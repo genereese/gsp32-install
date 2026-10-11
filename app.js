@@ -1,81 +1,58 @@
+// GSP32 web installer: one wizard window (version and warnings, port, flashing with esptool-js, Wi-Fi over Improv,
+// restart, done). One serial port stays open from the port pick to the end, and every open and close leaves the
+// board's reset lines in the run state (DTR and RTS both off), so the page never resets or holds the board in reset
+// by itself; it resets the board only on purpose (after flashing, after Wi-Fi setup, Reset Board).
+import { ESPLoader, Transport } from "./vendor/esptool-js-0.5.7.js";
+
 const HEADER = [0x49, 0x4d, 0x50, 0x52, 0x4f, 0x56];
 const MAX_LINES = 2000;
+const FLASH_BAUD = 115200;
 const textEncoder = new TextEncoder();
-
 const $ = (id) => document.getElementById(id);
 
+const wizard = $("wizard");
 const versionSelect = $("version");
 const eraseOk = $("erase-ok");
-const installButton = document.querySelector("esp-web-install-button");
-const installBtn = $("install-btn");
-const installStatus = $("install-status");
-const hiddenBanner = $("hidden-banner");
-const installError = $("install-error");
-const afterInstall = $("after-install");
-const setupWifiBtn = $("setup-wifi");
-const skipUsbBtn = $("skip-usb");
-const usbOnly = $("usb-only");
+const startInstall = $("start-install");
+const flashStatus = $("flash-status");
+const flashBar = $("flash-bar");
+const flashDetail = $("flash-detail");
+const wifiStatus = $("wifi-status");
+const wifiWait = $("wifi-wait");
+const wifiList = $("wifi-list");
+const wifiForm = $("wifi-form");
+const wifiPassword = $("wifi-password");
+const wifiError = $("wifi-error");
+const wifiRescan = $("wifi-rescan");
+const wifiConnect = $("wifi-connect");
+const restartStatus = $("restart-status");
+const boardIp = $("board-ip");
+const openWebui = $("open-webui");
+const errorText = $("error-text");
+const consoleCard = $("console");
+const consoleOut = $("console-out");
+const consoleIn = $("console-in");
 const connectBtn = $("connect");
+const disconnectBtn = $("disconnect");
 const resetBtn = $("reset");
 const ctrlCBtn = $("ctrl-c");
-const wifiSetupBtn = $("wifi-setup");
-const consoleHint = $("console-hint");
-const consoleOut = $("console-out");
-const consoleForm = $("console-form");
-const consoleIn = $("console-in");
-const wifiPanel = $("wifi");
-const wifiStatus = $("wifi-status");
-const wifiList = $("wifi-list");
-const wifiPassword = $("wifi-password");
-const wifiConnect = $("wifi-connect");
-const wifiProgress = $("wifi-progress");
-const wifiError = $("wifi-error");
-const wifiSuccess = $("wifi-success");
-const openBoard = $("open-board");
-const openBoardUrl = $("open-board-url");
 
-const PROGRESS = new Set(["initializing", "manifest", "preparing", "erasing", "writing"]);
-const STATUS_TEXT = {
-  initializing: "Starting the install...",
-  manifest: "Reading the install file...",
-  preparing: "Getting the firmware ready...",
-  erasing: "Erasing the board...",
-  writing: "Writing the firmware...",
-};
-
-let versionReady = false;
-let phase = "idle";
-let lastStateKey = "";
-let wantWake = false;
+let versionsReady = false;
+let busy = false;
+let retryStep = "prep";
 let wakeSentinel = null;
 
+// Serial state: the port, our reader (null while esptool-js reads), and what came in
 let port = null;
-let opening = false;
+let reader = null;
 let reading = false;
+let readDone = Promise.resolve();
 let pending = new Uint8Array(0);
 let textDecoder = new TextDecoder("utf-8");
 let lines = [];
 let partial = "";
 let onImprov = null;
-let wifiBusy = false;
-
-function browserBlocked() {
-  const ua = navigator.userAgent || "";
-  const firefox = /firefox|fxios/i.test(ua);
-  const safari = /safari/i.test(ua) && !/chrome|chromium|crios|edg\/|edge\/|edgios/i.test(ua);
-  let mobile = !!(navigator.userAgentData && navigator.userAgentData.mobile);
-  if (/Android|iPhone|iPad|iPod|Mobile|Tablet|Opera Mini|IEMobile/i.test(ua)) mobile = true;
-  if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) mobile = true;
-  return !("serial" in navigator) || firefox || safari || mobile;
-}
-
-function applyBrowserCheck() {
-  if (browserBlocked()) document.documentElement.setAttribute("data-browser", "block");
-}
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+let lineWatchers = [];
 
 function concatBytes(left, right) {
   if (!left.length) return right.slice();
@@ -226,246 +203,213 @@ function safeHttpUrl(value) {
   return "";
 }
 
-function signalWord(rssi) {
-  if (rssi >= -55) return "strong";
-  if (rssi >= -67) return "good";
-  if (rssi >= -75) return "fair";
-  return "weak";
+
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function applyManifest() {
-  const manifest = versionSelect.value || "manifest.json";
-  installButton.setAttribute("manifest", manifest);
-  installButton.manifest = manifest;
+function browserBlocked() {
+  return document.documentElement.getAttribute("data-browser") === "block";
 }
 
-function syncInstallButton() {
-  const installing = phase === "installing";
-  installBtn.disabled = !versionReady || !eraseOk.checked || installing;
-  versionSelect.disabled = !versionReady || installing;
-}
-
-async function loadVersions() {
-  try {
-    const response = await fetch("versions.json");
-    if (!response.ok) throw new Error("bad status");
-    const list = await response.json();
-    if (!Array.isArray(list) || !list.length) throw new Error("empty");
-    versionSelect.replaceChildren();
-    for (const item of list) {
-      const option = document.createElement("option");
-      option.value = item.manifest;
-      option.textContent = item.label || item.version || item.manifest;
-      if (item.version) option.dataset.version = item.version;
-      versionSelect.append(option);
-    }
-    versionReady = true;
-    applyManifest();
-  } catch (err) {
-    versionReady = false;
-    versionSelect.replaceChildren();
-    const option = document.createElement("option");
-    option.textContent = "Could not load versions";
-    versionSelect.append(option);
-    installStatus.hidden = false;
-    installStatus.textContent = "Could not load the version list. Refresh the page and try again.";
+// Wizard steps: only the current one shows; the window keeps its place and changes height smoothly
+function showStep(name) {
+  const before = wizard.open ? wizard.offsetHeight : 0;
+  for (const step of wizard.querySelectorAll(".step")) step.hidden = step.dataset.step !== name;
+  const titles = { prep: "Install GSP32", flash: "Installing GSP32", choice: "Installed", wifi: "Set Up Wi-Fi",
+                   restart: "Restarting the Board", done: "Your Board Is Ready", usb: "USB Only", error: "Something Went Wrong" };
+  $("wizard-title").textContent = titles[name] || "Install GSP32";
+  if (before && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const after = wizard.offsetHeight;
+    wizard.animate([{ height: before + "px" }, { height: after + "px" }], { duration: 200, easing: "ease-out" });
   }
-  syncInstallButton();
+}
+
+function setBusy(on) {
+  busy = on;
+  if (on) requestWakeLock();
+  else releaseWakeLock();
 }
 
 async function requestWakeLock() {
-  if (!wantWake || document.hidden || !("wakeLock" in navigator)) return;
-  if (wakeSentinel) return;
+  if (!busy || document.hidden || !("wakeLock" in navigator) || wakeSentinel) return;
   try {
-    const sentinel = await navigator.wakeLock.request("screen");
-    wakeSentinel = sentinel;
-    sentinel.addEventListener("release", () => {
-      if (wakeSentinel === sentinel) wakeSentinel = null;
-      if (wantWake && !document.hidden) requestWakeLock();
-    });
+    wakeSentinel = await navigator.wakeLock.request("screen");
+    wakeSentinel.addEventListener("release", () => { wakeSentinel = null; });
   } catch (err) {
     wakeSentinel = null;
   }
 }
 
-async function releaseWakeLock() {
-  wantWake = false;
-  const sentinel = wakeSentinel;
+function releaseWakeLock() {
+  if (wakeSentinel) wakeSentinel.release().catch(() => {});
   wakeSentinel = null;
-  if (!sentinel) return;
-  try {
-    await sentinel.release();
-  } catch (err) {
-    // Already released when the tab was hidden.
-  }
 }
 
-function updateHiddenBanner() {
-  hiddenBanner.hidden = !(wantWake && document.hidden);
+function showError(message, retry) {
+  setBusy(false);
+  retryStep = retry || "prep";
+  errorText.textContent = message;
+  showStep("error");
 }
 
-function onInstallState(state, detail) {
-  const pct = detail && detail.details && typeof detail.details.percentage === "number"
-    ? detail.details.percentage
-    : "";
-  const key = state + "/" + pct;
-  if (key === lastStateKey) return;
-  lastStateKey = key;
-
-  if (PROGRESS.has(state)) {
-    phase = "installing";
-    wantWake = true;
-    installError.hidden = true;
-    afterInstall.hidden = true;
-    usbOnly.hidden = true;
-    const base = STATUS_TEXT[state] || "Installing...";
-    installStatus.hidden = false;
-    installStatus.textContent = state === "writing" && pct !== "" ? base + " " + pct + "%" : base;
-    updateHiddenBanner();
-    requestWakeLock();
-    syncInstallButton();
-    return;
-  }
-
-  if (state === "error") {
-    phase = "error";
-    installStatus.hidden = true;
-    installError.hidden = false;
-    releaseWakeLock();
-    updateHiddenBanner();
-    syncInstallButton();
-    return;
-  }
-
-  if (state === "finished") {
-    phase = "finished";
-    installStatus.hidden = true;
-    installError.hidden = true;
-    afterInstall.hidden = false;
-    releaseWakeLock();
-    updateHiddenBanner();
-    syncInstallButton();
-  }
-}
-
-function watchInstallDialog() {
-  const timers = new WeakMap();
-  const watch = (dialog) => {
-    if (timers.has(dialog)) return;
-    let prev = "";
-    const timer = setInterval(() => {
-      if (!dialog.isConnected) {
-        clearInterval(timer);
-        timers.delete(dialog);
-        return;
-      }
-      let state = null;
-      try {
-        state = dialog._installState;
-      } catch (err) {
-        return;
-      }
-      if (!state || !state.state) return;
-      const pct = state.details && state.details.percentage;
-      const key = state.state + "/" + (state.message || "") + "/" + (pct == null ? "" : pct);
-      if (key === prev) return;
-      prev = key;
-      installButton.dispatchEvent(new CustomEvent("state-changed", { detail: state }));
-    }, 200);
-    timers.set(dialog, timer);
-  };
-  const observer = new MutationObserver(() => {
-    document.querySelectorAll("ewt-install-dialog").forEach(watch);
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
-}
-
+// Console text
 function paintConsole() {
   const atBottom = consoleOut.scrollHeight - consoleOut.scrollTop - consoleOut.clientHeight < 48;
-  const body = lines.join("\n") + (partial ? (lines.length ? "\n" : "") + partial : "");
-  consoleOut.textContent = body;
-  consoleHint.hidden = body.length > 0;
+  consoleOut.textContent = lines.join("\n") + (partial ? (lines.length ? "\n" : "") + partial : "");
   if (atBottom) consoleOut.scrollTop = consoleOut.scrollHeight;
 }
 
 function appendConsole(text) {
   if (!text) return;
   partial += text;
-  if (partial.length > 2000 && !partial.includes("\n")) {
-    lines.push(partial.slice(0, 2000));
-    partial = partial.slice(2000);
-  }
   const pieces = partial.split("\n");
   partial = pieces.pop();
-  for (const line of pieces) lines.push(line);
+  if (partial.length > 2000) {
+    pieces.push(partial);
+    partial = "";
+  }
+  for (const line of pieces) {
+    lines.push(line);
+    for (const watch of lineWatchers.slice()) watch(line);
+  }
   if (lines.length > MAX_LINES) lines = lines.slice(lines.length - MAX_LINES);
   paintConsole();
 }
 
+function consumeSerial(chunk) {
+  const taken = takeSerialBytes(concatBytes(pending, chunk));
+  pending = taken.rest;
+  if (taken.text.length) appendConsole(textDecoder.decode(taken.text, { stream: true }));
+  for (const packet of taken.packets) {
+    if (!onImprov) continue;
+    try {
+      onImprov(packet);
+    } catch (err) {
+      // One bad packet must not stop the reading
+    }
+  }
+}
+
+// Serial port: open once, reset lines to run, our reader; esptool-js borrows the port while flashing
 function portOpen() {
   return !!(port && port.readable && port.writable);
 }
 
-function setConnected(on) {
+function syncConsoleButtons() {
+  const on = portOpen();
   connectBtn.disabled = on;
   connectBtn.textContent = on ? "Connected" : "Connect";
-  resetBtn.disabled = !on;
-  ctrlCBtn.disabled = !on;
-  consoleIn.disabled = !on;
+  disconnectBtn.disabled = !on || busy;
+  resetBtn.disabled = !on || busy;
+  ctrlCBtn.disabled = !on || busy;
+  consoleIn.disabled = !on || busy;
 }
 
-function consumeSerial(chunk) {
-  const merged = concatBytes(pending, chunk);
-  const taken = takeSerialBytes(merged);
-  pending = taken.rest;
-  if (taken.text.length) {
-    const text = textDecoder.decode(taken.text, { stream: true });
-    if (text) appendConsole(text);
-  }
-  if (taken.packets.length && onImprov) {
-    for (const packet of taken.packets) {
+async function setRunState() {
+  // DTR and RTS off together in one request: the board's EN and GPIO 0 lines both stay high (running)
+  if (port) await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+}
+
+async function resetBoard() {
+  // RTS on alone pulls EN low (reset), then back to the run state
+  await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+  await delay(120);
+  await setRunState();
+}
+
+function startReading() {
+  if (reading || !portOpen()) return;
+  reading = true;
+  readDone = (async () => {
+    while (reading && port && port.readable) {
       try {
-        onImprov(packet);
+        reader = port.readable.getReader();
       } catch (err) {
-        // Keep the console reading even if a Wi-Fi step mis-handles one packet.
+        break;
       }
-    }
-  }
-}
-
-async function readLoop() {
-  const current = port;
-  while (reading && current && current.readable) {
-    let reader;
-    try {
-      reader = current.readable.getReader();
-    } catch (err) {
-      break;
-    }
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) {
-          reading = false;
-          break;
+      let got = false;
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          got = true;
+          if (value) consumeSerial(value);
         }
-        if (value) consumeSerial(value);
-      }
-    } catch (err) {
-      reading = false;
-      appendConsole("\nDisconnected. Plug the board in and click Connect.\n");
-    } finally {
-      try {
-        reader.releaseLock();
       } catch (err) {
-        // The lock is already gone when the device unplugs.
+        if (reading) {
+          reading = false;
+          appendConsole("\n[The board disconnected. Plug it in and click Connect.]\n");
+          port = null;
+        }
+      } finally {
+        try {
+          reader.releaseLock();
+        } catch (err) {
+          // Already released when the device unplugs
+        }
+        reader = null;
       }
+      // A stream that ends at once again and again would spin here: give the port a moment, then stop
+      if (!got) await delay(50);
+      if (!got && reading && port && port.readable && port.readable.locked) break;
     }
+    reading = false;
+    syncConsoleButtons();
+  })();
+}
+
+async function stopReading() {
+  reading = false;
+  if (reader) await reader.cancel().catch(() => {});
+  await readDone;
+}
+
+async function openPort(selected) {
+  if (port === selected && portOpen()) return;
+  if (port && port !== selected) await closePort();
+  await selected.open({ baudRate: FLASH_BAUD });
+  port = selected;
+  await setRunState();
+  pending = new Uint8Array(0);
+  textDecoder = new TextDecoder("utf-8");
+  startReading();
+  syncConsoleButtons();
+}
+
+async function pickPort() {
+  if (portOpen()) return port;
+  let selected;
+  try {
+    selected = await navigator.serial.requestPort();
+  } catch (err) {
+    const cancel = new Error("No port was chosen.");
+    cancel.code = "cancel";
+    throw cancel;
   }
-  if (port === current) {
-    port = null;
-    setConnected(false);
+  try {
+    await openPort(selected);
+  } catch (err) {
+    const fail = new Error("Could not open the port. Close other programs that use it (Arduino, Thonny, mpremote) and try again.");
+    fail.code = "open";
+    throw fail;
   }
+  return port;
+}
+
+async function closePort() {
+  if (!port) return;
+  const closing = port;
+  await stopReading();
+  try {
+    await setRunState();
+  } catch (err) {
+    // The device may be gone already
+  }
+  await closing.close().catch(() => {});
+  if (port === closing) port = null;
+  syncConsoleButtons();
 }
 
 async function writeBytes(bytes) {
@@ -478,114 +422,176 @@ async function writeBytes(bytes) {
   }
 }
 
-function blockedMessage() {
-  return "Use Chrome or Edge on a desktop computer.";
-}
-
-async function connectPort() {
-  if (browserBlocked() || !("serial" in navigator)) {
-    const err = new Error("blocked");
-    err.code = "blocked";
-    throw err;
-  }
-  if (portOpen()) return;
-  if (opening) return;
-  opening = true;
-  connectBtn.disabled = true;
+// Versions
+async function loadVersions() {
   try {
-    let selected;
-    try {
-      selected = await navigator.serial.requestPort();
-    } catch (err) {
-      if (err && err.name === "NotFoundError") {
-        const cancel = new Error("cancel");
-        cancel.code = "cancel";
-        throw cancel;
-      }
-      throw err;
+    const response = await fetch("versions.json", { cache: "no-store" });
+    const list = await response.json();
+    versionSelect.replaceChildren();
+    for (const item of list) {
+      const option = document.createElement("option");
+      option.value = item.manifest;
+      option.textContent = item.label || item.version;
+      versionSelect.append(option);
     }
-    await selected.open({ baudRate: 115200 });
-    port = selected;
-    pending = new Uint8Array(0);
-    textDecoder = new TextDecoder("utf-8");
-    reading = true;
-    setConnected(true);
-    readLoop();
+    versionsReady = list.length > 0;
   } catch (err) {
-    if (!portOpen()) connectBtn.disabled = false;
-    throw err;
-  } finally {
-    opening = false;
+    versionSelect.replaceChildren(new Option("Could Not Load Versions"));
+    versionsReady = false;
   }
+  syncStart();
 }
 
-function portProblem(err) {
-  if (err && err.code === "blocked") return blockedMessage();
-  if (err && err.code === "cancel") return "No port chosen. Click Connect when you want to try again.";
-  return "Could not open the port. Close the install window, and close Arduino, Thonny, or mpremote if they are open. Then try another USB cable or port.";
+function syncStart() {
+  startInstall.disabled = !versionsReady || !eraseOk.checked;
 }
 
-function syncWifiConnect() {
-  const picked = wifiList.querySelector("input:checked");
-  wifiConnect.disabled = wifiBusy || !picked;
-}
-
-function renderNetworks(networks) {
-  const previous = wifiList.querySelector("input:checked");
-  const previousSsid = previous ? previous.value : "";
-  const sorted = networks.slice().sort((a, b) => b.rssi - a.rssi);
-  wifiList.replaceChildren();
-  for (const net of sorted) {
-    const li = document.createElement("li");
-    const label = document.createElement("label");
-    const radio = document.createElement("input");
-    radio.type = "radio";
-    radio.name = "network";
-    radio.value = net.ssid;
-    if (net.ssid === previousSsid) radio.checked = true;
-    const text = document.createElement("span");
-    const lock = net.auth === "NO" ? "open" : "needs a password";
-    const rssi = Number.isFinite(net.rssi) ? net.rssi : 0;
-    text.textContent = net.ssid + " · " + rssi + " dBm, " + signalWord(rssi) + ", " + lock;
-    label.append(radio, text);
-    li.append(label);
-    wifiList.append(li);
+async function loadFirmware() {
+  const manifestUrl = new URL(versionSelect.value, location.href);
+  const manifest = await (await fetch(manifestUrl, { cache: "no-store" })).json();
+  const build = manifest.builds.find((item) => item.chipFamily === "ESP32") || manifest.builds[0];
+  const files = [];
+  for (const part of build.parts) {
+    const response = await fetch(new URL(part.path, manifestUrl), { cache: "no-store" });
+    if (!response.ok) throw new Error("Could not download the firmware (" + response.status + ").");
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    // esptool-js takes each file as a binary string
+    let data = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) data += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    files.push({ data, address: part.offset });
   }
-  syncWifiConnect();
+  return files;
 }
 
+function setProgress(text, percent, detail) {
+  flashStatus.textContent = text;
+  if (percent != null) flashBar.style.width = Math.max(0, Math.min(100, percent)) + "%";
+  if (detail != null) flashDetail.textContent = detail;
+}
+
+// Step 2: port, then flash with esptool-js on the same open port
+async function install() {
+  showStep("flash");
+  setProgress("Choose the board's port in the browser's list...", 0, "");
+  setBusy(true);
+  try {
+    await pickPort();
+  } catch (err) {
+    setBusy(false);
+    if (err.code === "cancel") {
+      showStep("prep");
+      return;
+    }
+    showError(err.message, "prep");
+    return;
+  }
+  syncConsoleButtons();
+  try {
+    setProgress("Downloading the firmware...", 0, "");
+    const files = await loadFirmware();
+    await stopReading();
+    const transport = new Transport(port, false);
+    // The port is already open: esptool-js only borrows its reader, never closes or reopens it
+    transport.connect = async function (baud) {
+      this.baudrate = baud;
+      this.reader = port.readable.getReader();
+    };
+    transport.disconnect = async function () {
+      if (this.reader) {
+        await this.reader.cancel().catch(() => {});
+        try {
+          this.reader.releaseLock();
+        } catch (err) {
+          // Released already
+        }
+      }
+      this.reader = undefined;
+    };
+    const terminal = {
+      clean() {},
+      writeLine(text) { flashDetail.textContent = text; },
+      write() {},
+    };
+    const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
+    setProgress("Connecting to the board...", 0);
+    const chip = await loader.main("default_reset");
+    if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
+    setProgress("Erasing the board (about 15 seconds)...", 0, chip);
+    let lastPercent = -1;
+    await loader.writeFlash({
+      fileArray: files,
+      flashSize: "keep",
+      flashMode: "keep",
+      flashFreq: "keep",
+      eraseAll: true,
+      compress: true,
+      reportProgress: (index, written, total) => {
+        const percent = Math.floor((written / total) * 100);
+        if (percent !== lastPercent) {
+          lastPercent = percent;
+          setProgress("Writing the firmware... " + percent + "%", percent);
+        }
+      },
+    });
+    setProgress("Restarting the board...", 100, "");
+    await transport.disconnect();
+    await resetBoard();
+    lines = [];
+    partial = "";
+    startReading();
+    setBusy(false);
+    showStep("choice");
+  } catch (err) {
+    await setRunState().catch(() => {});
+    startReading();
+    showError("The install did not finish: " + (err && err.message ? err.message : err), "prep");
+  }
+  syncConsoleButtons();
+}
+
+// Improv Wi-Fi
 function waitForPackets(timeoutMs, onPacket) {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
+    const finish = (fn) => (value) => {
+      clearTimeout(timer);
       if (onImprov === handle) onImprov = null;
+      fn(value);
+    };
+    const timer = setTimeout(finish(() => {
       const err = new Error("timeout");
       err.code = "timeout";
       reject(err);
-    }, timeoutMs);
+    }), timeoutMs);
     function handle(packet) {
-      onPacket(packet, (value) => {
-        clearTimeout(timer);
-        if (onImprov === handle) onImprov = null;
-        resolve(value);
-      }, (err) => {
-        clearTimeout(timer);
-        if (onImprov === handle) onImprov = null;
-        reject(err);
-      });
+      onPacket(packet, finish(resolve), finish(reject));
     }
     onImprov = handle;
   });
 }
 
+// The board answers Improv once its web UI runs (a few seconds after a reset; while the boot Wi-Fi prompt waits,
+// that prompt answers). Ask for the state every 1.5 s until it does
+async function waitBoardReady(timeoutMs) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    const answer = waitForPackets(1500, (packet, resolve) => {
+      if (packet.type === 1) resolve(packet.data[0]);
+    });
+    await writeBytes(buildRpc(2, new Uint8Array(0)));
+    try {
+      return await answer;
+    } catch (err) {
+      if (err.code !== "timeout") throw err;
+    }
+  }
+  return null;
+}
+
 async function scanNetworks() {
   const found = new Map();
-  wifiStatus.textContent = "Looking for Wi-Fi networks...";
-  renderNetworks([]);
-  const pendingResult = waitForPackets(20000, (packet, resolve, reject) => {
+  const result = waitForPackets(20000, (packet, resolve, reject) => {
     if (packet.type === 2 && packet.data[0] > 0) {
-      const err = new Error("scan");
-      err.code = packet.data[0];
-      reject(err);
+      reject(new Error("scan"));
       return;
     }
     if (packet.type !== 4) return;
@@ -596,238 +602,316 @@ async function scanNetworks() {
       return;
     }
     const ssid = parsed.strings[0];
-    if (!ssid) return;
     const rssi = Number(parsed.strings[1]);
-    const auth = parsed.strings[2] || "YES";
-    const prev = found.get(ssid);
-    if (!prev || rssi > prev.rssi) found.set(ssid, { ssid, rssi, auth });
-    renderNetworks([...found.values()]);
+    if (ssid && (!found.has(ssid) || rssi > found.get(ssid).rssi)) found.set(ssid, { ssid, rssi, auth: parsed.strings[2] || "YES" });
   });
   await writeBytes(buildRpc(4, new Uint8Array(0)));
   try {
-    return await pendingResult;
+    return await result;
   } catch (err) {
-    if (err && err.code === "timeout") return [...found.values()];
+    if (err.code === "timeout") return [...found.values()];
     throw err;
   }
 }
 
-async function sendWifi(ssid, password) {
-  const name = textEncoder.encode(ssid);
-  const secret = textEncoder.encode(password);
-  if (name.length > 255 || secret.length > 255) {
-    const err = new Error("long");
-    err.code = "long";
-    throw err;
+function signalWord(rssi) {
+  if (rssi >= -55) return "Strong";
+  if (rssi >= -67) return "Good";
+  if (rssi >= -75) return "Fair";
+  return "Weak";
+}
+
+function renderNetworks(networks) {
+  wifiList.replaceChildren();
+  for (const net of networks.sort((a, b) => b.rssi - a.rssi)) {
+    const item = document.createElement("li");
+    const label = document.createElement("label");
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "network";
+    radio.value = net.ssid;
+    radio.dataset.open = net.auth === "NO" ? "1" : "";
+    const name = document.createElement("span");
+    name.className = "net-name";
+    name.textContent = net.ssid;
+    const info = document.createElement("span");
+    info.className = "net-info";
+    info.textContent = signalWord(net.rssi) + (net.auth === "NO" ? ", Open" : "");
+    label.append(radio, name, info);
+    item.append(label);
+    wifiList.append(item);
   }
-  const pendingResult = waitForPackets(30000, (packet, resolve, reject) => {
+}
+
+function syncWifiConnect() {
+  const picked = wifiList.querySelector("input:checked");
+  wifiForm.hidden = !picked || !!picked.dataset.open;
+  wifiConnect.disabled = busy || !picked;
+}
+
+async function startWifi(fresh) {
+  showStep("wifi");
+  wifiError.hidden = true;
+  wifiRescan.hidden = true;
+  wifiForm.hidden = true;
+  wifiPassword.value = "";
+  wifiList.replaceChildren();
+  wifiWait.hidden = false;
+  setBusy(true);
+  syncWifiConnect();
+  try {
+    if (!portOpen()) await pickPort();
+    wifiStatus.textContent = "Waiting for the board to start...";
+    // Right after a flash or reset the web UI answers by itself; a board already running for a while needs its
+    // Improv listener started from the REPL
+    let state = await waitBoardReady(fresh ? 40000 : 4000);
+    if (state === null) {
+      await writeBytes(new Uint8Array([0x03, 0x03]));
+      await delay(300);
+      await writeBytes(textEncoder.encode("import webui_wifisetup; webui_wifisetup.improvSession()\r\n"));
+      state = await waitBoardReady(10000);
+    }
+    if (state === null) throw new Error("The board did not answer. Check that GSP32 is installed, then try again.");
+    await scanForWifi();
+  } catch (err) {
+    wifiWait.hidden = true;
+    setBusy(false);
+    if (err.code === "cancel") {
+      wizard.close();
+      return;
+    }
+    wifiStatus.textContent = err.message;
+    wifiRescan.hidden = false;
+    wifiRescan.textContent = "Try Again";
+  }
+  syncWifiConnect();
+}
+
+async function scanForWifi() {
+  setBusy(true);
+  wifiWait.hidden = false;
+  wifiRescan.hidden = true;
+  wifiStatus.textContent = "Looking for Wi-Fi networks...";
+  syncWifiConnect();
+  let networks = [];
+  try {
+    networks = await scanNetworks();
+  } catch (err) {
+    networks = [];
+  }
+  wifiWait.hidden = true;
+  setBusy(false);
+  renderNetworks(networks);
+  wifiRescan.hidden = false;
+  wifiRescan.textContent = "Scan Again";
+  wifiStatus.textContent = networks.length
+    ? "Pick your network and enter its password."
+    : "No networks found. Move the board closer to the router, then click Scan Again.";
+  syncWifiConnect();
+}
+
+async function connectWifi() {
+  const picked = wifiList.querySelector("input:checked");
+  if (!picked || busy) return;
+  const name = textEncoder.encode(picked.value);
+  const secret = textEncoder.encode(wifiPassword.value);
+  wifiError.hidden = true;
+  if (name.length > 255 || secret.length > 255) {
+    wifiError.hidden = false;
+    wifiError.textContent = "That name or password is too long.";
+    return;
+  }
+  setBusy(true);
+  syncWifiConnect();
+  wifiWait.hidden = false;
+  wifiStatus.textContent = "Connecting to " + picked.value + "...";
+  const result = waitForPackets(40000, (packet, resolve, reject) => {
     if (packet.type === 2 && packet.data[0] > 0) {
       const err = new Error("connect");
       err.code = packet.data[0];
       reject(err);
       return;
     }
-    if (packet.type !== 4) return;
-    const parsed = parseImprovResult(packet.data);
-    if (parsed.command !== 1) return;
-    resolve(parsed.strings[0] || "");
-  });
-  await writeBytes(buildWifiRpc(ssid, password));
-  return pendingResult;
-}
-
-function showWifiError(message) {
-  wifiProgress.hidden = true;
-  wifiError.hidden = false;
-  wifiError.textContent = message;
-}
-
-async function connectSelected() {
-  const chosen = wifiList.querySelector("input[name=network]:checked");
-  if (!chosen || wifiBusy) {
-    wifiStatus.textContent = "Pick a network from the list.";
-    return;
-  }
-  const ssid = chosen.value;
-  const password = wifiPassword.value;
-  wifiBusy = true;
-  syncWifiConnect();
-  wifiError.hidden = true;
-  wifiSuccess.hidden = true;
-  wifiProgress.hidden = false;
-  wifiProgress.textContent = "Connecting...";
-  try {
-    const url = await sendWifi(ssid, password);
-    wifiProgress.hidden = true;
-    const safe = safeHttpUrl(url);
-    if (!safe) {
-      wifiStatus.textContent = "The board connected, but it did not send a link. Try http://gsp32.local";
-    } else {
-      openBoard.href = safe;
-      openBoardUrl.textContent = safe;
-      wifiSuccess.hidden = false;
-      wifiStatus.textContent = "Wi-Fi is set up.";
+    if (packet.type === 4) {
+      const parsed = parseImprovResult(packet.data);
+      if (parsed.command === 1) resolve(parsed.strings[0] || "");
     }
+  });
+  try {
+    await writeBytes(buildWifiRpc(picked.value, wifiPassword.value));
+    const url = safeHttpUrl(await result);
     wifiPassword.value = "";
+    await restartAndWait(url);
   } catch (err) {
-    if (err && err.code === 3) showWifiError("Could not connect: check the password");
-    else if (err && err.code === "long") showWifiError("That name or password is too long.");
-    else showWifiError("Could not connect. Move the board closer and try again.");
-  } finally {
-    wifiBusy = false;
+    wifiWait.hidden = true;
+    setBusy(false);
+    wifiError.hidden = false;
+    wifiError.textContent = err.code === 3
+      ? "Could not connect. Check the password and try again."
+      : "Could not connect. Move the board closer to the router and try again.";
+    wifiStatus.textContent = "Pick your network and enter its password.";
     syncWifiConnect();
   }
 }
 
-async function beginWifiSetup() {
-  document.getElementById("console").scrollIntoView({ block: "start" });
-  if (browserBlocked()) {
-    appendConsole("\n" + blockedMessage() + "\n");
-    return;
-  }
-  if (wifiBusy) return;
-  wifiBusy = true;
-  wifiPanel.hidden = false;
-  wifiSuccess.hidden = true;
-  wifiError.hidden = true;
-  wifiProgress.hidden = true;
-  wifiPassword.value = "";
-  renderNetworks([]);
-  syncWifiConnect();
-  wifiStatus.textContent = "Asking the board to listen for Wi-Fi setup...";
-  try {
-    await connectPort();
-    // Stop a running program, then start the board's Improv listener, then give it a moment.
-    await writeBytes(new Uint8Array([0x03, 0x03]));
-    await writeBytes(textEncoder.encode("import webui_wifisetup; webui_wifisetup.improvSession()\r\n"));
-    await delay(1500);
-    let networks = [];
-    try {
-      networks = await scanNetworks();
-    } catch (err) {
-      wifiStatus.textContent = "The board could not scan for networks. Click Set up / change Wi-Fi to try again.";
-      return;
-    }
-    if (!networks.length) {
-      wifiStatus.textContent = "No networks showed up. Move the board closer to the router, then click Set up / change Wi-Fi again.";
-    } else {
-      wifiStatus.textContent = "Pick a network, enter its password, and click Connect.";
-    }
-  } catch (err) {
-    if (err && err.code === "cancel") wifiStatus.textContent = "No port chosen. Click Set up / change Wi-Fi when you want to try again.";
-    else if (err && err.code === "blocked") wifiStatus.textContent = blockedMessage();
-    else wifiStatus.textContent = portProblem(err);
-  } finally {
-    wifiBusy = false;
-    syncWifiConnect();
-  }
-}
-
-function guardClick(fn) {
-  return () => {
-    fn().catch(() => {
-      appendConsole("\nSomething went wrong. Unplug the board, plug it back in, and try again.\n");
-    });
-  };
-}
-
-applyBrowserCheck();
-
-eraseOk.addEventListener("change", syncInstallButton);
-versionSelect.addEventListener("change", () => {
-  applyManifest();
-  syncInstallButton();
-});
-
-installBtn.addEventListener("click", (event) => {
-  if (!eraseOk.checked) {
-    event.preventDefault();
-    event.stopPropagation();
-    return;
-  }
-  phase = "idle";
-  lastStateKey = "";
-  installStatus.hidden = true;
-  installError.hidden = true;
-  afterInstall.hidden = true;
-  usbOnly.hidden = true;
-  wantWake = true;
-  updateHiddenBanner();
-  requestWakeLock();
-});
-
-installButton.addEventListener("state-changed", (event) => {
-  const detail = event.detail || {};
-  const state = typeof detail === "string" ? detail : detail.state;
-  if (!state) return;
-  onInstallState(state, typeof detail === "string" ? {} : detail);
-});
-
-document.addEventListener("visibilitychange", () => {
-  updateHiddenBanner();
-  if (!document.hidden && wantWake) requestWakeLock();
-});
-
-window.addEventListener("focus", () => {
-  setTimeout(() => {
-    if (phase === "idle" && !document.querySelector("ewt-install-dialog")) {
-      wantWake = false;
-      releaseWakeLock();
-      updateHiddenBanner();
-    }
-  }, 400);
-});
-
-setupWifiBtn.addEventListener("click", guardClick(beginWifiSetup));
-wifiSetupBtn.addEventListener("click", guardClick(beginWifiSetup));
-skipUsbBtn.addEventListener("click", () => {
-  usbOnly.hidden = false;
-});
-
-connectBtn.addEventListener("click", guardClick(async () => {
-  try {
-    await connectPort();
-  } catch (err) {
-    appendConsole("\n" + portProblem(err) + "\n");
-  }
-}));
-
-resetBtn.addEventListener("click", guardClick(async () => {
-  if (!portOpen()) return;
-  // DTR low and RTS high holds the ESP32 in reset; dropping RTS lets it run.
-  await port.setSignals({ dataTerminalReady: false, requestToSend: true });
-  await delay(100);
-  await port.setSignals({ requestToSend: false });
-}));
-
-ctrlCBtn.addEventListener("click", guardClick(async () => {
-  await writeBytes(new Uint8Array([0x03]));
-}));
-
-consoleForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  if (!portOpen()) return;
-  const text = consoleIn.value;
-  consoleIn.value = "";
-  writeBytes(textEncoder.encode(text + "\r\n")).catch(() => {
-    appendConsole("\nCould not send. Click Connect and try again.\n");
+// Step 5: reset the board so it starts clean on the new network, then wait until its web server listens on Wi-Fi
+// (its boot lines on the serial port: this https page cannot ask an http board on the local network directly)
+function waitForBoot(timeoutMs) {
+  return new Promise((resolve) => {
+    let ip = "";
+    let listening = false;
+    const watch = (line) => {
+      if (line.includes("Server listening")) listening = true;
+      const match = line.match(/Network config: \('(\d+\.\d+\.\d+\.\d+)'/);
+      if (match) ip = match[1];
+      if (listening && ip) done();
+    };
+    const done = () => {
+      clearTimeout(timer);
+      lineWatchers = lineWatchers.filter((item) => item !== watch);
+      resolve(ip);
+    };
+    const timer = setTimeout(done, timeoutMs);
+    lineWatchers.push(watch);
   });
-});
+}
 
-wifiList.addEventListener("change", syncWifiConnect);
-wifiConnect.addEventListener("click", guardClick(connectSelected));
+async function restartAndWait(url) {
+  showStep("restart");
+  restartStatus.textContent = "Restarting the board...";
+  const booted = waitForBoot(45000);
+  await resetBoard();
+  restartStatus.textContent = "Waiting for the board to join Wi-Fi...";
+  let ip = await booted;
+  if (ip) {
+    // The web server answers a moment after the address is set
+    restartStatus.textContent = "Starting the web UI...";
+    await delay(2500);
+  } else if (url) {
+    ip = new URL(url).hostname;
+  }
+  setBusy(false);
+  if (!ip) {
+    showError("The board did not report its address. Open the Serial Console to see what it printed.", "prep");
+    return;
+  }
+  const address = "http://" + ip + "/";
+  boardIp.href = address;
+  boardIp.textContent = address;
+  openWebui.href = address;
+  showStep("done");
+}
+
+// Serial console on the page (shares the wizard's port)
+function showConsole() {
+  if (consoleCard.hidden) {
+    consoleCard.hidden = false;
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      consoleCard.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }], { duration: 200, easing: "ease-out" });
+    }
+  }
+  paintConsole();
+  consoleCard.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function guard(fn) {
+  return () => fn().catch((err) => appendConsole("\n[" + (err && err.message ? err.message : "Something went wrong") + "]\n"));
+}
+
+function openWizard(step) {
+  if (browserBlocked()) return;
+  if (!wizard.open) wizard.showModal();
+  showStep(step);
+}
+
+// Events
+$("install-btn").addEventListener("click", () => {
+  eraseOk.checked = false;
+  syncStart();
+  openWizard("prep");
+});
+$("open-console").addEventListener("click", showConsole);
+eraseOk.addEventListener("change", syncStart);
+startInstall.addEventListener("click", () => install());
+$("choose-wifi").addEventListener("click", () => startWifi(true));
+$("choose-usb").addEventListener("click", () => showStep("usb"));
+$("error-retry").addEventListener("click", () => {
+  if (retryStep === "wifi") startWifi(false);
+  else showStep(retryStep);
+});
+wifiList.addEventListener("change", () => {
+  syncWifiConnect();
+  if (!wifiForm.hidden) wifiPassword.focus();
+});
+wifiRescan.addEventListener("click", () => {
+  if (wifiRescan.textContent === "Try Again") startWifi(false);
+  else scanForWifi();
+});
+wifiConnect.addEventListener("click", () => connectWifi());
 wifiPassword.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
-    connectSelected().catch(() => {
-      showWifiError("Could not connect. Move the board closer and try again.");
-    });
+    connectWifi();
   }
+});
+for (const button of wizard.querySelectorAll("[data-action]")) {
+  button.addEventListener("click", () => {
+    wizard.close();
+    if (button.dataset.action === "console") showConsole();
+  });
+}
+// No closing in the middle of a step that talks to the board
+wizard.addEventListener("cancel", (event) => {
+  if (busy) event.preventDefault();
+});
+wizard.querySelector(".close").addEventListener("click", (event) => {
+  if (busy) event.preventDefault();
+});
+wizard.addEventListener("close", () => {
+  onImprov = null;
+  syncConsoleButtons();
 });
 
-watchInstallDialog();
-loadVersions().then(() => {
-  if (customElements.whenDefined) {
-    customElements.whenDefined("esp-web-install-button").then(applyManifest);
+connectBtn.addEventListener("click", guard(async () => {
+  showConsole();
+  await pickPort();
+}));
+disconnectBtn.addEventListener("click", guard(closePort));
+resetBtn.addEventListener("click", guard(resetBoard));
+ctrlCBtn.addEventListener("click", guard(() => writeBytes(new Uint8Array([0x03]))));
+$("wifi-setup").addEventListener("click", () => {
+  openWizard("wifi");
+  startWifi(false);
+});
+$("console-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = consoleIn.value;
+  consoleIn.value = "";
+  writeBytes(textEncoder.encode(text + "\r\n")).catch(() => appendConsole("\n[Could not send. Click Connect and try again.]\n"));
+});
+
+if ("serial" in navigator) {
+  navigator.serial.addEventListener("disconnect", (event) => {
+    if (event.target === port) {
+      reading = false;
+      port = null;
+      syncConsoleButtons();
+    }
+  });
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) requestWakeLock();
+});
+window.addEventListener("beforeunload", (event) => {
+  if (busy) {
+    event.preventDefault();
+    event.returnValue = "";
   }
 });
+// Leaving the page: lines to run first, so closing the tab never holds the board in reset
+window.addEventListener("pagehide", () => {
+  if (port) port.setSignals({ dataTerminalReady: false, requestToSend: false }).catch(() => {});
+});
+
+loadVersions();
+syncConsoleButtons();

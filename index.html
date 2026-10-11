@@ -22,105 +22,134 @@
 <body>
   <main>
     <h1>Install GSP32</h1>
-    <p class="lede">GSP32 is a MicroPython web UI for ESP32 boards. This page installs it from your browser.</p>
+    <p class="lede">GSP32 is a MicroPython web UI for ESP32 boards. Plug your board in with a USB data cable and install it right from this page.</p>
 
     <section id="browser-block" class="card">
-      <h2>Use Chrome or Edge on a desktop computer</h2>
+      <h2>Use Chrome or Edge on a Desktop Computer</h2>
       <p>This page talks to the board over a USB cable. Phones, tablets, Firefox, and Safari cannot do that. Open this page in Google Chrome or Microsoft Edge on a desktop computer.</p>
     </section>
 
-    <section id="installer" class="card">
-      <h2>Install</h2>
-      <ul>
-        <li>A classic ESP32 board</li>
-        <li>A USB data cable</li>
-        <li>Google Chrome or Microsoft Edge on a desktop computer</li>
-      </ul>
-      <p>Installing deletes everything already stored on the board.</p>
-
-      <label class="field" for="version">Version
-        <select id="version" disabled>
-          <option>Loading versions...</option>
-        </select>
-      </label>
-
-      <label class="check" for="erase-ok">
-        <input id="erase-ok" type="checkbox" required>
-        <span>I understand this erases the board</span>
-      </label>
-
-      <p class="warn">Keep this tab open and visible during the install. If you switch away, the install can slow down or fail.</p>
-
-      <esp-web-install-button manifest="manifest.json">
-        <button slot="activate" id="install-btn" type="button" disabled>Install GSP32</button>
-        <span slot="unsupported">Use Chrome or Edge on a desktop computer.</span>
-        <span slot="not-allowed">Open this page on localhost or HTTPS, then try again.</span>
-      </esp-web-install-button>
-
-      <p id="install-status" class="status" hidden></p>
-      <p id="hidden-banner" class="banner" hidden>This tab is hidden. Bring it back and keep it visible until the install finishes.</p>
-      <div id="install-error" class="error" hidden>
-        <p>The install did not finish. Unplug the board, plug it back in, and try again. Close other programs that use the serial port, such as Arduino, Thonny, and mpremote. If it still fails, try another USB cable and another port.</p>
-      </div>
-      <div id="after-install" hidden>
-        <p>The firmware is on the board. The install window can set up Wi-Fi too. You can also do it here.</p>
-        <div class="actions">
-          <button id="setup-wifi" type="button">Set up Wi-Fi</button>
-          <button id="skip-usb" type="button">Skip, USB only</button>
-        </div>
-        <div id="usb-only" hidden>
-          <p>You can use the board over USB, with no Wi-Fi.</p>
-          <ul>
-            <li>In the serial console below, click Connect. The speed is 115200.</li>
-            <li>Or from a terminal: <code>mpremote connect /dev/ttyUSB0</code> on Linux, the <code>cu.usbserial</code> port on Mac, or <code>COMx</code> on Windows.</li>
-          </ul>
-          <p>Reset the board and press Enter when it says “Press Enter within 10 s” to set up Wi-Fi from the USB console.</p>
-        </div>
-      </div>
+    <section id="installer" class="start">
+      <button id="install-btn" class="primary big" type="button">Install GSP32</button>
+      <button id="open-console" class="link-button" type="button">Open the Serial Console</button>
     </section>
 
-    <section id="console" class="card">
-      <h2>Serial console</h2>
-      <p>Talk to the board over USB at 115200. You can use this any time.</p>
+    <section id="console" class="card fold" hidden>
+      <h2>Serial Console</h2>
+      <p class="hint">Talk to the board over USB at 115200. Opening and closing the port here does not reset the board.</p>
       <div class="actions">
-        <button id="connect" type="button">Connect</button>
-        <button id="reset" type="button" disabled>Reset</button>
-        <button id="ctrl-c" type="button" disabled>Ctrl-C</button>
-        <button id="wifi-setup" type="button">Set up / change Wi-Fi</button>
+        <button id="connect" class="primary" type="button">Connect</button>
+        <button id="disconnect" type="button" disabled>Disconnect</button>
+        <button id="reset" type="button" disabled>Reset Board</button>
+        <button id="ctrl-c" type="button" disabled>Send Ctrl-C</button>
+        <button id="wifi-setup" type="button">Set Up Wi-Fi</button>
       </div>
-      <p id="console-hint" class="hint">Nothing yet. Click Connect and the board’s text shows up here.</p>
       <pre id="console-out" class="console-out" tabindex="0" aria-label="Board output"></pre>
       <form id="console-form">
-        <label class="field" for="console-in">Send a line
+        <label class="field" for="console-in">Send a Line
           <input id="console-in" type="text" autocomplete="off" spellcheck="false" disabled>
         </label>
       </form>
-
-      <div id="wifi" hidden>
-        <h3>Wi-Fi</h3>
-        <p id="wifi-status">Looking for Wi-Fi networks...</p>
-        <ul id="wifi-list" class="nets"></ul>
-        <label class="field" for="wifi-password">Password
-          <input id="wifi-password" type="password" autocomplete="off" spellcheck="false">
-        </label>
-        <button id="wifi-connect" type="button" disabled>Connect</button>
-        <p id="wifi-progress" hidden>Connecting...</p>
-        <p id="wifi-error" class="error" hidden></p>
-        <div id="wifi-success" hidden>
-          <a id="open-board" class="open-board" href="http://gsp32.local/">Open your board</a>
-          <p id="open-board-url" class="board-url"></p>
-        </div>
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Getting Started</h2>
-      <p>Open <a href="http://gsp32.local/">http://gsp32.local</a>, or the address shown after Wi-Fi setup.</p>
-      <p>On the first visit, set a password for the web UI.</p>
-      <p>If you skipped Wi-Fi, use the serial console above or <code>mpremote</code>. Press Enter at the “Press Enter within 10 s” prompt.</p>
     </section>
   </main>
-  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+
+  <dialog id="wizard" aria-labelledby="wizard-title">
+    <form method="dialog" class="wizard-close-form"><button class="close" value="close" aria-label="Close" title="Close">&times;</button></form>
+    <h2 id="wizard-title">Install GSP32</h2>
+
+    <div class="step" data-step="prep">
+      <label class="field" for="version">Version
+        <select id="version"><option>Loading Versions...</option></select>
+      </label>
+      <p>You need:</p>
+      <ul>
+        <li>A classic ESP32 board</li>
+        <li>A USB data cable (some cables only charge)</li>
+      </ul>
+      <p class="warn-box">Installing <b>erases everything</b> on the board: your programs, files, and Wi-Fi settings. Close Arduino, Thonny, mpremote, and any other program using the board's port first.</p>
+      <label class="check" for="erase-ok">
+        <input id="erase-ok" type="checkbox">
+        <span>I Understand This Erases the Board</span>
+      </label>
+      <div class="actions end">
+        <button type="button" data-action="close">Cancel</button>
+        <button id="start-install" class="primary" type="button" disabled>Choose Port and Install</button>
+      </div>
+    </div>
+
+    <div class="step" data-step="flash">
+      <p id="flash-status" class="status-line">Connecting to the board...</p>
+      <div class="progress"><div id="flash-bar" class="progress-bar"></div></div>
+      <p id="flash-detail" class="hint"></p>
+      <p class="danger-note">Don't leave this tab or the install will fail.</p>
+    </div>
+
+    <div class="step" data-step="choice">
+      <p class="ok-line">GSP32 is installed.</p>
+      <p>Set up Wi-Fi now to use the web UI from your browser, or use the board over USB only.</p>
+      <div class="actions end">
+        <button id="choose-usb" type="button">USB Only</button>
+        <button id="choose-wifi" class="primary" type="button">Set Up Wi-Fi</button>
+      </div>
+    </div>
+
+    <div class="step" data-step="wifi">
+      <p id="wifi-status" class="status-line">Waiting for the board to start...</p>
+      <div id="wifi-wait" class="progress indeterminate"><div class="progress-bar"></div></div>
+      <ul id="wifi-list" class="nets"></ul>
+      <div id="wifi-form" hidden>
+        <label class="field" for="wifi-password">Wi-Fi Password
+          <input id="wifi-password" type="password" autocomplete="off" spellcheck="false">
+        </label>
+      </div>
+      <p id="wifi-error" class="error-line" hidden></p>
+      <div class="actions end">
+        <button id="wifi-rescan" type="button" hidden>Scan Again</button>
+        <button id="wifi-connect" class="primary" type="button" disabled>Connect</button>
+      </div>
+    </div>
+
+    <div class="step" data-step="restart">
+      <p id="restart-status" class="status-line">Restarting the board...</p>
+      <div class="progress indeterminate"><div class="progress-bar"></div></div>
+      <p class="hint">The board restarts with its new Wi-Fi settings. This takes about 15 seconds.</p>
+      <p class="danger-note">Don't leave this tab until the board is ready.</p>
+    </div>
+
+    <div class="step" data-step="done">
+      <p class="ok-line">GSP32 is installed and on your Wi-Fi.</p>
+      <p>It is on your network at <a id="board-ip" href="#" target="_blank" rel="noopener"></a>. On the first visit, choose a password for the web UI.</p>
+      <div class="actions stack">
+        <a id="open-webui" class="button primary" href="#" target="_blank" rel="noopener">Open GSP32 Web UI</a>
+        <button type="button" data-action="console">Connect to Serial Console</button>
+      </div>
+    </div>
+
+    <div class="step" data-step="usb">
+      <p class="ok-line">GSP32 is installed for USB use.</p>
+      <ul>
+        <li>Use the Serial Console on this page, or <code>mpremote connect COMx</code> (Windows), <code>/dev/ttyUSB0</code> (Linux), or the <code>cu.usbserial</code> port (Mac).</li>
+        <li>To add Wi-Fi later, click Set Up Wi-Fi in the Serial Console.</li>
+      </ul>
+      <div class="actions stack">
+        <button class="primary" type="button" data-action="console">Connect to Serial Console</button>
+      </div>
+    </div>
+
+    <div class="step" data-step="error">
+      <p id="error-text" class="error-line"></p>
+      <ul class="hint">
+        <li>Unplug the board, plug it back in, and try again.</li>
+        <li>Close Arduino, Thonny, mpremote, and other programs that use the port.</li>
+        <li>Try another USB cable or port.</li>
+      </ul>
+      <div class="actions end">
+        <button type="button" data-action="close">Close</button>
+        <button id="error-retry" class="primary" type="button">Try Again</button>
+      </div>
+    </div>
+  </dialog>
+
   <script type="module" src="app.js"></script>
 </body>
 </html>
