@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Install GSP32</title>
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --esp-tools-button-color: #1f6feb;
+      --esp-tools-button-text-color: #ffffff;
+      --esp-tools-button-border-radius: 10px;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: #f5f7fb;
+    }
+
+    body {
+      margin: 0;
+      background: #f5f7fb;
+      color: #1f2933;
+      font-family: system-ui, sans-serif;
+      font-size: 1.0625rem;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+      overflow-x: hidden;
+    }
+
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+    }
+
+    h1,
+    h2 {
+      line-height: 1.25;
+      margin: 0 0 0.5rem;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+    }
+
+    h2 {
+      font-size: 1.2rem;
+    }
+
+    p,
+    ol,
+    ul {
+      margin: 0 0 0.9rem;
+    }
+
+    ol:last-child,
+    ul:last-child,
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    ol,
+    ul {
+      padding-left: 1.25rem;
+    }
+
+    li + li {
+      margin-top: 0.4rem;
+    }
+
+    a {
+      color: #1f6feb;
+    }
+
+    .lede {
+      margin: 0;
+      color: #5b6675;
+    }
+
+    .card {
+      background: #ffffff;
+      border: 1px solid #dfe4ec;
+      border-radius: 10px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    .erase {
+      margin: 0 0 16px;
+      padding: 12px 14px;
+      border: 1px solid #d1242f;
+      border-radius: 10px;
+      color: #d1242f;
+      font-weight: 600;
+    }
+
+    esp-web-install-button {
+      display: block;
+      max-width: 100%;
+    }
+
+    button[slot="activate"] {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 48px;
+      margin: 0;
+      padding: 12px 20px;
+      border: 0;
+      border-radius: 10px;
+      background: #1f6feb;
+      color: #ffffff;
+      font: inherit;
+      font-weight: 600;
+      line-height: 1.2;
+      cursor: pointer;
+    }
+
+    button[slot="activate"]:hover {
+      filter: brightness(0.95);
+    }
+
+    button[slot="activate"]:focus-visible {
+      outline: 3px solid #1f6feb;
+      outline-offset: 3px;
+    }
+
+    [slot="unsupported"],
+    [slot="not-allowed"] {
+      display: block;
+      color: #5b6675;
+    }
+
+    esp-web-install-button:not(:defined) [slot="unsupported"],
+    esp-web-install-button:not(:defined) [slot="not-allowed"] {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Install GSP32</h1>
+    <p class="lede">GSP32 is a MicroPython web UI for ESP32 boards. This page installs it from your browser.</p>
+
+    <section class="card">
+      <h2>What you need</h2>
+      <ul>
+        <li>A classic ESP32 board</li>
+        <li>A USB data cable</li>
+        <li>Google Chrome or Microsoft Edge on a desktop computer</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Install</h2>
+      <ol>
+        <li>Plug the board into this computer with the USB data cable.</li>
+        <li>Click <strong>Install GSP32</strong> and pick the port for your board.</li>
+        <li>Wait for the flash to finish. Leave the board plugged in.</li>
+        <li>Enter your Wi-Fi name and password when asked.</li>
+      </ol>
+      <p class="erase">This erases the board. Anything already stored on it is deleted.</p>
+      <esp-web-install-button manifest="manifest.json">
+        <button slot="activate" type="button">Install GSP32</button>
+        <span slot="unsupported">This browser has no Web Serial support, so firmware cannot be installed from this page. Open it in Google Chrome or Microsoft Edge on a desktop computer.</span>
+        <span slot="not-allowed">The browser will not open a serial port from this address. Use HTTPS, or open the page on localhost, then try again.</span>
+      </esp-web-install-button>
+    </section>
+
+    <section class="card">
+      <h2>Getting Started</h2>
+      <p>Open <a href="http://gsp32.local/">http://gsp32.local</a>, or the IP address shown after setup.</p>
+      <p>On the first visit, set a password for the web UI.</p>
+      <p>If Wi-Fi setup was skipped, use a serial console: press Enter at the “Press Enter within 10 s” prompt.</p>
+    </section>
+  </main>
+</body>
+</html>

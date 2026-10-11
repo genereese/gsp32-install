@@ -1,0 +1,18 @@
+{
+  "name": "GSP32",
+  "version": "31d2bdf",
+  "new_install_prompt_erase": true,
+  "new_install_improv_wait_time": 15,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "improv": true,
+      "parts": [
+        {
+          "path": "firmware/gsp32-esp32.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
