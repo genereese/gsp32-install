@@ -1,4 +1,4 @@
-// GSP32 web installer: Connect to Board opens one serial port and the board card (live console plus Install GSP32,
+// GSP32 web installer: Get Started opens one serial port and the board card (live console plus Install GSP32,
 // Set Up Wi-Fi, Open GSP32 Web UI). The install and Wi-Fi steps run inline in that card, one step at a time, with
 // their output in the same console. One serial port stays open from the port pick to the end, and every open and close leaves the
 // board's reset lines in the run state (DTR and RTS both off), so the page never resets or holds the board in reset
@@ -30,6 +30,7 @@ const boardIp = $("board-ip");
 const openWebui = $("open-webui");
 const errorText = $("error-text");
 const consoleCard = $("console");
+const installer = $("installer");
 const consoleOut = $("console-out");
 const consoleIn = $("console-in");
 const connectBtn = $("connect");
@@ -54,7 +55,7 @@ let partial = "";
 let onImprov = null;
 let lineWatchers = [];
 // What the serial lines tell about the board: GSP32 or not, when its Improv listener is ready, its address
-const board = { kind: "unknown", readyAt: 0, bootAt: 0, ip: "", name: "", repl: false };
+const board = { installed: false, kind: "unknown", readyAt: 0, bootAt: 0, ip: "", name: "", repl: false, chip: "", mac: "", version: "", asked: 0 };
 const READY_WINDOW_MS = 25000;
 let otherTimer = null;
 const FOLD_MS = 220;
@@ -97,6 +98,11 @@ function trackBoard(line) {
     board.kind = "gsp32";
     board.readyAt = Date.now();
     clearTimeout(otherTimer);
+    // Only once GSP32 is confirmed: ask its Improv device info (chip family, version); never sent to other programs
+    if (/GSP32 Improv Ready/.test(line) && board.asked <= board.bootAt) {
+      board.asked = Date.now();
+      writeBytes(buildRpc(3, new Uint8Array(0))).catch(() => {});
+    }
   }
   if (/^rst:0x|^ets [A-Z][a-z]{2} /.test(line)) {
     board.bootAt = Date.now();
@@ -118,28 +124,37 @@ function trackBoard(line) {
   syncBoardUi();
 }
 
+// Show only the buttons that apply; one that appears fades in instead of jumping
+function setShown(element, on) {
+  if (element.hidden === !on) return;
+  element.hidden = !on;
+  if (on && motionOk()) element.animate([{ opacity: 0, transform: "scale(0.96)" }, { opacity: 1, transform: "none" }], { duration: FOLD_MS, easing: "ease-out" });
+}
+
 function syncBoardUi() {
-  const setup = $("wifi-setup"), web = $("console-webui"), hint = $("board-hint"), install = $("install-btn");
+  const setup = $("wifi-setup"), web = $("console-webui"), install = $("install-btn");
   const on = portOpen();
   const gsp32 = board.kind === "gsp32";
   install.disabled = !on || busy;
-  setup.disabled = !on || busy || !gsp32;
+  install.textContent = gsp32 ? "Reinstall GSP32" : "Install GSP32";
+  setShown(setup, gsp32);
+  setup.disabled = !on || busy;
   const address = gsp32 && board.ip ? "http://" + board.ip + "/" : "";
   web.href = address || "#";
-  web.setAttribute("aria-disabled", address && on ? "false" : "true");
+  setShown(web, !!(address && on));
   web.classList.toggle("primary", !!address);
+  web.title = address ? "Open " + address + (board.name ? " (also http://" + board.name + "/)" : "") : "";
+  $("board-chip").textContent = (board.chip || "ESP32 Board").replace(/\s*\(revision[^)]*\)/i, "");
+  const mac = $("board-mac");
+  mac.textContent = board.mac ? "MAC " + board.mac.toUpperCase() : "";
+  mac.hidden = !board.mac;
+  const version = board.version ? " (Version " + board.version + ")" : "";
   const state = $("board-state");
-  state.textContent = !on ? "Not Connected" : gsp32 ? "GSP32 Found" : board.kind === "other" ? "Other Firmware" : "Connected";
-  state.classList.toggle("on", on);
-  let text;
-  if (!on) text = "Disconnected. Click Connect to Board to use it again.";
-  else if (board.kind === "other") text = "This board does not run GSP32. Install GSP32 first to set up Wi-Fi.";
-  else if (!gsp32) text = "Checking what the board runs. Set Up Wi-Fi turns on once GSP32 is found; click Reset Board if nothing shows.";
-  else if (address) text = "GSP32 is on Wi-Fi at " + address + (board.name ? " (also http://" + board.name + "/)" : "") + ".";
-  else text = "GSP32 found. Open GSP32 Web UI turns on once the board reports a Wi-Fi address: Set Up Wi-Fi, or click Reset Board.";
-  hint.textContent = text;
-  setup.title = setup.disabled && on && !busy ? "Install GSP32 first to set up Wi-Fi" : "";
-  web.title = address ? "Open " + address : "Needs GSP32 on Wi-Fi with a known address";
+  state.textContent = !on ? "Not Connected"
+    : gsp32 ? (board.installed ? "GSP32 Found" : "Existing GSP32 Installation Found") + version
+    : board.installed ? "Installed, Restarting..."
+    : board.kind === "other" ? "No GSP32 Found" : "Checking the Board...";
+  state.classList.toggle("on", on && gsp32);
 }
 
 function concatBytes(left, right) {
@@ -388,6 +403,13 @@ function consumeSerial(chunk) {
       const parsed = parseImprovResult(packet.data);
       const found = parsed.command === 2 && parsed.strings[0] && parsed.strings[0].match(/^http:\/\/([\d.]+)\//);
       if (found) board.ip = found[1];
+      // Device info: firmware, version, chip family, device name
+      if (parsed.command === 3 && parsed.strings.length >= 3) {
+        if (!board.chip && parsed.strings[2]) board.chip = parsed.strings[2];
+        const v = parsed.strings[1] || "";
+        const n = v.match(/^(?:Version\s*)?(\d{2,})$/i);
+        if (n) board.version = n[1];
+      }
     }
     syncBoardUi();
     if (!onImprov) continue;
@@ -407,7 +429,6 @@ function portOpen() {
 function syncConsoleButtons() {
   const on = portOpen();
   connectBtn.disabled = on;
-  connectBtn.textContent = on ? "Connected" : "Connect to Board";
   disconnectBtn.disabled = !on || busy;
   resetBtn.disabled = !on || busy;
   ctrlCBtn.disabled = !on || busy;
@@ -448,7 +469,7 @@ function startReading() {
       } catch (err) {
         if (reading) {
           reading = false;
-          appendConsole("\n[The board disconnected. Plug it in and click Connect to Board.]\n");
+          appendConsole("\n[The board disconnected. Plug it in and click Get Started.]\n");
           port = null;
         }
       } finally {
@@ -579,10 +600,12 @@ function setProgress(text, percent) {
 // Step 2: port, then flash with esptool-js on the same open port
 async function install() {
   showStep("flash");
+  startFlashGuard();
   setBusy(true);
   syncConsoleButtons();
   if (!portOpen()) {
-    showError("The board is not connected. Click Connect to Board, then try again.", "prep");
+    stopFlashGuard();
+    showError("The board is not connected. Click Get Started, then try again.", "prep");
     return;
   }
   appendConsole("\n[Installing " + versionSelect.options[versionSelect.selectedIndex].textContent + "]\n");
@@ -615,6 +638,12 @@ async function install() {
     const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
     setProgress("Connecting to the board...", 0);
     const chip = await loader.main("default_reset");
+    try {
+      board.chip = (await loader.chip.getChipDescription(loader)) || chip;
+      board.mac = (await loader.chip.readMac(loader)) || "";
+    } catch (err) {
+      board.chip = chip;
+    }
     if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
     setProgress("Erasing the board (about 15 seconds)...", 0);
     let lastPercent = -1;
@@ -640,14 +669,19 @@ async function install() {
     board.kind = "unknown";
     board.ip = "";
     board.readyAt = 0;
+    const picked = versionSelect.options[versionSelect.selectedIndex].textContent.match(/Version (\d+)/);
+    board.version = picked ? picked[1] : "";
+    board.installed = true;
     appendConsole("[Installed. Restarting the board.]\n");
     await resetBoard();
     startReading();
     setBusy(false);
-    showStep("choice");
+    stopFlashGuard();
+    closeWizard();
   } catch (err) {
     await setRunState().catch(() => {});
     startReading();
+    stopFlashGuard();
     showError("The install did not finish: " + (err && err.message ? err.message : err), "prep");
   }
   syncConsoleButtons();
@@ -923,10 +957,36 @@ async function restartAndWait(url) {
   showStep("done");
 }
 
-// The board card: slides open on the first connect and stays (its console is the only log)
+// While flashing: a floating red warning pinned at the top of the viewport, sliding in and away
+function startFlashGuard() {
+  const box = $("flash-warn");
+  box.hidden = false;
+  if (motionOk()) box.animate([{ transform: "translate(-50%, -140%)", opacity: 0 }, { transform: "translate(-50%, 0)", opacity: 1 }], { duration: FOLD_MS, easing: "ease-out" });
+}
+function stopFlashGuard() {
+  const box = $("flash-warn");
+  if (box.hidden) return;
+  if (!motionOk()) {
+    box.hidden = true;
+    return;
+  }
+  box.animate([{ transform: "translate(-50%, 0)", opacity: 1 }, { transform: "translate(-50%, -140%)", opacity: 0 }], { duration: FOLD_MS, easing: "ease-in" })
+    .onfinish = () => { box.hidden = true; };
+}
+
+// Start state <-> board card: the steps and Get Started fold away while the card slides in, and back on Disconnect
 function showConsole() {
+  foldShut(installer);
   if (consoleCard.hidden) foldOpen(consoleCard);
   paintConsole();
+}
+
+function hideConsole() {
+  if (!busy) closeWizard();
+  foldShut(consoleCard, () => {
+    wizard.hidden = true;
+    foldOpen(installer);
+  });
 }
 
 function guard(fn) {
@@ -959,8 +1019,6 @@ $("install-btn").addEventListener("click", () => {
 });
 eraseOk.addEventListener("change", syncStart);
 startInstall.addEventListener("click", () => install());
-$("choose-wifi").addEventListener("click", () => startWifi(true));
-$("choose-usb").addEventListener("click", () => showStep("usb"));
 $("copy-log").addEventListener("click", copyLog);
 $("error-retry").addEventListener("click", () => {
   if (retryStep === "wifi") startWifi(false);
@@ -989,24 +1047,31 @@ for (const button of wizard.querySelectorAll("[data-action]")) {
 }
 
 connectBtn.addEventListener("click", guard(async () => {
-  await pickPort();
+  try {
+    await pickPort();
+  } catch (err) {
+    if (err.code === "cancel") return;
+    throw err;
+  }
+  Object.assign(board, { installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0 });
+  syncBoardUi();
   showConsole();
 }));
-disconnectBtn.addEventListener("click", guard(closePort));
+disconnectBtn.addEventListener("click", guard(async () => {
+  await closePort();
+  hideConsole();
+}));
 resetBtn.addEventListener("click", guard(resetBoard));
 ctrlCBtn.addEventListener("click", guard(() => writeBytes(new Uint8Array([0x03]))));
 $("wifi-setup").addEventListener("click", () => {
   if (busy) return;
   startWifi(false);
 });
-$("console-webui").addEventListener("click", (event) => {
-  if ($("console-webui").getAttribute("aria-disabled") === "true") event.preventDefault();
-});
 $("console-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const text = consoleIn.value;
   consoleIn.value = "";
-  writeBytes(textEncoder.encode(text + "\r\n")).catch(() => appendConsole("\n[Could not send. Click Connect to Board and try again.]\n"));
+  writeBytes(textEncoder.encode(text + "\r\n")).catch(() => appendConsole("\n[Could not send. Click Get Started and try again.]\n"));
 });
 
 if ("serial" in navigator) {
@@ -1015,17 +1080,12 @@ if ("serial" in navigator) {
       reading = false;
       port = null;
       syncConsoleButtons();
+      hideConsole();
     }
   });
 }
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) requestWakeLock();
-});
-window.addEventListener("beforeunload", (event) => {
-  if (busy) {
-    event.preventDefault();
-    event.returnValue = "";
-  }
 });
 // Leaving the page: lines to run first, so closing the tab never holds the board in reset
 window.addEventListener("pagehide", () => {

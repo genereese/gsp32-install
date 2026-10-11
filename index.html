@@ -20,6 +20,7 @@
   </script>
 </head>
 <body>
+  <div id="flash-warn" class="flash-warn" role="alert" hidden>Installing. Keep This Tab Open or the Install Will Fail.</div>
   <main>
     <h1>Install GSP32</h1>
     <p class="lede">GSP32 is a MicroPython web UI for ESP32 boards. Plug your board in with a USB data cable and install it right from this page.</p>
@@ -33,25 +34,27 @@
       <ol class="steps-row" aria-label="Steps">
         <li><span class="step-icon" aria-hidden="true">&#128268;</span>1. Plug In Your Board</li>
         <li class="arrow" aria-hidden="true">&rarr;</li>
-        <li><span class="step-icon" aria-hidden="true">&#128279;</span>2. Connect to Board</li>
+        <li><span class="step-icon" aria-hidden="true">&#128279;</span>2. Click Get Started</li>
         <li class="arrow" aria-hidden="true">&rarr;</li>
         <li><span class="step-icon" aria-hidden="true">&#11015;</span>3. Install GSP32 or Set Up Wi-Fi</li>
       </ol>
-      <button id="connect" class="primary big" type="button">Connect to Board</button>
+      <button id="connect" class="primary big" type="button">Get Started</button>
       <p class="hint small">Works in Chrome or Edge on a computer.</p>
     </section>
 
     <section id="console" class="card" hidden>
       <div class="console-head">
-        <h2>Your Board</h2>
-        <span id="board-state" class="board-state">Not Connected</span>
+        <div class="board-id">
+          <h2 id="board-chip">ESP32 Board</h2>
+          <span id="board-mac" class="board-mac" hidden></span>
+        </div>
+        <span id="board-state" class="board-state">Checking the Board...</span>
       </div>
       <div class="actions" id="board-actions">
         <button id="install-btn" class="primary" type="button">Install GSP32</button>
-        <button id="wifi-setup" type="button" disabled>Set Up Wi-Fi</button>
-        <a id="console-webui" class="button" href="#" target="_blank" rel="noopener" aria-disabled="true">Open GSP32 Web UI</a>
+        <button id="wifi-setup" type="button" hidden>Set Up Wi-Fi</button>
+        <a id="console-webui" class="button" href="#" target="_blank" rel="noopener" hidden>Open GSP32 Web UI</a>
       </div>
-      <p id="board-hint" class="hint board-hint">Looking for GSP32 in the board's output...</p>
 
       <div id="wizard" class="wizard" hidden>
         <div class="step" data-step="prep" hidden>
@@ -75,18 +78,8 @@
           <h3>Installing GSP32</h3>
           <p id="flash-status" class="status-line">Connecting to the board...</p>
           <div class="progress"><div id="flash-bar" class="progress-bar"></div></div>
-          <p class="danger-note">Don't leave this tab or the install will fail.</p>
         </div>
 
-        <div class="step" data-step="choice" hidden>
-          <h3>Installed</h3>
-          <p class="ok-line">GSP32 is installed.</p>
-          <p>Set up Wi-Fi now to use the web UI from your browser, or use the board over USB only.</p>
-          <div class="actions end">
-            <button id="choose-usb" type="button">USB Only</button>
-            <button id="choose-wifi" class="primary" type="button">Set Up Wi-Fi</button>
-          </div>
-        </div>
 
         <div class="step" data-step="wifi" hidden>
           <h3>Set Up Wi-Fi</h3>
@@ -123,17 +116,6 @@
           </div>
         </div>
 
-        <div class="step" data-step="usb" hidden>
-          <h3>USB Only</h3>
-          <p class="ok-line">GSP32 is installed for USB use.</p>
-          <ul>
-            <li>Use the console below, or <code>mpremote connect COMx</code> (Windows), <code>/dev/ttyUSB0</code> (Linux), or the <code>cu.usbserial</code> port (Mac).</li>
-            <li>To add Wi-Fi later, click Set Up Wi-Fi above.</li>
-          </ul>
-          <div class="actions end">
-            <button class="primary" type="button" data-action="close">Close</button>
-          </div>
-        </div>
 
         <div class="step" data-step="error" hidden>
           <h3>Something Went Wrong</h3>

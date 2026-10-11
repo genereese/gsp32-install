@@ -44,7 +44,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 html[data-browser="block"] #browser-block { display: block; }
 html[data-browser="block"] #installer { display: none; }
 
-.start { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-top: 24px; }
+.start { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0; margin-top: 28px; padding: 8px 0 4px; }
+.start .steps-row { justify-content: center; }
+.start #connect { margin: 26px 0 12px; padding-left: 40px; padding-right: 40px; }
+.start .hint { margin: 0; }
 
 /* Buttons: only buttons lift on hover */
 button, .button {
@@ -87,6 +90,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 
 /* The inline wizard: one step at a time inside the board card, folding in place */
 .wizard { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-top: 14px; background: #fbfcfe; overflow: hidden; }
+[hidden] { display: none !important; }
 .wizard[hidden] { display: none; }
 h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .console-head, .console-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
@@ -131,5 +135,9 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .steps-row { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 0; margin: 0; font-size: 0.92rem; font-weight: 600; color: var(--muted); }
 .steps-row li { margin: 0; display: inline-flex; align-items: center; gap: 6px; }
 .steps-row .arrow { color: #a8b1bf; font-weight: 400; }
+.board-id { display: flex; flex-direction: column; gap: 2px; }
+.board-id h2 { margin: 0; }
+.board-mac { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); opacity: 0.85; }
 .step-icon { font-size: 1rem; }
 .hint.small { font-size: 0.88rem; margin: 0; }
+.flash-warn { position: fixed; top: 12px; left: 50%; transform: translate(-50%, 0); z-index: 50; max-width: calc(100vw - 24px); padding: 10px 14px; border-radius: 8px; border: 1px solid #d93025; background: #fdecea; color: #611a15; font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }
