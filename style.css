@@ -1,0 +1,321 @@
+:root {
+  color-scheme: light;
+  --esp-tools-button-color: #1f6feb;
+  --esp-tools-button-text-color: #ffffff;
+  --esp-tools-button-border-radius: 10px;
+  --ink: #1f2933;
+  --muted: #5b6675;
+  --line: #dfe4ec;
+  --paper: #ffffff;
+  --page: #f5f7fb;
+  --blue: #1f6feb;
+  --danger: #d1242f;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--page);
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: system-ui, sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  min-width: 0;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0 0 0.5rem;
+}
+
+h1 {
+  font-size: 1.75rem;
+}
+
+h2 {
+  font-size: 1.2rem;
+}
+
+h3 {
+  font-size: 1.05rem;
+  margin-top: 0.2rem;
+}
+
+p,
+ol,
+ul {
+  margin: 0 0 0.9rem;
+}
+
+ol:last-child,
+ul:last-child,
+p:last-child {
+  margin-bottom: 0;
+}
+
+ol,
+ul {
+  padding-left: 1.25rem;
+}
+
+li + li {
+  margin-top: 0.4rem;
+}
+
+a {
+  color: var(--blue);
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+
+.lede {
+  margin: 0;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  margin-top: 16px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+#browser-block {
+  display: none;
+}
+
+html[data-browser="block"] #browser-block {
+  display: block;
+}
+
+html[data-browser="block"] #installer {
+  display: none !important;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 14px;
+  font-weight: 600;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  max-width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 400;
+}
+
+.check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 0 14px;
+  font-weight: 600;
+}
+
+.check input {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.25rem;
+  flex: none;
+  accent-color: var(--blue);
+}
+
+.warn,
+.error,
+.banner {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.banner {
+  margin-top: 12px;
+}
+
+.status {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #eef4ff;
+  color: var(--ink);
+}
+
+esp-web-install-button {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+button,
+#install-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
+  cursor: pointer;
+}
+
+#install-btn,
+#wifi-connect,
+.open-board {
+  border: 0;
+  background: var(--blue);
+  color: #ffffff;
+}
+
+button:hover,
+.open-board:hover {
+  filter: brightness(0.97);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 3px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  min-width: 0;
+}
+
+.console-out {
+  height: 240px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  overflow: auto;
+  max-width: 100%;
+  background: var(--ink);
+  color: var(--page);
+  border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  margin: -4px 0 12px;
+  color: var(--muted);
+}
+
+.nets {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  max-height: 240px;
+  overflow: auto;
+  max-width: 100%;
+}
+
+.nets li + li {
+  margin-top: 0;
+}
+
+.nets label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-weight: 400;
+}
+
+.nets input {
+  margin-top: 0.3rem;
+  flex: none;
+  accent-color: var(--blue);
+}
+
+#wifi-connect {
+  margin-bottom: 12px;
+}
+
+.open-board {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  margin: 8px 0;
+  padding: 16px 18px;
+  border-radius: 10px;
+  font-size: 1.35rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.board-url {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+[hidden] {
+  display: none !important;
+}

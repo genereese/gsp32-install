@@ -4,183 +4,123 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
-  <style>
-    :root {
-      color-scheme: light;
-      --esp-tools-button-color: #1f6feb;
-      --esp-tools-button-text-color: #ffffff;
-      --esp-tools-button-border-radius: 10px;
-    }
-
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-    }
-
-    html {
-      background: #f5f7fb;
-    }
-
-    body {
-      margin: 0;
-      background: #f5f7fb;
-      color: #1f2933;
-      font-family: system-ui, sans-serif;
-      font-size: 1.0625rem;
-      line-height: 1.55;
-      overflow-wrap: anywhere;
-      overflow-x: hidden;
-    }
-
-    main {
-      max-width: 760px;
-      margin: 0 auto;
-      padding: 24px 16px 48px;
-    }
-
-    h1,
-    h2 {
-      line-height: 1.25;
-      margin: 0 0 0.5rem;
-    }
-
-    h1 {
-      font-size: 1.75rem;
-    }
-
-    h2 {
-      font-size: 1.2rem;
-    }
-
-    p,
-    ol,
-    ul {
-      margin: 0 0 0.9rem;
-    }
-
-    ol:last-child,
-    ul:last-child,
-    p:last-child {
-      margin-bottom: 0;
-    }
-
-    ol,
-    ul {
-      padding-left: 1.25rem;
-    }
-
-    li + li {
-      margin-top: 0.4rem;
-    }
-
-    a {
-      color: #1f6feb;
-    }
-
-    .lede {
-      margin: 0;
-      color: #5b6675;
-    }
-
-    .card {
-      background: #ffffff;
-      border: 1px solid #dfe4ec;
-      border-radius: 10px;
-      padding: 16px;
-      margin-top: 16px;
-    }
-
-    .erase {
-      margin: 0 0 16px;
-      padding: 12px 14px;
-      border: 1px solid #d1242f;
-      border-radius: 10px;
-      color: #d1242f;
-      font-weight: 600;
-    }
-
-    esp-web-install-button {
-      display: block;
-      max-width: 100%;
-    }
-
-    button[slot="activate"] {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      min-height: 48px;
-      margin: 0;
-      padding: 12px 20px;
-      border: 0;
-      border-radius: 10px;
-      background: #1f6feb;
-      color: #ffffff;
-      font: inherit;
-      font-weight: 600;
-      line-height: 1.2;
-      cursor: pointer;
-    }
-
-    button[slot="activate"]:hover {
-      filter: brightness(0.95);
-    }
-
-    button[slot="activate"]:focus-visible {
-      outline: 3px solid #1f6feb;
-      outline-offset: 3px;
-    }
-
-    [slot="unsupported"],
-    [slot="not-allowed"] {
-      display: block;
-      color: #5b6675;
-    }
-
-    esp-web-install-button:not(:defined) [slot="unsupported"],
-    esp-web-install-button:not(:defined) [slot="not-allowed"] {
-      display: none;
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    (function () {
+      var ua = navigator.userAgent || "";
+      var firefox = /firefox|fxios/i.test(ua);
+      var safari = /safari/i.test(ua) && !/chrome|chromium|crios|edg\/|edge\/|edgios/i.test(ua);
+      var mobile = !!(navigator.userAgentData && navigator.userAgentData.mobile);
+      if (/Android|iPhone|iPad|iPod|Mobile|Tablet|Opera Mini|IEMobile/i.test(ua)) mobile = true;
+      if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) mobile = true;
+      if (!("serial" in navigator) || firefox || safari || mobile) {
+        document.documentElement.setAttribute("data-browser", "block");
+      }
+    })();
+  </script>
 </head>
 <body>
   <main>
     <h1>Install GSP32</h1>
     <p class="lede">GSP32 is a MicroPython web UI for ESP32 boards. This page installs it from your browser.</p>
 
-    <section class="card">
-      <h2>What you need</h2>
+    <section id="browser-block" class="card">
+      <h2>Use Chrome or Edge on a desktop computer</h2>
+      <p>This page talks to the board over a USB cable. Phones, tablets, Firefox, and Safari cannot do that. Open this page in Google Chrome or Microsoft Edge on a desktop computer.</p>
+    </section>
+
+    <section id="installer" class="card">
+      <h2>Install</h2>
       <ul>
         <li>A classic ESP32 board</li>
         <li>A USB data cable</li>
         <li>Google Chrome or Microsoft Edge on a desktop computer</li>
       </ul>
+      <p>Installing deletes everything already stored on the board.</p>
+
+      <label class="field" for="version">Version
+        <select id="version" disabled>
+          <option>Loading versions...</option>
+        </select>
+      </label>
+
+      <label class="check" for="erase-ok">
+        <input id="erase-ok" type="checkbox" required>
+        <span>I understand this erases the board</span>
+      </label>
+
+      <p class="warn">Keep this tab open and visible during the install. If you switch away, the install can slow down or fail.</p>
+
+      <esp-web-install-button manifest="manifest.json">
+        <button slot="activate" id="install-btn" type="button" disabled>Install GSP32</button>
+        <span slot="unsupported">Use Chrome or Edge on a desktop computer.</span>
+        <span slot="not-allowed">Open this page on localhost or HTTPS, then try again.</span>
+      </esp-web-install-button>
+
+      <p id="install-status" class="status" hidden></p>
+      <p id="hidden-banner" class="banner" hidden>This tab is hidden. Bring it back and keep it visible until the install finishes.</p>
+      <div id="install-error" class="error" hidden>
+        <p>The install did not finish. Unplug the board, plug it back in, and try again. Close other programs that use the serial port, such as Arduino, Thonny, and mpremote. If it still fails, try another USB cable and another port.</p>
+      </div>
+      <div id="after-install" hidden>
+        <p>The firmware is on the board. The install window can set up Wi-Fi too. You can also do it here.</p>
+        <div class="actions">
+          <button id="setup-wifi" type="button">Set up Wi-Fi</button>
+          <button id="skip-usb" type="button">Skip, USB only</button>
+        </div>
+        <div id="usb-only" hidden>
+          <p>You can use the board over USB, with no Wi-Fi.</p>
+          <ul>
+            <li>In the serial console below, click Connect. The speed is 115200.</li>
+            <li>Or from a terminal: <code>mpremote connect /dev/ttyUSB0</code> on Linux, the <code>cu.usbserial</code> port on Mac, or <code>COMx</code> on Windows.</li>
+          </ul>
+          <p>Reset the board and press Enter when it says “Press Enter within 10 s” to set up Wi-Fi from the USB console.</p>
+        </div>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>Install</h2>
-      <ol>
-        <li>Plug the board into this computer with the USB data cable.</li>
-        <li>Click <strong>Install GSP32</strong> and pick the port for your board.</li>
-        <li>Wait for the flash to finish. Leave the board plugged in.</li>
-        <li>Enter your Wi-Fi name and password when asked.</li>
-      </ol>
-      <p class="erase">This erases the board. Anything already stored on it is deleted.</p>
-      <esp-web-install-button manifest="manifest.json">
-        <button slot="activate" type="button">Install GSP32</button>
-        <span slot="unsupported">This browser has no Web Serial support, so firmware cannot be installed from this page. Open it in Google Chrome or Microsoft Edge on a desktop computer.</span>
-        <span slot="not-allowed">The browser will not open a serial port from this address. Use HTTPS, or open the page on localhost, then try again.</span>
-      </esp-web-install-button>
+    <section id="console" class="card">
+      <h2>Serial console</h2>
+      <p>Talk to the board over USB at 115200. You can use this any time.</p>
+      <div class="actions">
+        <button id="connect" type="button">Connect</button>
+        <button id="reset" type="button" disabled>Reset</button>
+        <button id="ctrl-c" type="button" disabled>Ctrl-C</button>
+        <button id="wifi-setup" type="button">Set up / change Wi-Fi</button>
+      </div>
+      <p id="console-hint" class="hint">Nothing yet. Click Connect and the board’s text shows up here.</p>
+      <pre id="console-out" class="console-out" tabindex="0" aria-label="Board output"></pre>
+      <form id="console-form">
+        <label class="field" for="console-in">Send a line
+          <input id="console-in" type="text" autocomplete="off" spellcheck="false" disabled>
+        </label>
+      </form>
+
+      <div id="wifi" hidden>
+        <h3>Wi-Fi</h3>
+        <p id="wifi-status">Looking for Wi-Fi networks...</p>
+        <ul id="wifi-list" class="nets"></ul>
+        <label class="field" for="wifi-password">Password
+          <input id="wifi-password" type="password" autocomplete="off" spellcheck="false">
+        </label>
+        <button id="wifi-connect" type="button" disabled>Connect</button>
+        <p id="wifi-progress" hidden>Connecting...</p>
+        <p id="wifi-error" class="error" hidden></p>
+        <div id="wifi-success" hidden>
+          <a id="open-board" class="open-board" href="http://gsp32.local/">Open your board</a>
+          <p id="open-board-url" class="board-url"></p>
+        </div>
+      </div>
     </section>
 
     <section class="card">
       <h2>Getting Started</h2>
-      <p>Open <a href="http://gsp32.local/">http://gsp32.local</a>, or the IP address shown after setup.</p>
+      <p>Open <a href="http://gsp32.local/">http://gsp32.local</a>, or the address shown after Wi-Fi setup.</p>
       <p>On the first visit, set a password for the web UI.</p>
-      <p>If Wi-Fi setup was skipped, use a serial console: press Enter at the “Press Enter within 10 s” prompt.</p>
+      <p>If you skipped Wi-Fi, use the serial console above or <code>mpremote</code>. Press Enter at the “Press Enter within 10 s” prompt.</p>
     </section>
   </main>
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
