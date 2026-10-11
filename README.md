@@ -18,5 +18,5 @@ reset the board and press Enter at the "Press Enter within 10 s" prompt to set u
 ## Contents
 
 - `index.html` - the page; `manifest.json` - the ESP Web Tools manifest (ESP32, Improv on)
-- `firmware/gsp32-esp32.bin` - merged 4 MB image from ESP32-httpd e31c853 (no Wi-Fi settings, no passwords, no
+- `firmware/gsp32-esp32.bin` - merged 4 MB image from ESP32-httpd 62600ef (no Wi-Fi settings, no passwords, no
   personal files: the file system holds only boot.py, main.py and the shipped web pages)
