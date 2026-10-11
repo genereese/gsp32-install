@@ -25,9 +25,6 @@ const wifiPassword = $("wifi-password");
 const wifiError = $("wifi-error");
 const wifiRescan = $("wifi-rescan");
 const wifiConnect = $("wifi-connect");
-const restartStatus = $("restart-status");
-const boardIp = $("board-ip");
-const openWebui = $("open-webui");
 const errorText = $("error-text");
 const consoleCard = $("console");
 const installer = $("installer");
@@ -149,11 +146,21 @@ function syncBoardUi() {
   mac.textContent = board.mac ? "MAC " + board.mac.toUpperCase() : "";
   mac.hidden = !board.mac;
   const version = board.version ? " (Version " + board.version + ")" : "";
+  setup.textContent = address ? "Change Wi-Fi" : "Set Up Wi-Fi";
   const state = $("board-state");
   state.textContent = !on ? "Not Connected"
+    : board.note ? board.note
     : gsp32 ? (board.installed ? "GSP32 Found" : "Existing GSP32 Installation Found") + version
     : board.installed ? "Installed, Restarting..."
     : board.kind === "other" ? "No GSP32 Found" : "Checking the Board...";
+  if (on && gsp32 && address && !board.note) {
+    const link = document.createElement("a");
+    link.href = address;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = board.ip;
+    state.append(" at ", link);
+  }
   state.classList.toggle("on", on && gsp32);
 }
 
@@ -340,6 +347,7 @@ function closeWizard() {
 
 function setBusy(on) {
   busy = on;
+  if (typeof syncConsoleButtons === "function") setTimeout(syncConsoleButtons, 0);
   if (on) requestWakeLock();
   else releaseWakeLock();
 }
@@ -802,6 +810,7 @@ function syncWifiConnect() {
 
 async function startWifi(fresh) {
   showStep("wifi");
+  setTimeout(() => wizard.scrollIntoView({ behavior: motionOk() ? "smooth" : "auto", block: "nearest" }), motionOk() ? FOLD_MS : 0);
   wifiError.hidden = true;
   wifiRescan.hidden = true;
   wifiForm.hidden = true;
@@ -879,7 +888,8 @@ async function connectWifi() {
   setBusy(true);
   syncWifiConnect();
   wifiWait.hidden = false;
-  wifiStatus.textContent = "Connecting to " + picked.value + "...";
+  wifiStatus.textContent = "Connecting to Wi-Fi (" + picked.value + ")...";
+  appendConsole("\n[Connecting to Wi-Fi (" + picked.value + ")...]\n");
   const result = waitForPackets(40000, (packet, resolve, reject) => {
     if (packet.type === 2 && packet.data[0] > 0) {
       const err = new Error("connect");
@@ -896,7 +906,7 @@ async function connectWifi() {
     await writeBytes(buildWifiRpc(picked.value, wifiPassword.value));
     const url = safeHttpUrl(await result);
     wifiPassword.value = "";
-    await restartAndWait(url);
+    finishWifi(url);
   } catch (err) {
     wifiWait.hidden = true;
     setBusy(false);
@@ -909,52 +919,19 @@ async function connectWifi() {
   }
 }
 
-// Step 5: reset the board so it starts clean on the new network, then wait until its web server listens on Wi-Fi
-// (its boot lines on the serial port: this https page cannot ask an http board on the local network directly)
-function waitForBoot(timeoutMs) {
-  return new Promise((resolve) => {
-    let ip = "";
-    let listening = false;
-    const watch = (line) => {
-      if (line.includes("Server listening")) listening = true;
-      const match = line.match(/Network config: \('(\d+\.\d+\.\d+\.\d+)'/);
-      if (match) ip = match[1];
-      if (listening && ip) done();
-    };
-    const done = () => {
-      clearTimeout(timer);
-      lineWatchers = lineWatchers.filter((item) => item !== watch);
-      resolve(ip);
-    };
-    const timer = setTimeout(done, timeoutMs);
-    lineWatchers.push(watch);
-  });
-}
-
-async function restartAndWait(url) {
-  showStep("restart");
-  restartStatus.textContent = "Restarting the board...";
-  const booted = waitForBoot(45000);
-  await resetBoard();
-  restartStatus.textContent = "Waiting for the board to join Wi-Fi...";
-  let ip = await booted;
-  if (ip) {
-    // The web server answers a moment after the address is set
-    restartStatus.textContent = "Starting the web UI...";
-    await delay(2500);
-  } else if (url) {
-    ip = new URL(url).hostname;
-  }
+// Step 5: the board joined Wi-Fi on its own (the Improv result carries its address): no reset; the card shows it
+function finishWifi(url) {
   setBusy(false);
+  const ip = url ? new URL(url).hostname : "";
   if (!ip) {
     showError("The board did not report its address. The console below shows what it printed.", "prep");
     return;
   }
-  const address = "http://" + ip + "/";
-  boardIp.href = address;
-  boardIp.textContent = address;
-  openWebui.href = address;
-  showStep("done");
+  board.ip = ip;
+  appendConsole("\n[Wi-Fi connected. GSP32 web UI: http://" + ip + "/]\n");
+  onImprov = null;
+  foldShut(wizard);
+  syncConsoleButtons();
 }
 
 // While flashing: a floating red warning pinned at the top of the viewport, sliding in and away
