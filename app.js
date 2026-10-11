@@ -1,5 +1,6 @@
-// GSP32 web installer: one wizard window (version and warnings, port, flashing with esptool-js, Wi-Fi over Improv,
-// restart, done). One serial port stays open from the port pick to the end, and every open and close leaves the
+// GSP32 web installer: Connect to Board opens one serial port and the board card (live console plus Install GSP32,
+// Set Up Wi-Fi, Open GSP32 Web UI). The install and Wi-Fi steps run inline in that card, one step at a time, with
+// their output in the same console. One serial port stays open from the port pick to the end, and every open and close leaves the
 // board's reset lines in the run state (DTR and RTS both off), so the page never resets or holds the board in reset
 // by itself; it resets the board only on purpose (after flashing, after Wi-Fi setup, Reset Board).
 import { ESPLoader, Transport } from "./vendor/esptool-js-0.5.7.js";
@@ -16,7 +17,6 @@ const eraseOk = $("erase-ok");
 const startInstall = $("start-install");
 const flashStatus = $("flash-status");
 const flashBar = $("flash-bar");
-const flashDetail = $("flash-detail");
 const wifiStatus = $("wifi-status");
 const wifiWait = $("wifi-wait");
 const wifiList = $("wifi-list");
@@ -57,6 +57,40 @@ let lineWatchers = [];
 const board = { kind: "unknown", readyAt: 0, bootAt: 0, ip: "", name: "", repl: false };
 const READY_WINDOW_MS = 25000;
 let otherTimer = null;
+const FOLD_MS = 220;
+
+function motionOk() {
+  return !matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// Height folds: content slides open and shut instead of jumping
+function foldOpen(element) {
+  element.hidden = false;
+  if (!motionOk()) return;
+  const height = element.offsetHeight;
+  element.style.overflow = "hidden";
+  element.animate([{ height: "0px", opacity: 0 }, { height: height + "px", opacity: 1 }], { duration: FOLD_MS, easing: "ease-out" })
+    .onfinish = () => { element.style.overflow = ""; };
+}
+
+function foldShut(element, done) {
+  if (element.hidden) {
+    if (done) done();
+    return;
+  }
+  if (!motionOk()) {
+    element.hidden = true;
+    if (done) done();
+    return;
+  }
+  element.style.overflow = "hidden";
+  element.animate([{ height: element.offsetHeight + "px", opacity: 1 }, { height: "0px", opacity: 0 }], { duration: FOLD_MS, easing: "ease-in" })
+    .onfinish = () => {
+      element.style.overflow = "";
+      element.hidden = true;
+      if (done) done();
+    };
+}
 
 function trackBoard(line) {
   if (/GSP32 Improv Ready|Server listening on port|Web UI starts without Wi-Fi|Web UI running/.test(line)) {
@@ -85,33 +119,27 @@ function trackBoard(line) {
 }
 
 function syncBoardUi() {
-  const setup = $("wifi-setup"), web = $("console-webui"), hint = $("board-hint");
-  if (!setup || !web) return;
-  const other = board.kind === "other";
-  setup.disabled = other || busy;
-  setup.title = other ? "Install GSP32 first to set up Wi-Fi" : "Send the Wi-Fi name and password to GSP32 over USB";
-  const address = board.ip ? "http://" + board.ip + "/" : "";
+  const setup = $("wifi-setup"), web = $("console-webui"), hint = $("board-hint"), install = $("install-btn");
+  const on = portOpen();
+  const gsp32 = board.kind === "gsp32";
+  install.disabled = !on || busy;
+  setup.disabled = !on || busy || !gsp32;
+  const address = gsp32 && board.ip ? "http://" + board.ip + "/" : "";
   web.href = address || "#";
-  web.setAttribute("aria-disabled", address ? "false" : "true");
+  web.setAttribute("aria-disabled", address && on ? "false" : "true");
   web.classList.toggle("primary", !!address);
-  web.title = address ? "Open " + address + (board.name ? " (" + board.name + ")" : "") : "The address shows once the board reports it on Wi-Fi";
-  hint.replaceChildren();
-  if (other) {
-    hint.append("Install GSP32 first to set up Wi-Fi. ");
-    const link = document.createElement("a");
-    link.href = "#";
-    link.textContent = "Install GSP32";
-    link.addEventListener("click", (event) => { event.preventDefault(); $("install-btn").click(); });
-    hint.append(link);
-  } else if (address) {
-    hint.textContent = "GSP32 is on Wi-Fi at " + address + (board.name ? " (also http://" + board.name + "/)" : "") + ".";
-  } else if (!portOpen()) {
-    hint.textContent = "Connect to see whether the board runs GSP32 and its address.";
-  } else if (board.kind === "gsp32") {
-    hint.textContent = "GSP32 found. No Wi-Fi address yet: Set Up Wi-Fi, or click Reset Board to see it at boot.";
-  } else {
-    hint.textContent = "Waiting for the board: click Reset Board to see what it runs and its address.";
-  }
+  const state = $("board-state");
+  state.textContent = !on ? "Not Connected" : gsp32 ? "GSP32 Found" : board.kind === "other" ? "Other Firmware" : "Connected";
+  state.classList.toggle("on", on);
+  let text;
+  if (!on) text = "Disconnected. Click Connect to Board to use it again.";
+  else if (board.kind === "other") text = "This board does not run GSP32. Install GSP32 first to set up Wi-Fi.";
+  else if (!gsp32) text = "Checking what the board runs. Set Up Wi-Fi turns on once GSP32 is found; click Reset Board if nothing shows.";
+  else if (address) text = "GSP32 is on Wi-Fi at " + address + (board.name ? " (also http://" + board.name + "/)" : "") + ".";
+  else text = "GSP32 found. Open GSP32 Web UI turns on once the board reports a Wi-Fi address: Set Up Wi-Fi, or click Reset Board.";
+  hint.textContent = text;
+  setup.title = setup.disabled && on && !busy ? "Install GSP32 first to set up Wi-Fi" : "";
+  web.title = address ? "Open " + address : "Needs GSP32 on Wi-Fi with a known address";
 }
 
 function concatBytes(left, right) {
@@ -273,17 +301,26 @@ function browserBlocked() {
   return document.documentElement.getAttribute("data-browser") === "block";
 }
 
-// Wizard steps: only the current one shows; the window keeps its place and changes height smoothly
+// Wizard steps: inline in the board card; the current step replaces the last one and the box changes height smoothly
 function showStep(name) {
-  const before = wizard.open ? wizard.offsetHeight : 0;
+  const wasHidden = wizard.hidden;
+  const before = wasHidden ? 0 : wizard.offsetHeight;
   for (const step of wizard.querySelectorAll(".step")) step.hidden = step.dataset.step !== name;
-  const titles = { prep: "Install GSP32", flash: "Installing GSP32", choice: "Installed", wifi: "Set Up Wi-Fi",
-                   restart: "Restarting the Board", done: "Your Board Is Ready", usb: "USB Only", error: "Something Went Wrong" };
-  $("wizard-title").textContent = titles[name] || "Install GSP32";
-  if (before && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    const after = wizard.offsetHeight;
-    wizard.animate([{ height: before + "px" }, { height: after + "px" }], { duration: 200, easing: "ease-out" });
+  if (wasHidden) {
+    foldOpen(wizard);
+    return;
   }
+  if (motionOk()) {
+    const after = wizard.offsetHeight;
+    if (after !== before) wizard.animate([{ height: before + "px" }, { height: after + "px" }], { duration: FOLD_MS, easing: "ease-out" });
+  }
+}
+
+function closeWizard() {
+  if (busy) return;
+  onImprov = null;
+  foldShut(wizard);
+  syncConsoleButtons();
 }
 
 function setBusy(on) {
@@ -370,7 +407,7 @@ function portOpen() {
 function syncConsoleButtons() {
   const on = portOpen();
   connectBtn.disabled = on;
-  connectBtn.textContent = on ? "Connected" : "Connect";
+  connectBtn.textContent = on ? "Connected" : "Connect to Board";
   disconnectBtn.disabled = !on || busy;
   resetBtn.disabled = !on || busy;
   ctrlCBtn.disabled = !on || busy;
@@ -411,7 +448,7 @@ function startReading() {
       } catch (err) {
         if (reading) {
           reading = false;
-          appendConsole("\n[The board disconnected. Plug it in and click Connect.]\n");
+          appendConsole("\n[The board disconnected. Plug it in and click Connect to Board.]\n");
           port = null;
         }
       } finally {
@@ -534,29 +571,21 @@ async function loadFirmware() {
   return files;
 }
 
-function setProgress(text, percent, detail) {
+function setProgress(text, percent) {
   flashStatus.textContent = text;
   if (percent != null) flashBar.style.width = Math.max(0, Math.min(100, percent)) + "%";
-  if (detail != null) flashDetail.textContent = detail;
 }
 
 // Step 2: port, then flash with esptool-js on the same open port
 async function install() {
   showStep("flash");
-  setProgress("Choose the board's port in the browser's list...", 0, "");
   setBusy(true);
-  try {
-    await pickPort();
-  } catch (err) {
-    setBusy(false);
-    if (err.code === "cancel") {
-      showStep("prep");
-      return;
-    }
-    showError(err.message, "prep");
+  syncConsoleButtons();
+  if (!portOpen()) {
+    showError("The board is not connected. Click Connect to Board, then try again.", "prep");
     return;
   }
-  syncConsoleButtons();
+  appendConsole("\n[Installing " + versionSelect.options[versionSelect.selectedIndex].textContent + "]\n");
   try {
     setProgress("Downloading the firmware...", 0, "");
     const files = await loadFirmware();
@@ -580,14 +609,14 @@ async function install() {
     };
     const terminal = {
       clean() {},
-      writeLine(text) { flashDetail.textContent = text; },
-      write() {},
+      writeLine(text) { appendConsole("[esptool] " + text + "\n"); },
+      write(text) { appendConsole(text); },
     };
     const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
     setProgress("Connecting to the board...", 0);
     const chip = await loader.main("default_reset");
     if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
-    setProgress("Erasing the board (about 15 seconds)...", 0, chip);
+    setProgress("Erasing the board (about 15 seconds)...", 0);
     let lastPercent = -1;
     await loader.writeFlash({
       fileArray: files,
@@ -601,14 +630,18 @@ async function install() {
         if (percent !== lastPercent) {
           lastPercent = percent;
           setProgress("Writing the firmware... " + percent + "%", percent);
+          if (percent % 10 === 0) appendConsole("[esptool] Written " + percent + "%\n");
         }
       },
     });
-    setProgress("Restarting the board...", 100, "");
+    setProgress("Restarting the board...", 100);
     await transport.disconnect();
+    // Detect again from the new boot: the buttons follow what the fresh firmware prints
+    board.kind = "unknown";
+    board.ip = "";
+    board.readyAt = 0;
+    appendConsole("[Installed. Restarting the board.]\n");
     await resetBoard();
-    lines = [];
-    partial = "";
     startReading();
     setBusy(false);
     showStep("choice");
@@ -768,10 +801,6 @@ async function startWifi(fresh) {
   } catch (err) {
     wifiWait.hidden = true;
     setBusy(false);
-    if (err.code === "cancel") {
-      wizard.close();
-      return;
-    }
     wifiStatus.textContent = err.message;
     wifiRescan.hidden = false;
     wifiRescan.textContent = "Try Again";
@@ -884,7 +913,7 @@ async function restartAndWait(url) {
   }
   setBusy(false);
   if (!ip) {
-    showError("The board did not report its address. Open the Serial Console to see what it printed.", "prep");
+    showError("The board did not report its address. The console below shows what it printed.", "prep");
     return;
   }
   const address = "http://" + ip + "/";
@@ -894,39 +923,45 @@ async function restartAndWait(url) {
   showStep("done");
 }
 
-// Serial console on the page (shares the wizard's port)
+// The board card: slides open on the first connect and stays (its console is the only log)
 function showConsole() {
-  if (consoleCard.hidden) {
-    consoleCard.hidden = false;
-    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      consoleCard.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }], { duration: 200, easing: "ease-out" });
-    }
-  }
+  if (consoleCard.hidden) foldOpen(consoleCard);
   paintConsole();
-  consoleCard.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function guard(fn) {
   return () => fn().catch((err) => appendConsole("\n[" + (err && err.message ? err.message : "Something went wrong") + "]\n"));
 }
 
-function openWizard(step) {
-  if (browserBlocked()) return;
-  if (!wizard.open) wizard.showModal();
-  showStep(step);
+async function copyLog() {
+  const text = consoleOut.textContent;
+  const button = $("copy-log");
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (err) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.append(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  button.textContent = "Copied";
+  setTimeout(() => { button.textContent = "Copy Log"; }, 1500);
 }
 
 // Events
 $("install-btn").addEventListener("click", () => {
+  if (busy) return;
   eraseOk.checked = false;
   syncStart();
-  openWizard("prep");
+  showStep("prep");
 });
-$("open-console").addEventListener("click", showConsole);
 eraseOk.addEventListener("change", syncStart);
 startInstall.addEventListener("click", () => install());
 $("choose-wifi").addEventListener("click", () => startWifi(true));
 $("choose-usb").addEventListener("click", () => showStep("usb"));
+$("copy-log").addEventListener("click", copyLog);
 $("error-retry").addEventListener("click", () => {
   if (retryStep === "wifi") startWifi(false);
   else showStep(retryStep);
@@ -948,31 +983,20 @@ wifiPassword.addEventListener("keydown", (event) => {
 });
 for (const button of wizard.querySelectorAll("[data-action]")) {
   button.addEventListener("click", () => {
-    wizard.close();
-    if (button.dataset.action === "console") showConsole();
+    if (button.id === "wifi-cancel" && busy) return;
+    closeWizard();
   });
 }
-// No closing in the middle of a step that talks to the board
-wizard.addEventListener("cancel", (event) => {
-  if (busy) event.preventDefault();
-});
-wizard.querySelector(".close").addEventListener("click", (event) => {
-  if (busy) event.preventDefault();
-});
-wizard.addEventListener("close", () => {
-  onImprov = null;
-  syncConsoleButtons();
-});
 
 connectBtn.addEventListener("click", guard(async () => {
-  showConsole();
   await pickPort();
+  showConsole();
 }));
 disconnectBtn.addEventListener("click", guard(closePort));
 resetBtn.addEventListener("click", guard(resetBoard));
 ctrlCBtn.addEventListener("click", guard(() => writeBytes(new Uint8Array([0x03]))));
 $("wifi-setup").addEventListener("click", () => {
-  openWizard("wifi");
+  if (busy) return;
   startWifi(false);
 });
 $("console-webui").addEventListener("click", (event) => {
@@ -982,7 +1006,7 @@ $("console-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const text = consoleIn.value;
   consoleIn.value = "";
-  writeBytes(textEncoder.encode(text + "\r\n")).catch(() => appendConsole("\n[Could not send. Click Connect and try again.]\n"));
+  writeBytes(textEncoder.encode(text + "\r\n")).catch(() => appendConsole("\n[Could not send. Click Connect to Board and try again.]\n"));
 });
 
 if ("serial" in navigator) {

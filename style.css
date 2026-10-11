@@ -85,24 +85,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .check { display: flex; gap: 10px; align-items: flex-start; font-weight: 600; margin: 12px 0; cursor: pointer; }
 .check input { width: 20px; height: 20px; margin-top: 3px; }
 
-/* The wizard window */
-dialog#wizard {
-  width: min(520px, calc(100vw - 24px));
-  max-height: calc(100vh - 48px);
-  margin: 8vh auto auto;
-  padding: 20px 20px 18px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.25);
-  overflow: auto;
-}
-dialog#wizard::backdrop { background: rgba(15, 23, 42, 0.45); }
-dialog#wizard[open] { animation: pop 0.18s ease-out; }
-.wizard-close-form { float: right; margin: -8px -8px 0 0; }
-.close { border: none; background: none; font-size: 1.6rem; min-height: 0; padding: 0 8px; color: var(--muted); }
-.close:hover:not(:disabled) { transform: none; box-shadow: none; color: var(--ink); }
+/* The inline wizard: one step at a time inside the board card, folding in place */
+.wizard { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-top: 14px; background: #fbfcfe; overflow: hidden; }
+.wizard[hidden] { display: none; }
+h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+.console-head, .console-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.console-bar { margin-top: 16px; }
+.console-bar h3 { margin: 0; }
+.actions.tight { margin-top: 0; }
+.actions.tight button { min-height: 34px; padding: 4px 12px; font-size: 0.95rem; }
+.board-state { font-size: 0.9rem; font-weight: 600; color: var(--muted); padding: 2px 10px; border-radius: 999px; background: #eef1f6; }
+.board-state.on { color: var(--ok); background: #e6f4ea; }
 .step[hidden] { display: none; }
-.step:not([hidden]) { animation: fade 0.2s ease-out; }
 .warn-box { border-left: 4px solid #d4a72c; background: #fff8e5; padding: 10px 12px; border-radius: 6px; }
 .danger-note { color: var(--danger); font-weight: 600; margin-top: 12px; }
 .status-line { font-weight: 600; }
@@ -132,8 +126,10 @@ dialog#wizard[open] { animation: pop 0.18s ease-out; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
-@media (max-width: 520px) {
-  dialog#wizard { margin-top: 12px; }
-}
 .button[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; pointer-events: auto; }
 .board-hint { margin: 8px 0 0; }
+.steps-row { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 0; margin: 0; font-size: 0.92rem; font-weight: 600; color: var(--muted); }
+.steps-row li { margin: 0; display: inline-flex; align-items: center; gap: 6px; }
+.steps-row .arrow { color: #a8b1bf; font-weight: 400; }
+.step-icon { font-size: 1rem; }
+.hint.small { font-size: 0.88rem; margin: 0; }
