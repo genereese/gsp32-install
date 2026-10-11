@@ -135,3 +135,5 @@ dialog#wizard[open] { animation: pop 0.18s ease-out; }
 @media (max-width: 520px) {
   dialog#wizard { margin-top: 12px; }
 }
+.button[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; pointer-events: auto; }
+.board-hint { margin: 8px 0 0; }

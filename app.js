@@ -53,6 +53,66 @@ let lines = [];
 let partial = "";
 let onImprov = null;
 let lineWatchers = [];
+// What the serial lines tell about the board: GSP32 or not, when its Improv listener is ready, its address
+const board = { kind: "unknown", readyAt: 0, bootAt: 0, ip: "", name: "", repl: false };
+const READY_WINDOW_MS = 25000;
+let otherTimer = null;
+
+function trackBoard(line) {
+  if (/GSP32 Improv Ready|Server listening on port|Web UI starts without Wi-Fi|Web UI running/.test(line)) {
+    board.kind = "gsp32";
+    board.readyAt = Date.now();
+    clearTimeout(otherTimer);
+  }
+  if (/^rst:0x|^ets [A-Z][a-z]{2} /.test(line)) {
+    board.bootAt = Date.now();
+    board.repl = false;
+    clearTimeout(otherTimer);
+    // No GSP32 line within 20 s of a boot: some other firmware
+    otherTimer = setTimeout(() => {
+      if (board.readyAt < board.bootAt) {
+        board.kind = "other";
+        syncBoardUi();
+      }
+    }, 20000);
+  }
+  let match = line.match(/Network config: \('(\d+\.\d+\.\d+\.\d+)'/) || line.match(/^Connected: (\d+\.\d+\.\d+\.\d+)/);
+  if (match) board.ip = match[1];
+  match = line.match(/mDNS name: ([\w.-]+\.local)/);
+  if (match) board.name = match[1];
+  if (/Wi-Fi lost|Connection lost|starts without Wi-Fi/.test(line)) board.ip = "";
+  syncBoardUi();
+}
+
+function syncBoardUi() {
+  const setup = $("wifi-setup"), web = $("console-webui"), hint = $("board-hint");
+  if (!setup || !web) return;
+  const other = board.kind === "other";
+  setup.disabled = other || busy;
+  setup.title = other ? "Install GSP32 first to set up Wi-Fi" : "Send the Wi-Fi name and password to GSP32 over USB";
+  const address = board.ip ? "http://" + board.ip + "/" : "";
+  web.href = address || "#";
+  web.setAttribute("aria-disabled", address ? "false" : "true");
+  web.classList.toggle("primary", !!address);
+  web.title = address ? "Open " + address + (board.name ? " (" + board.name + ")" : "") : "The address shows once the board reports it on Wi-Fi";
+  hint.replaceChildren();
+  if (other) {
+    hint.append("Install GSP32 first to set up Wi-Fi. ");
+    const link = document.createElement("a");
+    link.href = "#";
+    link.textContent = "Install GSP32";
+    link.addEventListener("click", (event) => { event.preventDefault(); $("install-btn").click(); });
+    hint.append(link);
+  } else if (address) {
+    hint.textContent = "GSP32 is on Wi-Fi at " + address + (board.name ? " (also http://" + board.name + "/)" : "") + ".";
+  } else if (!portOpen()) {
+    hint.textContent = "Connect to see whether the board runs GSP32 and its address.";
+  } else if (board.kind === "gsp32") {
+    hint.textContent = "GSP32 found. No Wi-Fi address yet: Set Up Wi-Fi, or click Reset Board to see it at boot.";
+  } else {
+    hint.textContent = "Waiting for the board: click Reset Board to see what it runs and its address.";
+  }
+}
 
 function concatBytes(left, right) {
   if (!left.length) return right.slice();
@@ -266,12 +326,14 @@ function appendConsole(text) {
   partial += text;
   const pieces = partial.split("\n");
   partial = pieces.pop();
+  if (/>>> ?$/.test(partial)) board.repl = true;
   if (partial.length > 2000) {
     pieces.push(partial);
     partial = "";
   }
   for (const line of pieces) {
     lines.push(line);
+    trackBoard(line);
     for (const watch of lineWatchers.slice()) watch(line);
   }
   if (lines.length > MAX_LINES) lines = lines.slice(lines.length - MAX_LINES);
@@ -283,6 +345,14 @@ function consumeSerial(chunk) {
   pending = taken.rest;
   if (taken.text.length) appendConsole(textDecoder.decode(taken.text, { stream: true }));
   for (const packet of taken.packets) {
+    // Any answer is GSP32; a provisioned state's result carries the board's address
+    board.kind = "gsp32";
+    if (packet.type === 4) {
+      const parsed = parseImprovResult(packet.data);
+      const found = parsed.command === 2 && parsed.strings[0] && parsed.strings[0].match(/^http:\/\/([\d.]+)\//);
+      if (found) board.ip = found[1];
+    }
+    syncBoardUi();
     if (!onImprov) continue;
     try {
       onImprov(packet);
@@ -305,6 +375,7 @@ function syncConsoleButtons() {
   resetBtn.disabled = !on || busy;
   ctrlCBtn.disabled = !on || busy;
   consoleIn.disabled = !on || busy;
+  syncBoardUi();
 }
 
 async function setRunState() {
@@ -571,6 +642,19 @@ function waitForPackets(timeoutMs, onPacket) {
 
 // The board answers Improv once its web UI runs (a few seconds after a reset; while the boot Wi-Fi prompt waits,
 // that prompt answers). Ask for the state every 1.5 s until it does
+// Resolves once a GSP32 ready line arrives (or after timeoutMs)
+function waitReady(timeoutMs) {
+  const since = Date.now();
+  return new Promise((resolve) => {
+    const timer = setInterval(() => {
+      if (board.readyAt >= since || board.kind === "other" || Date.now() - since > timeoutMs) {
+        clearInterval(timer);
+        resolve(board.readyAt >= since);
+      }
+    }, 100);
+  });
+}
+
 async function waitBoardReady(timeoutMs) {
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
@@ -662,15 +746,23 @@ async function startWifi(fresh) {
   try {
     if (!portOpen()) await pickPort();
     wifiStatus.textContent = "Waiting for the board to start...";
-    // Right after a flash or reset the web UI answers by itself; a board already running for a while needs its
-    // Improv listener started from the REPL
-    let state = await waitBoardReady(fresh ? 40000 : 4000);
-    if (state === null) {
-      await writeBytes(new Uint8Array([0x03, 0x03]));
-      await delay(300);
-      await writeBytes(textEncoder.encode("import webui_wifisetup; webui_wifisetup.improvSession()\r\n"));
-      state = await waitBoardReady(10000);
+    // Never Ctrl-C: an interrupted boot drops to the REPL, which echoes Improv packets (and their 0x04 bytes
+    // soft-reboot it). Improv goes out only once GSP32 says it listens: the "GSP32 Improv Ready" line at the boot
+    // Wi-Fi offer, "Server listening" (listens for 30 s after a boot, and whenever it has no Wi-Fi)
+    if (Date.now() - board.readyAt > READY_WINDOW_MS) {
+      if (!fresh) {
+        wifiStatus.textContent = "Restarting the board so GSP32 listens for Wi-Fi setup...";
+        await resetBoard();
+      }
+      await waitReady(45000);
     }
+    let state = await waitBoardReady(8000);
+    // Fallback, once: a board sitting at the REPL starts the Improv session when asked
+    if (state === null && board.repl) {
+      await writeBytes(textEncoder.encode("import webui_wifisetup; webui_wifisetup.improvSession()\r\n"));
+      state = await waitBoardReady(6000);
+    }
+    if (state === null && board.kind === "other") throw new Error("This board does not run GSP32. Install GSP32 first to set up Wi-Fi.");
     if (state === null) throw new Error("The board did not answer. Check that GSP32 is installed, then try again.");
     await scanForWifi();
   } catch (err) {
@@ -882,6 +974,9 @@ ctrlCBtn.addEventListener("click", guard(() => writeBytes(new Uint8Array([0x03])
 $("wifi-setup").addEventListener("click", () => {
   openWizard("wifi");
   startWifi(false);
+});
+$("console-webui").addEventListener("click", (event) => {
+  if ($("console-webui").getAttribute("aria-disabled") === "true") event.preventDefault();
 });
 $("console-form").addEventListener("submit", (event) => {
   event.preventDefault();
