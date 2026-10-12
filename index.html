@@ -41,6 +41,19 @@
       <div class="start-go">
         <button id="connect" class="primary big" type="button">Get Started</button>
         <p class="hint small">Works in Chrome or Edge on a computer.</p>
+        <button id="no-board" class="link-button small-link" type="button" aria-expanded="false" aria-controls="board-help">Don't See Your Board?</button>
+      </div>
+      <div id="board-help" class="board-help" hidden>
+        <h3>Don't See Your Board?</h3>
+        <ol>
+          <li><b>Use a Data Cable.</b> Some USB cables only charge. Try another cable you know carries data.</li>
+          <li><b>Try Another Port.</b> Plug the board straight into the computer instead of a hub or dock.</li>
+          <li><b>Install the USB Driver.</b> Look at the small chip next to the board's USB port: "CP2102" or "CP2104" needs the
+            <a href="https://www.silabs.com/developer-tools/usb-to-uart-bridge-vcp-drivers" target="_blank" rel="noopener">Silicon Labs CP210x Driver</a>;
+            "CH340" or "CH341" needs the <a href="https://www.wch-ic.com/downloads/CH341SER_EXE.html" target="_blank" rel="noopener">WCH CH340 Driver</a>.</li>
+          <li><b>Hold BOOT While Plugging In.</b> Hold the board's BOOT button, plug the cable in, then let go.</li>
+          <li><b>Try Again.</b> Click Get Started and pick the board's port.</li>
+        </ol>
       </div>
     </section>
 

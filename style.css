@@ -76,6 +76,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .primary:hover:not(:disabled) { background: var(--blue-dark); }
 .big { font-size: 1.15rem; padding: 12px 28px; min-height: 52px; }
 .link-button { background: none; border: none; color: var(--blue); padding: 4px 0; min-height: 0; font-weight: 500; }
+.secondary { background: #e8f0fe; border-color: #c9dbfb; color: var(--blue-dark); }
+.secondary:hover:not(:disabled) { background: #dbe7fd; }
+.small-link { font-size: 0.88rem; margin-top: 10px; align-self: center; }
+.board-help { max-width: 560px; margin: 16px auto 0; text-align: left; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; font-size: 0.95rem; overflow: hidden; }
+.board-help ol { margin: 0; padding-left: 1.3rem; }
+.board-state { display: inline-flex; flex-direction: column; align-items: flex-end; text-align: right; border-radius: 12px !important; padding: 4px 12px !important; }
+.board-state .web-line { font-weight: 500; font-size: 0.85rem; }
 .link-button:hover:not(:disabled) { transform: none; box-shadow: none; text-decoration: underline; }
 button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid rgba(31, 111, 235, 0.35); outline-offset: 2px; }
 
@@ -151,4 +158,4 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .board-mac { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); opacity: 0.85; }
 .step-icon { font-size: 1rem; }
 .hint.small { font-size: 0.88rem; margin: 0; }
-.flash-warn { position: fixed; top: 32px; left: 50%; transform: translate(-50%, 0); z-index: 50; max-width: calc(100vw - 24px); padding: 20px 28px; border-radius: 8px; border: 1px solid #d93025; background: #fdecea; color: #611a15; font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }
+.flash-warn { position: fixed; top: 32px; left: 50%; transform: translate(-50%, 0); z-index: 50; max-width: calc(100vw - 24px); padding: 20px 28px; border-radius: 8px; border: 1px solid #d93025; background: #d93025; color: #fff; font-weight: 700; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }

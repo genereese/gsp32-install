@@ -136,23 +136,29 @@ function syncBoardUi() {
   const gsp32 = board.kind === "gsp32";
   install.disabled = !on || busy;
   install.textContent = gsp32 ? "Reinstall GSP32" : "Install GSP32";
-  setShown(setup, gsp32);
+  // While installing, Wi-Fi and the web UI button are gone (not greyed); they come back after
+  setShown(setup, gsp32 && !flashing);
   setup.disabled = !on || busy;
   const address = gsp32 && board.ip ? "http://" + board.ip + "/" : "";
   web.href = address || "#";
-  setShown(web, !!(address && on));
-  web.classList.toggle("primary", !!address);
+  setShown(web, !!(address && on && !flashing));
+  // The next step is the solid blue button, the others light blue: Install on a board without GSP32, Set Up Wi-Fi
+  //  once GSP32 runs, Open GSP32 Web UI once it is on Wi-Fi
+  const next = !gsp32 ? install : address ? web : setup;
+  for (const button of [install, setup, web]) {
+    button.classList.toggle("primary", button === next);
+    button.classList.toggle("secondary", button !== next);
+  }
   web.title = address ? "Open " + address + (board.name ? " (also http://" + board.name + "/)" : "") : "";
   $("board-chip").textContent = (board.chip || "ESP32 Board").replace(/\s*\(revision[^)]*\)/i, "");
   const mac = $("board-mac");
   mac.textContent = board.mac ? "MAC " + board.mac.toUpperCase() : "";
   mac.hidden = !board.mac;
-  const version = board.version ? " (Version " + board.version + ")" : "";
   setup.textContent = address ? "Change Wi-Fi" : "Set Up Wi-Fi";
   const state = $("board-state");
   state.textContent = !on ? "Not Connected"
     : board.note ? board.note
-    : gsp32 ? (board.installed ? "GSP32 Found" : "Existing GSP32 Installation Found") + version
+    : gsp32 ? (board.version ? "GSP32 Version " + board.version + " Found" : "GSP32 Found")
     : board.installed ? "Installed, Restarting..."
     : board.kind === "other" ? "No GSP32 Found" : "Checking the Board...";
   if (on && gsp32 && address && !board.note) {
@@ -160,8 +166,11 @@ function syncBoardUi() {
     link.href = address;
     link.target = "_blank";
     link.rel = "noopener";
-    link.textContent = board.ip;
-    state.append(" at ", link);
+    link.textContent = address;
+    const line = document.createElement("span");
+    line.className = "web-line";
+    line.append("Web UI: ", link);
+    state.append(line);
   }
   state.classList.toggle("on", on && gsp32);
 }
@@ -955,12 +964,17 @@ function finishWifi(url) {
 }
 
 // While flashing: a floating red warning pinned at the top of the viewport, sliding in and away
+let flashing = false;
 function startFlashGuard() {
+  flashing = true;
+  syncBoardUi();
   const box = $("flash-warn");
   box.hidden = false;
   if (motionOk()) box.animate([{ transform: "translate(-50%, -140%)", opacity: 0 }, { transform: "translate(-50%, 0)", opacity: 1 }], { duration: FOLD_MS, easing: "ease-out" });
 }
 function stopFlashGuard() {
+  flashing = false;
+  syncBoardUi();
   const box = $("flash-warn");
   if (box.hidden) return;
   if (!motionOk()) {
@@ -1069,13 +1083,26 @@ connectBtn.addEventListener("click", guard(async () => {
   try {
     await pickPort();
   } catch (err) {
-    if (err.code === "cancel") return;
+    // Cancelled picker: probably no board in the list, so the checklist opens
+    if (err.code === "cancel") {
+      showBoardHelp(true);
+      return;
+    }
     throw err;
   }
+  showBoardHelp(false);
   Object.assign(board, { installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0 });
   syncBoardUi();
   showConsole();
 }));
+function showBoardHelp(open) {
+  const help = $("board-help"), link = $("no-board");
+  if (open === !help.hidden) return;
+  link.setAttribute("aria-expanded", String(open));
+  if (open) foldOpen(help);
+  else foldShut(help);
+}
+$("no-board").addEventListener("click", () => showBoardHelp($("board-help").hidden));
 disconnectBtn.addEventListener("click", guard(async () => {
   await closePort();
   hideConsole();
