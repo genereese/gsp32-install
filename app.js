@@ -159,11 +159,45 @@ function trackBoard(line) {
   syncBoardUi();
 }
 
-// Show only the buttons that apply; one that appears fades in instead of jumping
+// Show only the buttons that apply. Version 30 (Gene): a button that is added or removed slides open or shut sideways
+//  (width, padding and the row's gap with it), so its neighbours move along smoothly instead of jumping
 function setShown(element, on) {
-  if (element.hidden === !on) return;
-  element.hidden = !on;
-  if (on && motionOk()) element.animate([{ opacity: 0, transform: "scale(0.96)" }, { opacity: 1, transform: "none" }], { duration: FOLD_MS, easing: "ease-out" });
+  const showing = element.sliding ? element.sliding.on : !element.hidden;
+  if (showing === on) return;
+  if (element.sliding) {
+    element.sliding.animation.cancel();
+    element.sliding = null;
+  }
+  if (on) element.hidden = false;
+  if (!motionOk()) {
+    element.hidden = !on;
+    return;
+  }
+  const style = getComputedStyle(element);
+  const gap = parseFloat(getComputedStyle(element.parentNode).columnGap) || 0;
+  const open = { width: element.offsetWidth + "px", paddingLeft: style.paddingLeft, paddingRight: style.paddingRight,
+                 borderLeftWidth: style.borderLeftWidth, borderRightWidth: style.borderRightWidth, marginRight: "0px", opacity: 1 };
+  const shut = { width: "0px", paddingLeft: "0px", paddingRight: "0px", borderLeftWidth: "0px", borderRightWidth: "0px",
+                 marginRight: -gap + "px", opacity: 0 };
+  element.style.overflow = "hidden";
+  element.style.whiteSpace = "nowrap";
+  const animation = element.animate(on ? [shut, open] : [open, shut], { duration: FOLD_MS, easing: on ? "ease-out" : "ease-in" });
+  element.sliding = { on, animation };
+  animation.onfinish = () => {
+    element.sliding = null;
+    element.style.overflow = "";
+    element.style.whiteSpace = "";
+    if (!on) element.hidden = true;
+  };
+}
+
+// Panels inside a wizard step (Wi-Fi form, wait note, error) fold up and down instead of jumping
+function setFolded(element, on) {
+  if (on) {
+    if (element.hidden || element.shutting) foldOpen(element);
+  } else if (!element.hidden && !element.shutting) {
+    foldShut(element);
+  }
 }
 
 function syncBoardUi() {
@@ -189,7 +223,7 @@ function syncBoardUi() {
   $("board-chip").textContent = (board.chip || "ESP32 Board").replace(/\s*\(revision[^)]*\)/i, "");
   const mac = $("board-mac");
   mac.textContent = board.mac ? "MAC " + board.mac.toUpperCase() : "";
-  mac.hidden = !board.mac;
+  setShown(mac, !!board.mac);
   setup.textContent = address ? "Change Wi-Fi" : "Set Up Wi-Fi";
   const state = $("board-state");
   state.textContent = !on ? "Not Connected"
@@ -423,10 +457,16 @@ function showError(message, retry) {
 }
 
 // Console text
+// The console follows the newest output until the user scrolls up, and again once they scroll back to the bottom.
+//  Version 30: decided by the user's scrolling, not measured at each paint (a fold or a hidden console measured as
+//  "not at the bottom" and stopped the following for good)
+let followConsole = true;
+consoleOut.addEventListener("scroll", () => {
+  if (consoleOut.clientHeight) followConsole = consoleOut.scrollHeight - consoleOut.scrollTop - consoleOut.clientHeight < 48;
+});
 function paintConsole() {
-  const atBottom = consoleOut.scrollHeight - consoleOut.scrollTop - consoleOut.clientHeight < 48;
   consoleOut.textContent = lines.join("\n") + (partial ? (lines.length ? "\n" : "") + partial : "");
-  if (atBottom) consoleOut.scrollTop = consoleOut.scrollHeight;
+  if (followConsole) consoleOut.scrollTop = consoleOut.scrollHeight;
 }
 
 function appendConsole(text) {
@@ -645,11 +685,24 @@ async function loadFirmware() {
   return files;
 }
 
+// "Version 30" for the status line (the picked build), "GSP32" when it has no number
+function installName() {
+  const picked = versionSelect.textContent.match(/Version \d+/);
+  return picked ? picked[0] : "GSP32";
+}
+
+// The install button row folds away while an install runs and comes back when it is done, failed or called off
+function showActions(on) {
+  const actions = $("board-actions");
+  if (on && (actions.hidden || actions.shutting) && bootingNote === null) foldOpen(actions);
+  if (!on && !actions.hidden && !actions.shutting) foldShut(actions);
+}
+
 // The status line is the progress bar: its background fills left to right (--fill) under the text
 function setProgress(text, percent, status) {
   flashStatus.textContent = text;
   if (percent != null) flashBar.style.width = Math.max(0, Math.min(100, percent)) + "%";
-  setStatus(status || "Installing (" + Math.max(0, Math.round(percent || 0)) + "%)");
+  setStatus(status || "Installing " + installName() + " (" + Math.max(0, Math.round(percent || 0)) + "%)");
   boardStatus.classList.add("filling");
   if (percent != null) boardStatus.style.setProperty("--fill", Math.max(0, Math.min(100, percent)) + "%");
 }
@@ -694,6 +747,7 @@ function setStatus(text, kind, ip) {
 
 // Step 2: port, then flash with esptool-js on the same open port
 async function install() {
+  showActions(false);
   showStep("flash");
   startFlashGuard();
   setBusy(true);
@@ -701,11 +755,12 @@ async function install() {
   if (!portOpen()) {
     stopFlashGuard();
     showError("The board is not connected. Click Get Started, then try again.", "prep");
+    showActions(true);
     return;
   }
   appendConsole("\n[Installing " + versionSelect.textContent + "]\n");
   try {
-    setProgress("Downloading the firmware...", 0, "Installing: Downloading the Firmware...");
+    setProgress("Downloading the firmware...", 0, "Installing " + installName() + ": Downloading the Firmware...");
     const files = await loadFirmware();
     await stopReading();
     const transport = new Transport(port, false);
@@ -731,7 +786,7 @@ async function install() {
       write(text) { appendConsole(text); },
     };
     const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
-    setProgress("Connecting to the board...", 0, "Installing: Connecting to the Board...");
+    setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
     const chip = await loader.main("default_reset");
     try {
       board.chip = (await loader.chip.getChipDescription(loader)) || chip;
@@ -740,7 +795,7 @@ async function install() {
       board.chip = chip;
     }
     if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
-    setProgress("Erasing the board (about 15 seconds)...", 0, "Installing: Erasing the Board...");
+    setProgress("Erasing the board (about 15 seconds)...", 0, "Installing " + installName() + ": Erasing the Board...");
     let lastPercent = -1;
     await loader.writeFlash({
       fileArray: files,
@@ -758,7 +813,7 @@ async function install() {
         }
       },
     });
-    setProgress("Restarting the board...", 100, "Installing (100%): Restarting the Board...");
+    setProgress("Restarting the board...", 100, "Installing " + installName() + " (100%): Restarting the Board...");
     await transport.disconnect();
     // Detect again from the new boot: the buttons follow what the fresh firmware prints
     board.kind = "unknown";
@@ -769,16 +824,18 @@ async function install() {
     board.installed = true;
     appendConsole("[Installed. Restarting the board.]\n");
     await resetBoard();
-    setStatus("Installation Successful", "ok");
+    setStatus(installName() + " Installed", "ok");
     startReading();
     setBusy(false);
     stopFlashGuard();
     closeWizard();
+    showActions(true);
   } catch (err) {
     await setRunState().catch(() => {});
     startReading();
     stopFlashGuard();
     showError("The install did not finish: " + (err && err.message ? err.message : err), "prep");
+    showActions(true);
   }
   syncConsoleButtons();
 }
@@ -892,19 +949,19 @@ function renderNetworks(networks) {
 
 function syncWifiConnect() {
   const picked = wifiList.querySelector("input:checked");
-  wifiForm.hidden = !picked || !!picked.dataset.open;
+  setFolded(wifiForm, !(!picked || !!picked.dataset.open));
   wifiConnect.disabled = busy || !picked;
 }
 
 async function startWifi(fresh) {
   showStep("wifi");
   setTimeout(() => wizard.scrollIntoView({ behavior: motionOk() ? "smooth" : "auto", block: "nearest" }), motionOk() ? FOLD_MS : 0);
-  wifiError.hidden = true;
-  wifiRescan.hidden = true;
-  wifiForm.hidden = true;
+  setFolded(wifiError, false);
+  setShown(wifiRescan, false);
+  setFolded(wifiForm, false);
   wifiPassword.value = "";
   wifiList.replaceChildren();
-  wifiWait.hidden = false;
+  setFolded(wifiWait, true);
   setBusy(true);
   syncWifiConnect();
   try {
@@ -930,10 +987,10 @@ async function startWifi(fresh) {
     if (state === null) throw new Error("The board did not answer. Check that GSP32 is installed, then try again.");
     await scanForWifi();
   } catch (err) {
-    wifiWait.hidden = true;
+    setFolded(wifiWait, false);
     setBusy(false);
     wifiStatus.textContent = err.message;
-    wifiRescan.hidden = false;
+    setShown(wifiRescan, true);
     wifiRescan.textContent = "Try Again";
   }
   syncWifiConnect();
@@ -941,8 +998,8 @@ async function startWifi(fresh) {
 
 async function scanForWifi() {
   setBusy(true);
-  wifiWait.hidden = false;
-  wifiRescan.hidden = true;
+  setFolded(wifiWait, true);
+  setShown(wifiRescan, false);
   wifiStatus.textContent = "Looking for Wi-Fi networks...";
   syncWifiConnect();
   let networks = [];
@@ -951,10 +1008,10 @@ async function scanForWifi() {
   } catch (err) {
     networks = [];
   }
-  wifiWait.hidden = true;
+  setFolded(wifiWait, false);
   setBusy(false);
   renderNetworks(networks);
-  wifiRescan.hidden = false;
+  setShown(wifiRescan, true);
   wifiRescan.textContent = "Scan Again";
   wifiStatus.textContent = networks.length
     ? "Pick your network and enter its password."
@@ -967,15 +1024,15 @@ async function connectWifi() {
   if (!picked || busy) return;
   const name = textEncoder.encode(picked.value);
   const secret = textEncoder.encode(wifiPassword.value);
-  wifiError.hidden = true;
+  setFolded(wifiError, false);
   if (name.length > 255 || secret.length > 255) {
-    wifiError.hidden = false;
+    setFolded(wifiError, true);
     wifiError.textContent = "That name or password is too long.";
     return;
   }
   setBusy(true);
   syncWifiConnect();
-  wifiWait.hidden = false;
+  setFolded(wifiWait, true);
   wifiStatus.textContent = "Connecting to Wi-Fi (" + picked.value + ")...";
   setStatus("Connecting to Wi-Fi (" + picked.value + ")...");
   appendConsole("\n[Connecting to Wi-Fi (" + picked.value + ")...]\n");
@@ -997,9 +1054,9 @@ async function connectWifi() {
     wifiPassword.value = "";
     finishWifi(url);
   } catch (err) {
-    wifiWait.hidden = true;
+    setFolded(wifiWait, false);
     setBusy(false);
-    wifiError.hidden = false;
+    setFolded(wifiError, true);
     wifiError.textContent = err.code === 3
       ? "Could not connect. Check the password and try again."
       : "Could not connect. Move the board closer to the router and try again.";
@@ -1079,12 +1136,19 @@ function sizeConsole() {
   if (consoleBox.hidden) return;
   // Measured from the top of the page (not the scrolled window), so scrolling never changes it
   const top = consoleOut.getBoundingClientRect().top + window.scrollY;
-  const below = consoleBox.getBoundingClientRect().bottom - consoleOut.getBoundingClientRect().bottom;
-  const gap = 16;
-  consoleOut.style.height = Math.max(CONSOLE_MIN, Math.floor(window.innerHeight - top - below - gap)) + "px";
+  // Everything under it down to the page's end (the card's padding and the page's bottom padding), so the page
+  //  ends at the window's bottom and never scrolls (Version 30)
+  const main = consoleOut.closest("main") || consoleBox;
+  const below = main.getBoundingClientRect().bottom - consoleOut.getBoundingClientRect().bottom;
+  consoleOut.style.height = Math.max(CONSOLE_MIN, Math.floor(window.innerHeight - top - below)) + "px";
 }
 window.addEventListener("resize", sizeConsole);
-if (window.ResizeObserver) new ResizeObserver(() => sizeConsole()).observe(consoleCard);
+// The board card above it grows and shrinks too (status line, folds): the console follows so the page never scrolls
+if (window.ResizeObserver) {
+  const watch = new ResizeObserver(() => sizeConsole());
+  watch.observe(consoleCard);
+  watch.observe($("console"));
+}
 
 function guard(fn) {
   return () => fn().catch((err) => appendConsole("\n[" + (err && err.message ? err.message : "Something went wrong") + "]\n"));
@@ -1204,3 +1268,6 @@ window.addEventListener("pagehide", () => {
 
 loadVersions();
 syncConsoleButtons();
+
+// For the page tests (Playwright): the slide helper and the console writer
+window.gsp32 = { setShown, appendConsole };
