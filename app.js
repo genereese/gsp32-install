@@ -135,6 +135,17 @@ function endBooting() {
 const WIFI_WAIT_MS = 20000;
 let wifiTimer = null;
 
+// Asks the board for its Improv device info (version, chip); once every 3 s at most, and once more 3 s later if the
+//  answer did not come (the Improv listener may not be up yet)
+function askVersion(always) {
+  if ((board.version && !always) || Date.now() - board.asked < 3000 || !portOpen()) return;
+  board.asked = Date.now();
+  writeBytes(buildRpc(3, new Uint8Array(0))).catch(() => {});
+  setTimeout(() => {
+    if (!board.version && board.kind === "gsp32") askVersion();
+  }, 3100);
+}
+
 function trackBoard(line) {
   if (/GSP32 Improv Ready|Server listening on port|Web UI starts without Wi-Fi|Web UI running/.test(line)) {
     board.kind = "gsp32";
@@ -142,10 +153,10 @@ function trackBoard(line) {
     clearTimeout(otherTimer);
     endBooting();
     // Only once GSP32 is confirmed: ask its Improv device info (chip family, version); never sent to other programs
-    if (/GSP32 Improv Ready/.test(line) && board.asked <= board.bootAt) {
-      board.asked = Date.now();
-      writeBytes(buildRpc(3, new Uint8Array(0))).catch(() => {});
-    }
+    if (/GSP32 Improv Ready/.test(line) && board.asked <= board.bootAt) askVersion(true);
+    // Version 39: a board found already running (no boot lines seen, or the Ready line came before the page listened)
+    //  never got asked, so "GSP32 Found" had no version: ask whenever GSP32 is confirmed without one
+    else if (!board.version) askVersion();
   }
   if (/^rst:0x|^ets [A-Z][a-z]{2} /.test(line)) {
     board.bootAt = Date.now();
@@ -296,6 +307,8 @@ function syncBoardUi() {
     state.append(line);
   }
   state.classList.toggle("on", on && gsp32);
+  // Version 39: the green box folds away while installing and comes back when it ends (done, failed or disconnected)
+  setFolded(state, !flashing);
 }
 
 function concatBytes(left, right) {
@@ -560,6 +573,7 @@ function consumeSerial(chunk) {
         if (n) board.version = n[1];
       }
     }
+    if (!board.version && !flashing) askVersion();
     syncBoardUi();
     if (!onImprov) continue;
     try {
@@ -1143,7 +1157,17 @@ function finishWifi(url) {
   }
   board.ip = ip;
   appendConsole("\n[Wi-Fi connected. GSP32 web UI: http://" + ip + "/]\n");
-  setStatus("Wi-Fi Connected", "ok", ip);
+  // Version 39: plain words for newcomers, with the address as a link
+  setStatus("Wi-Fi Connected!", "ok");
+  const ready = document.createElement("span");
+  ready.className = "status-more";
+  const link = document.createElement("a");
+  link.href = "http://" + ip + "/";
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = "http://" + ip + "/";
+  ready.append("Your board is ready. Open ", link, " in a browser on the same network to use GSP32, or click Open Web UI.");
+  boardStatus.append(ready);
   onImprov = null;
   foldShut(wizard);
   syncConsoleButtons();

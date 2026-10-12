@@ -180,3 +180,6 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 @keyframes status-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .board-status.ok { background: #e6f4ea; }
 .board-status.error { background: #fdecea; }
+
+/* Version 39: the second line of "Wi-Fi Connected!" */
+.board-status .status-more { display: block; margin-top: 4px; font-weight: 400; }

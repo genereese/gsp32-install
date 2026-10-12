@@ -16,7 +16,7 @@
     if (window.__other) { setTimeout(() => say("rst:0x1 (POWERON_RESET)\r\nMicroPython v1.25.0 on 2025-04-15; Generic ESP32 module with ESP32\r\n>>> "), 300); return; }
     const gap = window.__bootGap || 0;
     if (gap) setTimeout(() => say((window.__ets ? "ets Jul 29 2019 12:21:46\r\n\r\n" : "") + "rst:0x1 (POWERON_RESET)\r\n"), 300);
-    setTimeout(() => { booted = true; say((gap ? "" : (window.__ets ? "ets Jul 29 2019 12:21:46\r\n\r\n" : "") + "rst:0x1 (POWERON_RESET)\r\n") + "mDNS name: gsp32.local\r\nGSP32 Improv Ready\r\nPress Enter within 10 s\r\nServer listening on port 80\r\nWeb UI running in the background\r\n"); }, 300 + gap);
+    setTimeout(() => { booted = true; say((gap ? "" : (window.__ets ? "ets Jul 29 2019 12:21:46\r\n\r\n" : "") + "rst:0x1 (POWERON_RESET)\r\n") + "mDNS name: gsp32.local\r\n" + (window.__noReady ? "" : "GSP32 Improv Ready\r\n") + "Press Enter within 10 s\r\nServer listening on port 80\r\nWeb UI running in the background\r\n"); }, 300 + gap);
     if (window.__savedWifi) setTimeout(() => say("Connecting to WiFi...\r\n"), 350 + gap);
     if (window.__savedWifi && !window.__wifiNever) setTimeout(() => say("Connection successful\r\nNetwork config: ('192.168.2.77', '255.255.255.0', '192.168.2.1', '192.168.2.1')\r\n"), 350 + gap + (window.__wifiDelay || 3000));
     setTimeout(() => { booted = true; if (window.__wifi) say("Connection successful\r\nNetwork config: ('192.168.2.77', '255.255.255.0', '192.168.2.1', '192.168.2.1')\r\n"); }, 1500);
