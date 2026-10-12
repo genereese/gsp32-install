@@ -132,6 +132,9 @@ function endBooting() {
   if (actions.hidden || actions.shutting) foldOpen(actions);
 }
 
+const WIFI_WAIT_MS = 20000;
+let wifiTimer = null;
+
 function trackBoard(line) {
   if (/GSP32 Improv Ready|Server listening on port|Web UI starts without Wi-Fi|Web UI running/.test(line)) {
     board.kind = "gsp32";
@@ -147,6 +150,9 @@ function trackBoard(line) {
   if (/^rst:0x|^ets [A-Z][a-z]{2} /.test(line)) {
     board.bootAt = Date.now();
     board.repl = false;
+    board.wifiWait = false;
+    board.wifiFailed = false;
+    clearTimeout(wifiTimer);
     clearTimeout(otherTimer);
     startBooting();
     // No GSP32 line within 20 s of a boot: some other firmware
@@ -158,8 +164,32 @@ function trackBoard(line) {
       }
     }, 20000);
   }
+  // Version 37: a board with saved Wi-Fi says "Connecting to WiFi..." at boot; the Open button waits greyed until it
+  //  connects (space kept, no jump), and after 20 s without Wi-Fi the note says so
+  if (/^Connecting to WiFi/.test(line)) {
+    board.wifiWait = true;
+    board.wifiFailed = false;
+    clearTimeout(wifiTimer);
+    wifiTimer = setTimeout(() => {
+      if (board.wifiWait && !board.ip) {
+        board.wifiWait = false;
+        board.wifiFailed = true;
+        syncBoardUi();
+      }
+    }, WIFI_WAIT_MS);
+  }
+  if (/Could not (start )?connect(ing)? to WiFi/.test(line)) {
+    clearTimeout(wifiTimer);
+    board.wifiWait = false;
+    board.wifiFailed = true;
+  }
   let match = line.match(/Network config: \('(\d+\.\d+\.\d+\.\d+)'/) || line.match(/^Connected: (\d+\.\d+\.\d+\.\d+)/);
-  if (match) board.ip = match[1];
+  if (match) {
+    board.ip = match[1];
+    board.wifiWait = false;
+    board.wifiFailed = false;
+    clearTimeout(wifiTimer);
+  }
   match = line.match(/mDNS name: ([\w.-]+\.local)/);
   if (match) board.name = match[1];
   if (/Wi-Fi lost|Connection lost|starts without Wi-Fi/.test(line)) board.ip = "";
@@ -219,7 +249,17 @@ function syncBoardUi() {
   setup.disabled = !on || busy;
   const address = gsp32 && board.ip ? "http://" + board.ip + "/" : "";
   web.href = address || "#";
-  setShown(web, !!(address && on && !flashing));
+  // Waiting for Wi-Fi (or it never came): shown greyed, not clickable; it fades to blue once the address is known
+  const waiting = gsp32 && !address && (board.wifiWait || board.wifiFailed);
+  setShown(web, !!((address || waiting) && on && !flashing));
+  web.classList.toggle("waiting", waiting);
+  if (waiting) {
+    web.setAttribute("aria-disabled", "true");
+    web.tabIndex = -1;
+  } else {
+    web.removeAttribute("aria-disabled");
+    web.removeAttribute("tabindex");
+  }
   // The next step is the solid blue button, the others light blue: Install on a board without GSP32, Set Up Wi-Fi
   //  once GSP32 runs, Open GSP32 Web UI once it is on Wi-Fi
   const next = !gsp32 ? install : address ? web : setup;
@@ -227,12 +267,12 @@ function syncBoardUi() {
     button.classList.toggle("primary", button === next);
     button.classList.toggle("secondary", button !== next);
   }
-  web.title = address ? "Open " + address + (board.name ? " (also http://" + board.name + "/)" : "") : "";
+  web.title = waiting ? (board.wifiFailed ? "Wi-Fi Didn't Connect" : "Waiting for Wi-Fi...") : address ? "Open " + address + (board.name ? " (also http://" + board.name + "/)" : "") : "";
   $("board-chip").textContent = (board.chip || "ESP32 Board").replace(/\s*\(revision[^)]*\)/i, "");
   const mac = $("board-mac");
   mac.textContent = board.mac ? "MAC " + board.mac.toUpperCase() : "";
   setShown(mac, !!board.mac);
-  setup.textContent = address ? "Change Wi-Fi" : "Set Up Wi-Fi";
+  setup.textContent = address || waiting ? "Change Wi-Fi" : "Set Up Wi-Fi";
   const state = $("board-state");
   state.textContent = !on ? "Not Connected"
     : board.note ? board.note
@@ -248,6 +288,11 @@ function syncBoardUi() {
     const line = document.createElement("span");
     line.className = "web-line";
     line.append("Web UI: ", link);
+    state.append(line);
+  } else if (on && waiting && !board.note) {
+    const line = document.createElement("span");
+    line.className = "web-line wifi-note";
+    line.textContent = board.wifiFailed ? "Wi-Fi Didn't Connect" : "Waiting for Wi-Fi\u2026";
     state.append(line);
   }
   state.classList.toggle("on", on && gsp32);
@@ -1194,6 +1239,10 @@ async function copyLog() {
 }
 
 // Events
+// Version 37: the greyed Open GSP32 Web UI button (waiting for Wi-Fi) does nothing when clicked
+$("console-webui").addEventListener("click", (event) => {
+  if (event.currentTarget.classList.contains("waiting")) event.preventDefault();
+});
 $("install-btn").addEventListener("click", () => {
   if (busy) return;
   eraseOk.checked = false;

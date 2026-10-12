@@ -69,6 +69,11 @@ button, .button {
   cursor: pointer;
   transition: transform 0.12s, box-shadow 0.12s, background 0.12s;
 }
+/* Version 37: Open GSP32 Web UI waits greyed while the board joins Wi-Fi, then fades to blue */
+#console-webui { transition: transform 0.12s, box-shadow 0.12s, background-color 0.5s ease, border-color 0.5s ease, color 0.5s ease, opacity 0.5s ease; }
+#console-webui.waiting, #console-webui.waiting.primary, #console-webui.waiting.secondary { background: #eef0f3; border-color: #d6dae1; color: #8a94a3; opacity: 1; cursor: not-allowed; }
+#console-webui.waiting:hover { transform: none; box-shadow: none; }
+.board-state .wifi-note { color: var(--muted); }
 button:hover:not(:disabled), .button:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); }
 button:active:not(:disabled), .button:active { transform: none; box-shadow: none; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
