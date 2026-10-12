@@ -82,6 +82,8 @@ function foldOpen(element) {
 }
 
 function foldShut(element, done) {
+  // Hotfix: a fold shut already running is left alone (a second one would leave the first to hide the element later)
+  if (element.shutting) return;
   if (element.hidden) {
     if (done) done();
     return;
@@ -93,12 +95,17 @@ function foldShut(element, done) {
   }
   element.style.overflow = "hidden";
   element.shutting = element.animate([{ height: element.offsetHeight + "px", opacity: 1 }, { height: "0px", opacity: 0 }], { duration: FOLD_MS, easing: "ease-in" });
-  element.shutting.onfinish = () => {
-      element.shutting = null;
-      element.style.overflow = "";
-      element.hidden = true;
-      if (done) done();
-    };
+  const animation = element.shutting;
+  const finish = () => {
+    if (element.shutting !== animation) return;
+    element.shutting = null;
+    element.style.overflow = "";
+    element.hidden = true;
+    if (done) done();
+  };
+  animation.onfinish = finish;
+  // Hotfix: a background tab may hold the finish event back; the fold still ends on time
+  setTimeout(finish, FOLD_MS + 150);
 }
 
 // A boot banner (the board restarted, e.g. Windows resets it when the port opens): "Board Booting Up..." and the
@@ -157,6 +164,7 @@ function trackBoard(line) {
   if (match) board.name = match[1];
   if (/Wi-Fi lost|Connection lost|starts without Wi-Fi/.test(line)) board.ip = "";
   syncBoardUi();
+  syncActions();
 }
 
 // Show only the buttons that apply. Version 30 (Gene): a button that is added or removed slides open or shut sideways
@@ -691,9 +699,21 @@ function installName() {
   return picked ? picked[0] : "GSP32";
 }
 
+// Hotfix (Gene): the row comes back whenever nothing holds it away (no install, no boot under way), whatever order
+//  the board's lines, the install's end and the folds came in; checked on every board line and once a second
+let actionsWanted = true;
+function syncActions() {
+  const actions = $("board-actions");
+  if (!actionsWanted || busy || flashing || bootingNote !== null || !portOpen()) return;
+  if (actions.hidden || actions.shutting) foldOpen(actions);
+}
+setInterval(() => { if (typeof consoleCard !== "undefined" && !consoleCard.hidden) syncActions(); }, 1000);
+
 // The install button row folds away while an install runs and comes back when it is done, failed or called off
 function showActions(on) {
   const actions = $("board-actions");
+  if (on) actionsWanted = true;
+  if (!on) actionsWanted = false;
   if (on && (actions.hidden || actions.shutting) && bootingNote === null) foldOpen(actions);
   if (!on && !actions.hidden && !actions.shutting) foldShut(actions);
 }
@@ -830,9 +850,11 @@ async function install() {
     stopFlashGuard();
     closeWizard();
     showActions(true);
+    syncActions();
   } catch (err) {
     await setRunState().catch(() => {});
     startReading();
+    setBusy(false);
     stopFlashGuard();
     showError("The install did not finish: " + (err && err.message ? err.message : err), "prep");
     showActions(true);
