@@ -159,3 +159,4 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .step-icon { font-size: 1rem; }
 .hint.small { font-size: 0.88rem; margin: 0; }
 .flash-warn { position: fixed; top: 32px; left: 50%; transform: translate(-50%, 0); z-index: 50; max-width: calc(100vw - 24px); padding: 20px 28px; border-radius: 8px; border: 1px solid #d93025; background: #d93025; color: #fff; font-weight: 700; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }
+.version-line { margin: 0 0 12px; }

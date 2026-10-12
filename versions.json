@@ -1,17 +1,7 @@
 [
   {
-    "version": "0fe4561",
+    "version": "0b996c5",
     "manifest": "manifest.json",
-    "label": "Version 27 (0fe4561, latest)"
-  },
-  {
-    "version": "baacd90",
-    "manifest": "manifest-v26.json",
-    "label": "Version 26 (baacd90)"
-  },
-  {
-    "version": "c374678",
-    "manifest": "manifest-v25.json",
-    "label": "Version 25 (c374678)"
+    "label": "Version 28 (0b996c5, latest)"
   }
 ]

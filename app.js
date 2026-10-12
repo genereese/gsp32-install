@@ -38,6 +38,7 @@ const resetBtn = $("reset");
 const ctrlCBtn = $("ctrl-c");
 
 let versionsReady = false;
+let latest = null;
 let busy = false;
 let retryStep = "prep";
 let wakeSentinel = null;
@@ -611,16 +612,13 @@ async function loadVersions() {
   try {
     const response = await fetch("versions.json", { cache: "no-store" });
     const list = await response.json();
-    versionSelect.replaceChildren();
-    for (const item of list) {
-      const option = document.createElement("option");
-      option.value = item.manifest;
-      option.textContent = item.label || item.version;
-      versionSelect.append(option);
-    }
-    versionsReady = list.length > 0;
+    // Only the latest build is offered (older images stay in the repo for a rollback, unlisted)
+    latest = list[0] || null;
+    const number = latest ? String(latest.label || latest.version).match(/Version (\d+)/) : null;
+    versionSelect.textContent = number ? "Version " + number[1] : latest ? String(latest.label || latest.version) : "No Version Found";
+    versionsReady = !!latest;
   } catch (err) {
-    versionSelect.replaceChildren(new Option("Could Not Load Versions"));
+    versionSelect.textContent = "Could Not Load the Version";
     versionsReady = false;
   }
   syncStart();
@@ -631,7 +629,7 @@ function syncStart() {
 }
 
 async function loadFirmware() {
-  const manifestUrl = new URL(versionSelect.value, location.href);
+  const manifestUrl = new URL(latest.manifest, location.href);
   const manifest = await (await fetch(manifestUrl, { cache: "no-store" })).json();
   const build = manifest.builds.find((item) => item.chipFamily === "ESP32") || manifest.builds[0];
   const files = [];
@@ -655,12 +653,21 @@ function setProgress(text, percent, status) {
 
 // The board card's status line: what is going on right now (Installing (45%), Installation Successful,
 //  Connecting to Wi-Fi..., Wi-Fi Connected, or the error); "" folds it away
-function setStatus(text, kind) {
+function setStatus(text, kind, ip) {
   if (!text) {
     if (!boardStatus.hidden) foldShut(boardStatus);
     return;
   }
   boardStatus.textContent = text;
+  // "Wi-Fi Connected: 192.168.2.228" with the address as a link
+  if (ip) {
+    const link = document.createElement("a");
+    link.href = "http://" + ip + "/";
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = ip;
+    boardStatus.append(": ", link);
+  }
   boardStatus.className = "board-status" + (kind ? " " + kind : "");
   if (boardStatus.hidden) foldOpen(boardStatus);
 }
@@ -676,7 +683,7 @@ async function install() {
     showError("The board is not connected. Click Get Started, then try again.", "prep");
     return;
   }
-  appendConsole("\n[Installing " + versionSelect.options[versionSelect.selectedIndex].textContent + "]\n");
+  appendConsole("\n[Installing " + versionSelect.textContent + "]\n");
   try {
     setProgress("Downloading the firmware...", 0, "Installing: Downloading the Firmware...");
     const files = await loadFirmware();
@@ -737,7 +744,7 @@ async function install() {
     board.kind = "unknown";
     board.ip = "";
     board.readyAt = 0;
-    const picked = versionSelect.options[versionSelect.selectedIndex].textContent.match(/Version (\d+)/);
+    const picked = versionSelect.textContent.match(/Version (\d+)/);
     board.version = picked ? picked[1] : "";
     board.installed = true;
     appendConsole("[Installed. Restarting the board.]\n");
@@ -992,7 +999,7 @@ function finishWifi(url) {
   }
   board.ip = ip;
   appendConsole("\n[Wi-Fi connected. GSP32 web UI: http://" + ip + "/]\n");
-  setStatus("Wi-Fi Connected", "ok");
+  setStatus("Wi-Fi Connected", "ok", ip);
   onImprov = null;
   foldShut(wizard);
   syncConsoleButtons();
