@@ -21,6 +21,9 @@ for name in ("app.js", "files.js", "graphs.js", "style.css", "apps/backup.js", "
     for path, body in (("/gsp32-httpd/" + name, data), ("/gsp32-httpd/" + name + ".gz", gzip.compress(data, 9, mtime=0))):
         with fs.open(path, "wb") as f:
             f.write(body)
+# Version 35: the stock start page comes from the repo too (Examples link removed)
+with fs.open("/gsp32-httpd/pages/index.html", "wb") as f:
+    f.write(open(os.path.join(repo, "gsp32-httpd", "pages", "index.html"), "rb").read())
 for bad in ("/config.json", "/webui_auth.json"):
     assert bad[1:] not in fs.listdir("/"), bad
 image = bytearray(b"\xff" * 0x400000)
