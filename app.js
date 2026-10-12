@@ -645,11 +645,29 @@ async function loadFirmware() {
   return files;
 }
 
+// The status line is the progress bar: its background fills left to right (--fill) under the text
 function setProgress(text, percent, status) {
   flashStatus.textContent = text;
   if (percent != null) flashBar.style.width = Math.max(0, Math.min(100, percent)) + "%";
   setStatus(status || "Installing (" + Math.max(0, Math.round(percent || 0)) + "%)");
+  boardStatus.classList.add("filling");
+  if (percent != null) boardStatus.style.setProperty("--fill", Math.max(0, Math.min(100, percent)) + "%");
 }
+
+// The wizard's own status texts (Wi-Fi steps, errors) are shown only in the status line, never twice
+function mirrorStatus() {
+  new MutationObserver(function () {
+    if (wifiStatus.textContent && !wifiStatus.closest(".step").hidden) setStatus(wifiStatus.textContent);
+    boardStatus.classList.toggle("working", !wifiWait.hidden && !wifiWait.closest(".step").hidden);
+  }).observe(wifiStatus, { childList: true, characterData: true, subtree: true });
+  new MutationObserver(function () {
+    boardStatus.classList.toggle("working", !wifiWait.hidden && !wifiWait.closest(".step").hidden);
+  }).observe(wifiWait, { attributes: true, attributeFilter: ["hidden"] });
+  new MutationObserver(function () {
+    if (errorText.textContent) setStatus(errorText.textContent, "error");
+  }).observe(errorText, { childList: true, characterData: true, subtree: true });
+}
+mirrorStatus();
 
 // The board card's status line: what is going on right now (Installing (45%), Installation Successful,
 //  Connecting to Wi-Fi..., Wi-Fi Connected, or the error); "" folds it away
@@ -668,7 +686,9 @@ function setStatus(text, kind, ip) {
     link.textContent = ip;
     boardStatus.append(": ", link);
   }
-  boardStatus.className = "board-status" + (kind ? " " + kind : "");
+  const working = boardStatus.classList.contains("working");
+  boardStatus.className = "board-status" + (kind ? " " + kind : "") + (working && !kind ? " working" : "");
+  boardStatus.style.removeProperty("--fill");
   if (boardStatus.hidden) foldOpen(boardStatus);
 }
 

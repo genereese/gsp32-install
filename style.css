@@ -160,3 +160,16 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .hint.small { font-size: 0.88rem; margin: 0; }
 .flash-warn { position: fixed; top: 32px; left: 50%; transform: translate(-50%, 0); z-index: 50; max-width: calc(100vw - 24px); padding: 20px 28px; border-radius: 8px; border: 1px solid #d93025; background: #d93025; color: #fff; font-weight: 700; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }
 .version-line { margin: 0 0 12px; }
+
+/* Version 29: no wizard sub card. The status line above the buttons carries all status text and is itself the
+   progress bar (its background fills left to right); only the needed inputs fold open under the buttons */
+.wizard { border: 0; padding: 0; background: none; margin: 12px 0 0; }
+.wizard h3, .wizard .status-line, .wizard .progress, #error-text { display: none; }
+@property --fill { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
+.board-status { position: relative; overflow: hidden; --fill: 0%; transition: --fill 0.5s ease-out;
+  background: linear-gradient(90deg, #c9dcff var(--fill), #eef4ff var(--fill)); }
+.board-status.working { background: linear-gradient(90deg, #eef4ff 0%, #c9dcff 50%, #eef4ff 100%) 0 0 / 200% 100%;
+  animation: status-sweep 1.4s linear infinite; }
+@keyframes status-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.board-status.ok { background: #e6f4ea; }
+.board-status.error { background: #fdecea; }
