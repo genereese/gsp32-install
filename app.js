@@ -65,6 +65,13 @@ function motionOk() {
 
 // Height folds: content slides open and shut instead of jumping
 function foldOpen(element) {
+  // A fold shut still running is called off (the element stays open)
+  if (element.shutting) {
+    element.shutting.cancel();
+    element.shutting = null;
+    element.style.overflow = "";
+    if (!element.hidden) return;
+  }
   element.hidden = false;
   if (!motionOk()) return;
   const height = element.offsetHeight;
@@ -84,12 +91,37 @@ function foldShut(element, done) {
     return;
   }
   element.style.overflow = "hidden";
-  element.animate([{ height: element.offsetHeight + "px", opacity: 1 }, { height: "0px", opacity: 0 }], { duration: FOLD_MS, easing: "ease-in" })
-    .onfinish = () => {
+  element.shutting = element.animate([{ height: element.offsetHeight + "px", opacity: 1 }, { height: "0px", opacity: 0 }], { duration: FOLD_MS, easing: "ease-in" });
+  element.shutting.onfinish = () => {
+      element.shutting = null;
       element.style.overflow = "";
       element.hidden = true;
       if (done) done();
     };
+}
+
+// A boot banner (the board restarted, e.g. Windows resets it when the port opens): "Board Booting Up..." and the
+//  action buttons wait until GSP32 says it is ready (or 20 s pass: other firmware). Not while esptool works
+let bootingNote = null;
+function startBooting() {
+  if (busy || flashing) return;
+  if (bootingNote === null) bootingNote = boardStatus.hidden ? "" : boardStatus.textContent + "|" + boardStatus.className;
+  setStatus("Board Booting Up...");
+  const actions = $("board-actions");
+  if (!actions.hidden) foldShut(actions);
+}
+function endBooting() {
+  if (bootingNote === null) return;
+  const before = bootingNote;
+  bootingNote = null;
+  if (before) {
+    const [text, kind] = before.split("|");
+    setStatus(text, kind.replace("board-status", "").trim());
+  } else {
+    setStatus("");
+  }
+  const actions = $("board-actions");
+  if (actions.hidden || actions.shutting) foldOpen(actions);
 }
 
 function trackBoard(line) {
@@ -97,6 +129,7 @@ function trackBoard(line) {
     board.kind = "gsp32";
     board.readyAt = Date.now();
     clearTimeout(otherTimer);
+    endBooting();
     // Only once GSP32 is confirmed: ask its Improv device info (chip family, version); never sent to other programs
     if (/GSP32 Improv Ready/.test(line) && board.asked <= board.bootAt) {
       board.asked = Date.now();
@@ -107,10 +140,12 @@ function trackBoard(line) {
     board.bootAt = Date.now();
     board.repl = false;
     clearTimeout(otherTimer);
+    startBooting();
     // No GSP32 line within 20 s of a boot: some other firmware
     otherTimer = setTimeout(() => {
       if (board.readyAt < board.bootAt) {
         board.kind = "other";
+        endBooting();
         syncBoardUi();
       }
     }, 20000);
@@ -989,6 +1024,8 @@ function stopFlashGuard() {
 function showConsole() {
   foldShut(installer);
   boardStatus.hidden = true;
+  bootingNote = null;
+  $("board-actions").hidden = false;
   if (consoleCard.hidden) foldOpen(consoleCard);
   if (consoleBox.hidden) {
     foldOpen(consoleBox);
