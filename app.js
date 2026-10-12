@@ -27,6 +27,8 @@ const wifiRescan = $("wifi-rescan");
 const wifiConnect = $("wifi-connect");
 const errorText = $("error-text");
 const consoleCard = $("console");
+const consoleBox = $("console-card");
+const boardStatus = $("board-status");
 const installer = $("installer");
 const consoleOut = $("console-out");
 const consoleIn = $("console-in");
@@ -369,6 +371,7 @@ function releaseWakeLock() {
 
 function showError(message, retry) {
   setBusy(false);
+  setStatus(message, "error");
   retryStep = retry || "prep";
   errorText.textContent = message;
   showStep("error");
@@ -600,9 +603,22 @@ async function loadFirmware() {
   return files;
 }
 
-function setProgress(text, percent) {
+function setProgress(text, percent, status) {
   flashStatus.textContent = text;
   if (percent != null) flashBar.style.width = Math.max(0, Math.min(100, percent)) + "%";
+  setStatus(status || "Installing (" + Math.max(0, Math.round(percent || 0)) + "%)");
+}
+
+// The board card's status line: what is going on right now (Installing (45%), Installation Successful,
+//  Connecting to Wi-Fi..., Wi-Fi Connected, or the error); "" folds it away
+function setStatus(text, kind) {
+  if (!text) {
+    if (!boardStatus.hidden) foldShut(boardStatus);
+    return;
+  }
+  boardStatus.textContent = text;
+  boardStatus.className = "board-status" + (kind ? " " + kind : "");
+  if (boardStatus.hidden) foldOpen(boardStatus);
 }
 
 // Step 2: port, then flash with esptool-js on the same open port
@@ -618,7 +634,7 @@ async function install() {
   }
   appendConsole("\n[Installing " + versionSelect.options[versionSelect.selectedIndex].textContent + "]\n");
   try {
-    setProgress("Downloading the firmware...", 0, "");
+    setProgress("Downloading the firmware...", 0, "Installing: Downloading the Firmware...");
     const files = await loadFirmware();
     await stopReading();
     const transport = new Transport(port, false);
@@ -644,7 +660,7 @@ async function install() {
       write(text) { appendConsole(text); },
     };
     const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
-    setProgress("Connecting to the board...", 0);
+    setProgress("Connecting to the board...", 0, "Installing: Connecting to the Board...");
     const chip = await loader.main("default_reset");
     try {
       board.chip = (await loader.chip.getChipDescription(loader)) || chip;
@@ -653,7 +669,7 @@ async function install() {
       board.chip = chip;
     }
     if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
-    setProgress("Erasing the board (about 15 seconds)...", 0);
+    setProgress("Erasing the board (about 15 seconds)...", 0, "Installing: Erasing the Board...");
     let lastPercent = -1;
     await loader.writeFlash({
       fileArray: files,
@@ -671,7 +687,7 @@ async function install() {
         }
       },
     });
-    setProgress("Restarting the board...", 100);
+    setProgress("Restarting the board...", 100, "Installing (100%): Restarting the Board...");
     await transport.disconnect();
     // Detect again from the new boot: the buttons follow what the fresh firmware prints
     board.kind = "unknown";
@@ -682,6 +698,7 @@ async function install() {
     board.installed = true;
     appendConsole("[Installed. Restarting the board.]\n");
     await resetBoard();
+    setStatus("Installation Successful", "ok");
     startReading();
     setBusy(false);
     stopFlashGuard();
@@ -889,6 +906,7 @@ async function connectWifi() {
   syncWifiConnect();
   wifiWait.hidden = false;
   wifiStatus.textContent = "Connecting to Wi-Fi (" + picked.value + ")...";
+  setStatus("Connecting to Wi-Fi (" + picked.value + ")...");
   appendConsole("\n[Connecting to Wi-Fi (" + picked.value + ")...]\n");
   const result = waitForPackets(40000, (packet, resolve, reject) => {
     if (packet.type === 2 && packet.data[0] > 0) {
@@ -915,6 +933,7 @@ async function connectWifi() {
       ? "Could not connect. Check the password and try again."
       : "Could not connect. Move the board closer to the router and try again.";
     wifiStatus.textContent = "Pick your network and enter its password.";
+    setStatus(wifiError.textContent, "error");
     syncWifiConnect();
   }
 }
@@ -929,6 +948,7 @@ function finishWifi(url) {
   }
   board.ip = ip;
   appendConsole("\n[Wi-Fi connected. GSP32 web UI: http://" + ip + "/]\n");
+  setStatus("Wi-Fi Connected", "ok");
   onImprov = null;
   foldShut(wizard);
   syncConsoleButtons();
@@ -954,17 +974,39 @@ function stopFlashGuard() {
 // Start state <-> board card: the steps and Get Started fold away while the card slides in, and back on Disconnect
 function showConsole() {
   foldShut(installer);
+  boardStatus.hidden = true;
   if (consoleCard.hidden) foldOpen(consoleCard);
+  if (consoleBox.hidden) {
+    foldOpen(consoleBox);
+    // Sized again once the start row has folded away above it
+    setTimeout(sizeConsole, FOLD_MS + 40);
+  }
   paintConsole();
 }
 
 function hideConsole() {
   if (!busy) closeWizard();
+  foldShut(consoleBox);
   foldShut(consoleCard, () => {
     wizard.hidden = true;
+    boardStatus.hidden = true;
     foldOpen(installer);
   });
 }
+
+// The console output fills what is left of the window under it (at least 200px), and follows window resizes and
+//  the board card growing or shrinking above it (wizard steps, status line)
+const CONSOLE_MIN = 200;
+function sizeConsole() {
+  if (consoleBox.hidden) return;
+  // Measured from the top of the page (not the scrolled window), so scrolling never changes it
+  const top = consoleOut.getBoundingClientRect().top + window.scrollY;
+  const below = consoleBox.getBoundingClientRect().bottom - consoleOut.getBoundingClientRect().bottom;
+  const gap = 16;
+  consoleOut.style.height = Math.max(CONSOLE_MIN, Math.floor(window.innerHeight - top - below - gap)) + "px";
+}
+window.addEventListener("resize", sizeConsole);
+if (window.ResizeObserver) new ResizeObserver(() => sizeConsole()).observe(consoleCard);
 
 function guard(fn) {
   return () => fn().catch((err) => appendConsole("\n[" + (err && err.message ? err.message : "Something went wrong") + "]\n"));

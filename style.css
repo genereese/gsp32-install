@@ -46,8 +46,10 @@ html[data-browser="block"] #installer { display: none; }
 
 .start { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0; margin-top: 28px; padding: 8px 0 4px; }
 .start .steps-row { justify-content: center; }
-.start #connect { margin: 26px 0 12px; padding-left: 40px; padding-right: 40px; }
-.start .hint { margin: 0; }
+/* Get Started is exactly as wide as the hint under it, so the line reads as the button's hint */
+.start-go { display: inline-flex; flex-direction: column; align-items: stretch; margin-top: 44px; }
+.start #connect { margin: 0 0 10px; padding-left: 16px; padding-right: 16px; }
+.start .hint { margin: 0; white-space: nowrap; }
 
 /* Buttons: only buttons lift on hover */
 button, .button {
@@ -94,7 +96,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .wizard[hidden] { display: none; }
 h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .console-head, .console-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.console-bar { margin-top: 16px; }
+.console-bar { margin-top: 0; }
+#console-form .field { margin-bottom: 0; }
+/* The board card's status line: what is happening now */
+.board-status { margin: 12px 0 0; padding: 8px 12px; border-radius: 8px; background: #eef4ff; color: var(--blue-dark); font-weight: 600; }
+.board-status.ok { background: #e6f4ea; color: var(--ok); }
+.board-status.error { background: #fdecea; color: var(--danger); }
 .console-bar h3 { margin: 0; }
 .actions.tight { margin-top: 0; }
 .actions.tight button { min-height: 34px; padding: 4px 12px; font-size: 0.95rem; }
@@ -102,6 +109,9 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .board-state.on { color: var(--ok); background: #e6f4ea; }
 .step[hidden] { display: none; }
 .warn-box { border-left: 4px solid #d4a72c; background: #fff8e5; padding: 10px 12px; border-radius: 6px; }
+/* The erase checkbox sits inside the yellow box, on its left */
+.warn-check { display: flex; gap: 12px; align-items: flex-start; margin: 0 0 0.9rem; cursor: pointer; font-weight: 400; }
+.warn-check input { flex: none; width: 20px; height: 20px; margin: 3px 0 0; }
 .danger-note { color: var(--danger); font-weight: 600; margin-top: 12px; }
 .status-line { font-weight: 600; }
 .ok-line { color: var(--ok); font-weight: 700; font-size: 1.1rem; }
@@ -109,7 +119,7 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 
 .progress { height: 10px; border-radius: 6px; background: #e8edf5; overflow: hidden; margin: 8px 0 6px; }
 .progress[hidden] { display: none; }
-.progress-bar { height: 100%; width: 0; background: var(--blue); border-radius: 6px; transition: width 0.2s; }
+.progress-bar { height: 100%; width: 0; background: var(--blue); border-radius: 6px; transition: width 0.35s ease-out; }
 .progress.indeterminate .progress-bar { width: 35%; animation: slide 1.2s ease-in-out infinite; }
 
 .nets { list-style: none; padding: 0; margin: 8px 0 12px; max-height: 240px; overflow: auto; }
@@ -119,8 +129,9 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .net-name { flex: 1; font-weight: 600; }
 .net-info { color: var(--muted); font-size: 0.9rem; }
 
+/* The console card fills what is left of the window (app.js sizes the output, at least 200px) */
 .console-out {
-  min-height: 220px; max-height: 420px; overflow: auto; margin: 12px 0; padding: 10px;
+  height: 260px; min-height: 200px; overflow: auto; margin: 12px 0; padding: 10px;
   background: #0f172a; color: #e2e8f0; border-radius: 8px; font-size: 0.85rem; white-space: pre-wrap;
 }
 
@@ -140,4 +151,4 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .board-mac { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); opacity: 0.85; }
 .step-icon { font-size: 1rem; }
 .hint.small { font-size: 0.88rem; margin: 0; }
-.flash-warn { position: fixed; top: 12px; left: 50%; transform: translate(-50%, 0); z-index: 50; max-width: calc(100vw - 24px); padding: 10px 14px; border-radius: 8px; border: 1px solid #d93025; background: #fdecea; color: #611a15; font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }
+.flash-warn { position: fixed; top: 32px; left: 50%; transform: translate(-50%, 0); z-index: 50; max-width: calc(100vw - 24px); padding: 20px 28px; border-radius: 8px; border: 1px solid #d93025; background: #fdecea; color: #611a15; font-weight: 600; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }

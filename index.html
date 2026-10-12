@@ -38,8 +38,10 @@
         <li class="arrow" aria-hidden="true">&rarr;</li>
         <li><span class="step-icon" aria-hidden="true">&#11015;</span>3. Install GSP32 or Set Up Wi-Fi</li>
       </ol>
-      <button id="connect" class="primary big" type="button">Get Started</button>
-      <p class="hint small">Works in Chrome or Edge on a computer.</p>
+      <div class="start-go">
+        <button id="connect" class="primary big" type="button">Get Started</button>
+        <p class="hint small">Works in Chrome or Edge on a computer.</p>
+      </div>
     </section>
 
     <section id="console" class="card" hidden>
@@ -50,6 +52,7 @@
         </div>
         <span id="board-state" class="board-state">Checking the Board...</span>
       </div>
+      <p id="board-status" class="board-status" role="status" aria-live="polite" hidden></p>
       <div class="actions" id="board-actions">
         <button id="install-btn" class="primary" type="button">Install GSP32</button>
         <button id="wifi-setup" type="button" hidden>Set Up Wi-Fi</button>
@@ -63,10 +66,9 @@
             <select id="version"><option>Loading Versions...</option></select>
           </label>
           <p>You need a classic ESP32 board and a USB data cable (some cables only charge).</p>
-          <p class="warn-box">Installing <b>erases everything</b> on the board: your programs, files, and Wi-Fi settings.</p>
-          <label class="check" for="erase-ok">
+          <label class="warn-box warn-check" for="erase-ok">
             <input id="erase-ok" type="checkbox">
-            <span>I Understand This Erases the Board</span>
+            <span>Installing <b>erases everything</b> on the board: your programs, files, and Wi-Fi settings. <b>I Understand This Erases the Board.</b></span>
           </label>
           <div class="actions end">
             <button type="button" data-action="close">Cancel</button>
@@ -116,7 +118,9 @@
           </div>
         </div>
       </div>
+    </section>
 
+    <section id="console-card" class="card console-card" hidden>
       <div class="console-bar">
         <h3>Console</h3>
         <div class="actions tight">
