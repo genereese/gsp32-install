@@ -1,6 +1,8 @@
 import sys, http.server, threading, functools, os
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import json as _j, re as _r, os as _o
+LISTED = _r.match(r"Version \d+", _j.load(open(_o.path.join(site, "manifest.json")))["version"]).group(0)  # the listed build, e.g. "Version 32"
 handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=site)
 handler.log_message = lambda *a: None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8766), handler); threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -62,14 +64,14 @@ with sync_playwright() as p:
     fills = []
     pg.wait_for_timeout(350)
     check("V30 install button row folded away while installing", not pg.is_visible("#board-actions"))
-    check("V30 status names the version while installing", pg.inner_text("#board-status").startswith("Installing Version 30"), pg.inner_text("#board-status"))
+    check("V30 status names the version while installing", pg.inner_text("#board-status").startswith("Installing " + LISTED), pg.inner_text("#board-status"))
     for _ in range(12):
         pg.wait_for_timeout(150); fills.append(pg.evaluate("getComputedStyle(document.getElementById('board-status')).getPropertyValue('--fill')"))
     check("V29 status line is the progress bar (fill grows), no sub card", any(f.strip() not in ("", "0%") for f in fills)
           and pg.evaluate("getComputedStyle(document.getElementById('wizard')).borderTopWidth") == "0px"
           and not pg.is_visible("#flash-status"), str(fills))
     pg.wait_for_function("document.getElementById('wizard').hidden", timeout=20000)
-    check("V30 status line: 'Version 30 Installed'", pg.inner_text("#board-status") == "Version 30 Installed", pg.inner_text("#board-status"))
+    check("V30 status line: 'Version 30 Installed'", pg.inner_text("#board-status") == LISTED + " Installed", pg.inner_text("#board-status"))
     pg.wait_for_timeout(400)
     check("V30 install button row back after the install", pg.is_visible("#board-actions") and pg.is_visible("#install-btn"))
     out = pg.inner_text("#console-out")
@@ -78,7 +80,7 @@ with sync_playwright() as p:
     check("one open, run state, reset after flash", log.count("open 115200") == 1 and log[1] == "signals dtr=false rts=false" and "RESET" in log)
     pg.wait_for_timeout(800)
     check("re-detected GSP32 after install", pg.is_visible("#wifi-setup") and pg.inner_text("#wifi-setup") == "Set Up Wi-Fi" and pg.inner_text("#install-btn") == "Reinstall GSP32"
-          and pg.inner_text("#board-state") == "GSP32 Version 30 Found" and pg.locator("#board-hint, [data-step=choice], [data-step=usb]").count() == 0 and not pg.is_visible("#console-webui"), pg.inner_text("#board-state"))
+          and pg.inner_text("#board-state") == "GSP32 " + LISTED + " Found" and pg.locator("#board-hint, [data-step=choice], [data-step=usb]").count() == 0 and not pg.is_visible("#console-webui"), pg.inner_text("#board-state"))
     # V30: a button that is hidden or shown slides sideways (its width animates), never jumps
     widths = pg.evaluate("""(async () => { const b = document.getElementById('wifi-setup'); const out = [];
       gsp32.setShown(b, false); for (let i = 0; i < 5; i++) { await new Promise(r => setTimeout(r, 40)); out.push(b.hidden ? -1 : b.getBoundingClientRect().width); }
@@ -133,7 +135,7 @@ with sync_playwright() as p:
     check("V30 install button row back after a failed install", pg.is_visible("#install-btn"))
     check("status line shows the error", "did not finish" in pg.inner_text("#board-status") and "error" in pg.get_attribute("#board-status", "class"), pg.inner_text("#board-status"))
     pg.screenshot(path=shots + "/05-error.png")
-    check("latest build only, as plain text (no dropdown)", pg.inner_text("#version") == "Version 30" and pg.locator("select").count() == 0, pg.inner_text("#version"))
+    check("latest build only, as plain text (no dropdown)", pg.inner_text("#version") == LISTED and pg.locator("select").count() == 0, pg.inner_text("#version"))
     check("no page errors", not errors, str(errors))
     o = b.new_page(viewport={"width": 1280, "height": 900}); o.add_init_script(path=here + "/mock.js"); o.add_init_script("window.__other = true")
     o.goto(U); o.wait_for_timeout(300); o.click("#connect"); o.wait_for_timeout(400); o.click("#reset"); o.wait_for_timeout(21500)
@@ -148,7 +150,7 @@ with sync_playwright() as p:
     f.click("#install-btn"); f.check("#erase-ok"); f.click("#start-install"); f.wait_for_timeout(600)
     wb = f.locator("#flash-warn").bounding_box()
     pad = f.evaluate("parseFloat(getComputedStyle(document.getElementById('flash-warn')).paddingTop)")
-    check("status line: Installing Version N (N%)", f.inner_text("#board-status").startswith("Installing Version 30"), f.inner_text("#board-status"))
+    check("status line: Installing Version N (N%)", f.inner_text("#board-status").startswith("Installing " + LISTED), f.inner_text("#board-status"))
     check("banner lower, double padding", 24 <= wb["y"] <= 44 and pad >= 18, str((wb["y"], pad)))
     check("floating red warning pinned at top while flashing", f.is_visible("#flash-warn") and wb["y"] < 50 and f.inner_text("#flash-warn") == "Do Not Change Tabs or the Install Will Fail"
           and f.evaluate("getComputedStyle(document.getElementById('flash-warn')).position") == "fixed", str(wb))
