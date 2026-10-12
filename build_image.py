@@ -1,9 +1,9 @@
 """ Rebuilds firmware/gsp32-esp32.bin: bootloader 0x1000, partitions 0x8000, app 0x10000 from an ESP32-httpd firmware
-build (out/<commit>-heap72), and the LittleFS vfs at 0x200000 with the current web UI files (their .gz copies made
-here). boot.py, main.py, examples, pages and the default settings.json are kept from the previous image. No secrets:
+build (out/<commit>-heap72), and the LittleFS vfs at 0x200000 with the current web UI files (minified by
+firmware/minify_web.py, their .gz copies made here). boot.py, main.py, examples, pages and the default settings.json are kept from the previous image. No secrets:
 no config.json or webui_auth.json is ever added.
 Usage: build_image.py <ESP32-httpd checkout> <firmware out dir> """
-import gzip, os, sys, littlefs
+import gzip, os, subprocess, sys, tempfile, littlefs
 repo, out = sys.argv[1], sys.argv[2]
 IMG = "firmware/gsp32-esp32.bin"
 old = open(IMG, "rb").read()
@@ -12,7 +12,9 @@ fs.context.buffer = bytearray(old[0x200000:0x400000]); fs.mount()
 # Round 22 layout: the web UI's settings in gsp32-httpd/config (was ui-data)
 if "ui-data" in fs.listdir("/gsp32-httpd"):
     fs.rename("/gsp32-httpd/ui-data", "/gsp32-httpd/config")
-web = os.path.join(repo, "gsp32-httpd")
+# The shipped system files are minified copies (firmware/minify_web.py); the repo keeps the readable sources
+web = tempfile.mkdtemp(prefix="gsp32-min-")
+subprocess.run([sys.executable, os.path.join(repo, "firmware", "minify_web.py"), repo, web], check=True)
 for name in ("app.js", "files.js", "graphs.js", "style.css", "apps/backup.js", "apps/boards.js", "apps/libraries.js",
              "apps/logger.js", "apps/pins.js", "apps/schedule.js"):
     data = open(os.path.join(web, name), "rb").read()
