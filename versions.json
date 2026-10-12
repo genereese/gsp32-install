@@ -1,8 +1,13 @@
 [
   {
-    "version": "baacd90",
+    "version": "7998795",
     "manifest": "manifest.json",
-    "label": "Version 26 (baacd90, latest)"
+    "label": "Version 27 (7998795, latest)"
+  },
+  {
+    "version": "baacd90",
+    "manifest": "manifest-v26.json",
+    "label": "Version 26 (baacd90)"
   },
   {
     "version": "c374678",
