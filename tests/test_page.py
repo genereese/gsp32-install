@@ -151,9 +151,10 @@ with sync_playwright() as p:
     wb = f.locator("#flash-warn").bounding_box()
     pad = f.evaluate("parseFloat(getComputedStyle(document.getElementById('flash-warn')).paddingTop)")
     check("status line: Installing Version N (N%)", f.inner_text("#board-status").startswith("Installing " + LISTED), f.inner_text("#board-status"))
-    check("banner lower, double padding", 24 <= wb["y"] <= 44 and pad >= 18, str((wb["y"], pad)))
-    check("floating red warning pinned at top while flashing", f.is_visible("#flash-warn") and wb["y"] < 50 and f.inner_text("#flash-warn") == "Do Not Change Tabs or the Install Will Fail"
-          and f.evaluate("getComputedStyle(document.getElementById('flash-warn')).position") == "fixed", str(wb))
+    pb = f.locator("#board-status").bounding_box()
+    check("V38: red warning directly under the progress bar, slim", f.is_visible("#flash-warn") and 0 <= wb["y"] - (pb["y"] + pb["height"]) <= 8
+          and abs(wb["height"] - pb["height"]) <= 2 and f.inner_text("#flash-warn") == "Do Not Change Tabs or the Install Will Fail", str((pb, wb)))
+    check("V38: page title and text folded away with the steps", not f.is_visible("#page-head"))
     check("banner: solid red fill, bold white text", f.evaluate("(() => { const c = getComputedStyle(document.getElementById('flash-warn')); return [c.backgroundColor, c.color, c.fontWeight]; })()") == ["rgb(217, 48, 37)", "rgb(255, 255, 255)", "700"])
     check("during install: Wi-Fi and Web UI buttons hidden (not greyed)", not f.is_visible("#wifi-setup") and not f.is_visible("#console-webui"))
     check("old inline warning gone", f.locator(".danger-note").count() == 0 and f.inner_text("body").count("Do Not Change Tabs") == 1)

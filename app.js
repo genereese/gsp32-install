@@ -1149,31 +1149,24 @@ function finishWifi(url) {
   syncConsoleButtons();
 }
 
-// While flashing: a floating red warning pinned at the top of the viewport, sliding in and away
+// While flashing: the red warning under the progress bar folds open, and away when done (Version 38)
 let flashing = false;
 function startFlashGuard() {
   flashing = true;
   syncBoardUi();
-  const box = $("flash-warn");
-  box.hidden = false;
-  if (motionOk()) box.animate([{ transform: "translate(-50%, -140%)", opacity: 0 }, { transform: "translate(-50%, 0)", opacity: 1 }], { duration: FOLD_MS, easing: "ease-out" });
+  setFolded($("flash-warn"), true);
 }
 function stopFlashGuard() {
   flashing = false;
   syncBoardUi();
-  const box = $("flash-warn");
-  if (box.hidden) return;
-  if (!motionOk()) {
-    box.hidden = true;
-    return;
-  }
-  box.animate([{ transform: "translate(-50%, 0)", opacity: 1 }, { transform: "translate(-50%, -140%)", opacity: 0 }], { duration: FOLD_MS, easing: "ease-in" })
-    .onfinish = () => { box.hidden = true; };
+  setFolded($("flash-warn"), false);
 }
 
 // Start state <-> board card: the steps and Get Started fold away while the card slides in, and back on Disconnect
 function showConsole() {
   foldShut(installer);
+  // Version 38: the page title and its text fold away with the steps, making room for the board card and console
+  if (!$("page-head").hidden && !$("page-head").shutting) foldShut($("page-head"));
   boardStatus.hidden = true;
   bootingNote = null;
   $("board-actions").hidden = false;
@@ -1193,6 +1186,7 @@ function hideConsole() {
     wizard.hidden = true;
     boardStatus.hidden = true;
     foldOpen(installer);
+    if ($("page-head").hidden || $("page-head").shutting) foldOpen($("page-head"));
   });
 }
 

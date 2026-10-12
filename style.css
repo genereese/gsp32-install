@@ -163,7 +163,9 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .board-mac { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); opacity: 0.85; }
 .step-icon { font-size: 1rem; }
 .hint.small { font-size: 0.88rem; margin: 0; }
-.flash-warn { position: fixed; top: 32px; left: 50%; transform: translate(-50%, 0); z-index: 50; max-width: calc(100vw - 24px); padding: 20px 28px; border-radius: 8px; border: 1px solid #d93025; background: #d93025; color: #fff; font-weight: 700; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); }
+/* Version 38: the red warning sits right under the progress bar (the status line), the same height */
+.flash-warn { margin: 6px 0 0; padding: 8px 12px; border-radius: 8px; border: 1px solid #d93025; background: #d93025; color: #fff; font-weight: 700; text-align: center; overflow: hidden; }
+.flash-warn[hidden] { display: none; }
 .version-line { margin: 0 0 12px; }
 
 /* Version 29: no wizard sub card. The status line above the buttons carries all status text and is itself the

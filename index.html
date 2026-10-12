@@ -20,10 +20,11 @@
   </script>
 </head>
 <body>
-  <div id="flash-warn" class="flash-warn" role="alert" hidden>Do Not Change Tabs or the Install Will Fail</div>
   <main>
-    <h1>Install GSP32</h1>
-    <p class="lede">GSP32 is a MicroPython web UI for ESP32 boards. Plug your board in with a USB data cable and install it right from this page.</p>
+    <div id="page-head" class="page-head">
+      <h1>Install GSP32</h1>
+      <p class="lede">GSP32 is a MicroPython web UI for ESP32 boards. Plug your board in with a USB data cable and install it right from this page.</p>
+    </div>
 
     <section id="browser-block" class="card">
       <h2>Use Chrome or Edge on a Desktop Computer</h2>
@@ -66,6 +67,7 @@
         <span id="board-state" class="board-state">Checking the Board...</span>
       </div>
       <p id="board-status" class="board-status" role="status" aria-live="polite" hidden></p>
+      <div id="flash-warn" class="flash-warn" role="alert" hidden>Do Not Change Tabs or the Install Will Fail</div>
       <div id="wizard" class="wizard" hidden>
         <div class="step" data-step="prep" hidden>
           <h3>Install GSP32</h3>
