@@ -35,11 +35,11 @@
 
     <section id="installer" class="start">
       <ol class="steps-row" aria-label="Steps">
-        <li><svg class="step-art" viewBox="0 0 64 48" aria-hidden="true"><rect x="30" y="8" width="28" height="32" rx="4" fill="#1f6feb"/><rect x="36" y="14" width="16" height="12" rx="2" fill="#0b1f44"/><circle cx="40" cy="34" r="2" fill="#7ee0c3"/><circle cx="47" cy="34" r="2" fill="#ffb454"/><rect x="22" y="20" width="10" height="8" rx="1.5" fill="#9aa7b8"/><path d="M4 24h18" stroke="#5b6675" stroke-width="5" stroke-linecap="round"/><rect x="14" y="19" width="9" height="10" rx="2" fill="#7c5cff"/></svg>1. Plug In Your Board</li>
+        <li><svg class="step-art" viewBox="0 0 64 48" aria-hidden="true"><rect x="30" y="8" width="28" height="32" rx="4" fill="#1f6feb"/><rect x="36" y="14" width="16" height="12" rx="2" fill="#0b1f44"/><circle cx="40" cy="34" r="2" fill="#7ee0c3"/><circle cx="47" cy="34" r="2" fill="#ffb454"/><rect x="22" y="20" width="10" height="8" rx="1.5" fill="#9aa7b8"/><path d="M4 24h18" stroke="#5b6675" stroke-width="5" stroke-linecap="round"/><rect x="14" y="19" width="9" height="10" rx="2" fill="#7c5cff"/></svg><span>1. Plug In Your Board</span></li>
         <li class="arrow" aria-hidden="true">&rarr;</li>
-        <li><svg class="step-art" viewBox="0 0 64 48" aria-hidden="true"><circle cx="32" cy="24" r="20" fill="none" stroke="#dbe7fd" stroke-width="5"/><path d="M32 4a20 20 0 0 1 19 26" fill="none" stroke="#14b8a6" stroke-width="5" stroke-linecap="round"/><rect x="21" y="13" width="22" height="22" rx="3" fill="#1f6feb"/><rect x="26" y="18" width="12" height="12" rx="1.5" fill="#0b1f44"/><path d="M24 11v3M32 11v3M40 11v3M24 34v3M32 34v3M40 34v3M19 16h3M19 24h3M19 32h3M42 16h3M42 24h3M42 32h3" stroke="#9aa7b8" stroke-width="1.6"/></svg>2. Click Get Started</li>
+        <li><svg class="step-art" viewBox="0 0 64 48" aria-hidden="true"><circle cx="32" cy="24" r="20" fill="none" stroke="#dbe7fd" stroke-width="5"/><path d="M32 4a20 20 0 0 1 19 26" fill="none" stroke="#14b8a6" stroke-width="5" stroke-linecap="round"/><rect x="21" y="13" width="22" height="22" rx="3" fill="#1f6feb"/><rect x="26" y="18" width="12" height="12" rx="1.5" fill="#0b1f44"/><path d="M24 11v3M32 11v3M40 11v3M24 34v3M32 34v3M40 34v3M19 16h3M19 24h3M19 32h3M42 16h3M42 24h3M42 32h3" stroke="#9aa7b8" stroke-width="1.6"/></svg><span>2. Click Get Started</span></li>
         <li class="arrow" aria-hidden="true">&rarr;</li>
-        <li><svg class="step-art" viewBox="0 0 64 48" aria-hidden="true"><rect x="22" y="12" width="38" height="30" rx="4" fill="#fff" stroke="#1f6feb" stroke-width="2.5"/><path d="M22 20h38" stroke="#1f6feb" stroke-width="2.5"/><circle cx="27" cy="16" r="1.4" fill="#f87171"/><circle cx="31" cy="16" r="1.4" fill="#fbbf24"/><circle cx="35" cy="16" r="1.4" fill="#34d399"/><path d="M28 36l6-7 5 4 7-9 6 6" fill="none" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 18a16 16 0 0 1 20 0" fill="none" stroke="#7c5cff" stroke-width="3" stroke-linecap="round"/><path d="M8 23a10 10 0 0 1 12 0" fill="none" stroke="#7c5cff" stroke-width="3" stroke-linecap="round"/><circle cx="14" cy="28" r="2.5" fill="#7c5cff"/></svg>3. Install GSP32 or Set Up Wi-Fi</li>
+        <li><svg class="step-art" viewBox="0 0 64 48" aria-hidden="true"><rect x="22" y="12" width="38" height="30" rx="4" fill="#fff" stroke="#1f6feb" stroke-width="2.5"/><path d="M22 20h38" stroke="#1f6feb" stroke-width="2.5"/><circle cx="27" cy="16" r="1.4" fill="#f87171"/><circle cx="31" cy="16" r="1.4" fill="#fbbf24"/><circle cx="35" cy="16" r="1.4" fill="#34d399"/><path d="M28 36l6-7 5 4 7-9 6 6" fill="none" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 18a16 16 0 0 1 20 0" fill="none" stroke="#7c5cff" stroke-width="3" stroke-linecap="round"/><path d="M8 23a10 10 0 0 1 12 0" fill="none" stroke="#7c5cff" stroke-width="3" stroke-linecap="round"/><circle cx="14" cy="28" r="2.5" fill="#7c5cff"/></svg><span>3. Install GSP32 or Set Up Wi-Fi</span></li>
       </ol>
       <div class="start-go">
         <button id="connect" class="primary big" type="button">Get Started</button>
@@ -145,16 +145,20 @@
       </div>
       <pre id="console-out" class="console-out" tabindex="0" aria-label="Board output"></pre>
       <form id="console-form">
-        <label class="field" for="console-in">Send a Line
+        <label class="field" for="console-in">Send a Line</label>
+        <div class="console-line">
           <input id="console-in" type="text" autocomplete="off" spellcheck="false" disabled>
-        </label>
+          <button id="console-send" class="primary" type="submit" disabled>Send</button>
+        </div>
+        <p id="console-note" class="hint console-note" hidden>Typing is paused while the flasher works.</p>
       </form>
     </section>
     </div>
 
     <!-- Version 46 (Gene): What You Get: screenshots from the dev board (release_shots.py), each opens full size with a short tour -->
+    <hr class="tour-divider">
     <section id="tour" class="tour" aria-labelledby="tour-title">
-      <h2 id="tour-title">What You Get</h2>
+      <h2 id="tour-title">Check It Out</h2>
       <ul id="tour-list" class="tour-list"></ul>
     </section>
   </main>
@@ -162,9 +166,14 @@
   <dialog id="tour-modal" class="modal tour-modal" aria-labelledby="tour-modal-title">
     <div class="tour-modal-head">
       <h3 id="tour-modal-title"></h3>
-      <button id="tour-close" type="button" class="secondary">Close</button>
+      <button id="tour-close" type="button" class="icon-close" aria-label="Close" title="Close">&times;</button>
     </div>
-    <img id="tour-img" alt="">
+    <div class="tour-stage">
+      <button id="tour-prev" type="button" class="tour-nav prev" aria-label="Previous" title="Previous (Left Arrow)">&#8249;</button>
+      <img id="tour-img" alt="">
+      <button id="tour-next" type="button" class="tour-nav next" aria-label="Next" title="Next (Right Arrow)">&#8250;</button>
+    </div>
+    <p id="tour-count" class="hint tour-count"></p>
     <p id="tour-blurb"></p>
     <ul id="tour-points"></ul>
   </dialog>
@@ -186,6 +195,7 @@
   </dialog>
 
   <script type="module" src="app.js"></script>
+  <p class="flasher-version hint">Flasher Version 48</p>
   <script src="tour.js" defer></script>
 </body>
 </html>

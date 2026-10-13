@@ -278,9 +278,9 @@ button, .button { font-weight: var(--weight-normal); border-radius: var(--radius
 
 /* Version 46: install part centred on wide screens; What You Get strip; windows (Wi-Fi password, tour) */
 @media (min-width: 900px) and (min-height: 700px) {
-  .hero { min-height: calc(100vh - 280px); display: flex; flex-direction: column; justify-content: center; }
+  .hero { min-height: calc(100vh - 440px); display: flex; flex-direction: column; justify-content: center; }
 }
-.step-art { width: 44px; height: 33px; flex: none; }
+.step-art { width: 56px; height: 42px; flex: none; }
 .tour { margin: 32px 0 16px; }
 .tour h2 { font-size: 1.2rem; }
 .tour-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; }
@@ -302,3 +302,43 @@ button, .button { font-weight: var(--weight-normal); border-radius: var(--radius
 /* Once a board is connected the page is the installer only: no tour, no centring (the console fills the window) */
 body:has(#console:not([hidden])) .tour { display: none; }
 body:has(#console:not([hidden])) .hero { min-height: 0; display: block; }
+
+/* Version 48 (Gene): flasher page polish */
+main { text-align: center; }
+main .card, main .board-help, main .wizard, main .console-card, main .console-out, .tour-list, .modal { text-align: left; }
+.steps-row { justify-content: center; align-items: flex-start; gap: 12px 8px; }
+.steps-row li { flex-direction: column; text-align: center; gap: 6px; max-width: 170px; }
+.steps-row .arrow { align-self: center; margin-top: -24px; }
+@media (max-width: 520px) {
+  .steps-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .steps-row .arrow { display: none; }
+  .steps-row li { max-width: none; font-size: 0.85rem; }
+}
+.tour-divider { border: 0; border-top: 1px solid var(--line); margin: 24px 0 0; }
+.tour { margin: 16px 0; }
+.tour h2 { margin: 0 0 16px; }
+.icon-close { min-height: 0; width: 36px; height: 36px; padding: 0; border-radius: 8px; font-size: 1.6rem; line-height: 1; flex: none;
+  background: var(--paper); border: 1px solid var(--line); color: var(--muted); }
+.tour-modal-head { align-items: center; margin: 0 0 12px; }
+.tour-modal-head h3 { margin: 0; }
+.tour-stage { position: relative; }
+.tour-stage img.tour-in { animation: tour-fade 0.22s ease-out; }
+.tour-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; min-height: 0; padding: 0; border-radius: 50%;
+  font-size: 1.8rem; line-height: 1; background: rgba(255, 255, 255, 0.92); border: 1px solid var(--line); color: var(--ink); box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15); }
+.tour-nav:hover:not(:disabled) { transform: translateY(calc(-50% - 1px)); }
+.tour-nav.prev { left: 8px; }
+.tour-nav.next { right: 8px; }
+.tour-count { text-align: center; margin: 0 0 8px; }
+.console-line { position: relative; display: flex; }
+.console-line input { flex: 1; width: 100%; padding-right: 84px; }
+.console-line button { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); min-height: 0; height: calc(100% - 8px); padding: 0 14px; }
+.console-line button:hover:not(:disabled) { transform: translateY(calc(-50% - 1px)); }
+.console-line input:disabled { background: #eef0f3; color: #8a94a3; }
+.console-note { margin: 6px 0 0; transition: opacity 0.2s; }
+.flasher-version { text-align: center; margin: 8px 0 24px; font-size: 0.85rem; }
+@keyframes tour-fade { from { opacity: 0.2; } to { opacity: 1; } }
+.console-line input { font: inherit; padding: 8px 84px 8px 10px; min-height: 42px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-sizing: border-box; transition: background 0.2s, color 0.2s; }
+.console-line input:disabled { background: #eef0f3; color: #8a94a3; cursor: not-allowed; }
+.console-line button { height: 34px; }
+.tour-divider { max-width: 100%; }
+.flasher-version { margin-top: 24px; }

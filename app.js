@@ -35,6 +35,8 @@ const boardStatus = $("board-status");
 const installer = $("installer");
 const consoleOut = $("console-out");
 const consoleIn = $("console-in");
+const consoleSend = $("console-send");
+const consoleNote = $("console-note");
 const connectBtn = $("connect");
 const disconnectBtn = $("disconnect");
 const resetBtn = $("reset");
@@ -178,6 +180,7 @@ function statusWait(reason, on) {
   if (on) statusWaits.add(reason);
   else statusWaits.delete(reason);
   syncStatusWait();
+  if (typeof syncConsoleButtons === "function") setTimeout(syncConsoleButtons, 0);
 }
 function syncStatusWait() {
   const kind = /\b(ok|error)\b/.test(boardStatus.className);
@@ -602,6 +605,7 @@ function showStep(name) {
   const wasHidden = wizard.hidden;
   const before = wasHidden ? 0 : wizard.offsetHeight;
   for (const step of wizard.querySelectorAll(".step")) step.hidden = step.dataset.step !== name;
+  setTimeout(syncConsoleButtons, 0);
   if (wasHidden) {
     foldOpen(wizard);
     return;
@@ -722,13 +726,23 @@ function portOpen() {
   return !!(port && port.readable && port.writable);
 }
 
+function flasherWorking() {
+  const step = (wizard.hidden || wizard.shutting) ? "" : (wizard.querySelector(".step:not([hidden])") || {}).dataset?.step || "";
+  return busy || statusWaits.size > 0 || step === "flash" || step === "wifi";
+}
+
 function syncConsoleButtons() {
   const on = portOpen();
   connectBtn.disabled = on;
   disconnectBtn.disabled = !on || busy;
   resetBtn.disabled = !on || busy;
   ctrlCBtn.disabled = !on || busy;
-  consoleIn.disabled = !on || busy;
+  // Version 48 (Gene): no typing while the flasher works (install, erase, Wi-Fi setup, board checks and restarts)
+  const working = flasherWorking();
+  consoleIn.disabled = !on || working;
+  consoleSend.disabled = !on || working;
+  consoleIn.placeholder = on && working ? "The Flasher Is Working, Typing Is Back When It Finishes" : "";
+  consoleNote.hidden = !(on && working);
   syncBoardUi();
 }
 
@@ -1540,6 +1554,7 @@ $("wifi-setup").addEventListener("click", () => {
 });
 $("console-form").addEventListener("submit", (event) => {
   event.preventDefault();
+  if (consoleIn.disabled) return;
   const text = consoleIn.value;
   consoleIn.value = "";
   writeBytes(textEncoder.encode(text + "\r\n")).catch(() => appendConsole("\n[Could not send. Click Get Started and try again.]\n"));

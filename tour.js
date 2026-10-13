@@ -21,6 +21,7 @@ var TOUR = {
   var list = document.getElementById("tour-list");
   var modal = document.getElementById("tour-modal");
   if (!list || !modal) return;
+  var slides = [], current = 0;
   fetch("shots/index.json", {cache: "no-cache"}).then(function (response) { return response.json(); }).then(function (shots) {
     shots.forEach(function (shot) {
       var text = TOUR[shot.key];
@@ -33,13 +34,40 @@ var TOUR = {
       button.firstChild.src = "shots/" + shot.key + ".jpg";
       button.lastChild.textContent = shot.title;
       button.setAttribute("aria-label", "Open " + shot.title);
-      button.onclick = function () { open(shot, text); };
+      var index = slides.length;
+      slides.push([shot, text]);
+      button.onclick = function () { show(index); modal.showModal(); };
       item.appendChild(button);
       list.appendChild(item);
     });
   }).catch(function () { document.getElementById("tour").hidden = true; });
 
-  function open(shot, text) {
+  // Version 48 (Gene): a slideshow: previous / next, arrow keys and a swipe
+  function show(index) {
+    current = (index + slides.length) % slides.length;
+    var image = document.getElementById("tour-img");
+    image.classList.remove("tour-in");
+    void image.offsetWidth;
+    image.classList.add("tour-in");
+    fill(slides[current][0], slides[current][1]);
+    document.getElementById("tour-count").textContent = (current + 1) + " of " + slides.length;
+  }
+  document.getElementById("tour-prev").onclick = function () { show(current - 1); };
+  document.getElementById("tour-next").onclick = function () { show(current + 1); };
+  modal.addEventListener("keydown", function (event) {
+    if (event.key === "ArrowLeft") { event.preventDefault(); show(current - 1); }
+    if (event.key === "ArrowRight") { event.preventDefault(); show(current + 1); }
+  });
+  var touchX = null;
+  modal.addEventListener("touchstart", function (event) { touchX = event.touches[0].clientX; }, {passive: true});
+  modal.addEventListener("touchend", function (event) {
+    if (touchX === null) return;
+    var dx = event.changedTouches[0].clientX - touchX;
+    touchX = null;
+    if (Math.abs(dx) > 50) show(current + (dx < 0 ? 1 : -1));
+  });
+
+  function fill(shot, text) {
     document.getElementById("tour-modal-title").textContent = shot.title + ": " + text[0];
     var image = document.getElementById("tour-img");
     image.src = "shots/" + shot.key + ".jpg";
@@ -53,7 +81,6 @@ var TOUR = {
       points.appendChild(li);
     });
     points.hidden = !text[2];
-    modal.showModal();
   }
   document.getElementById("tour-close").onclick = function () { modal.close(); };
   modal.addEventListener("click", function (event) { if (event.target === modal) modal.close(); });
