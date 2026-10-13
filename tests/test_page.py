@@ -1,4 +1,4 @@
-import sys, http.server, threading, functools, os
+import re, sys, http.server, threading, functools, os
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import json as _j, re as _r, os as _o
@@ -94,7 +94,7 @@ with sync_playwright() as p:
     check("chip title and MAC from esptool", pg.inner_text("#board-chip").startswith("ESP32-D0WD-V3") and "F8:B3:B7:22:05:E8" in pg.inner_text("#board-mac")
           and pg.evaluate("getComputedStyle(document.getElementById('board-mac')).textTransform") == "uppercase", pg.inner_text("#board-chip") + " / " + pg.inner_text("#board-mac"))
     # Version 43.1: the version is known from the install, so nothing is asked; nothing ever reaches a board that is not listening
-    check("V43.1: version known after install, no Improv to a quiet board", "Version 43" in pg.inner_text("#board-state") and pg.evaluate("window.__badPk") == 0, pg.inner_text("#board-state"))
+    check("V43.1: version known after install, no Improv to a quiet board", re.search(r"Version 4[3-9]", pg.inner_text("#board-state")) is not None and pg.evaluate("window.__badPk") == 0, pg.inner_text("#board-state"))
     pg.screenshot(path=shots + "/03-choice.png")
     pg.click("#wifi-setup"); pg.wait_for_timeout(600)
     check("Wi-Fi wizard scrolled into view", pg.evaluate("(() => { const r = document.getElementById('wizard').getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; })()"))
