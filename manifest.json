@@ -1,6 +1,6 @@
 {
   "name": "GSP32",
-  "version": "Version 40 (226c65d)",
+  "version": "Version 41 (ed63aac)",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 15,
   "builds": [
