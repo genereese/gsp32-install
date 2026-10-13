@@ -334,12 +334,16 @@ main .card, main .board-help, main .wizard, main .console-card, main .console-ou
 .console-line button { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); min-height: 0; height: calc(100% - 8px); padding: 0 14px; }
 .console-line button:hover:not(:disabled) { transform: translateY(calc(-50% - 1px)); }
 .console-line input:disabled { background: #eef0f3; color: #8a94a3; }
-.console-note { margin: 6px 0 0; transition: opacity 0.2s; }
 .flasher-version { text-align: center; margin: 8px 0 24px; font-size: 0.85rem; }
 @keyframes tour-fade { from { opacity: 0.2; } to { opacity: 1; } }
 .console-line input { font: inherit; padding: 8px 84px 8px 10px; min-height: 42px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-sizing: border-box; transition: background 0.2s, color 0.2s; }
 .console-line input:disabled { background: #eef0f3; color: #8a94a3; cursor: not-allowed; }
 .console-line button { height: 34px; }
+/* Version 61 (Gene): Send fills the box's full height, flush top, right and bottom; straight left edge, outer
+   corners follow the input's 8 px rounding. Buttons still lift on hover, so it lifts with a shadow, not a shift */
+.console-line button { top: 0; right: 0; bottom: 0; height: auto; transform: none; border-radius: 0 8px 8px 0; transition: background 0.2s, box-shadow 0.2s, opacity 0.2s; }
+.console-line button:hover:not(:disabled) { transform: none; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18); }
+.console-line input::placeholder { transition: opacity 0.2s; }
 .tour-divider { max-width: 100%; }
 .flasher-version { margin-top: 24px; }
 body:has(#console:not([hidden])) .tour-divider, body:has(#console:not([hidden])) .flasher-version { display: none; }

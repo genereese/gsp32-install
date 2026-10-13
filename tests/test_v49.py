@@ -41,8 +41,8 @@ with sync_playwright() as p:
     writes = [l for l in log if l.startswith("write at")]
     check("check read fails at 921600: steps down to 460800", writes == ["write at 460800"], str(writes))
     check("V53: the slower rate is not saved", saved is None, str(saved))
-    notices = [(t, e) for t, e in pg.status if "Didn't Work" in t]
-    check("V53: plain step-down notice naming 460,800, status pulsing", notices and notices[0][0] == "Fast Speed Didn't Work, Retrying at 460,800 Baud..." and all(e for _, e in notices), str(notices))
+    notices = [(t, e) for t, e in pg.status if "Didn't Work" in t or "Retrying at" in t]
+    check("V53: plain step-down notice naming 460,800, status pulsing", notices and "Calibrating Transfer Speed..." in notices[0][0] and "460,800" in notices[0][0] and all(e for _, e in notices), str(notices))
     check("V53: then writing shows 460,800", any("at 460,800 Baud (" in t for t, _ in pg.status))
     pg.close()
     pg, log, saved = run(b, "window.__failWriteAt = [921600];")
@@ -51,7 +51,7 @@ with sync_playwright() as p:
     check("installed after the retry", "Installed" in pg.inner_text("body"), "")
     pcts = [int(t.rsplit("(", 1)[1].rstrip("%)")) for t, _ in pg.status if " Baud (" in t]
     restart = [i for i in range(1, len(pcts)) if pcts[i] < pcts[i - 1]]
-    check("V53: after a write error the notice shows and the bar starts over", any(t == "Fast Speed Didn't Work, Retrying at 460,800 Baud..." for t, _ in pg.status)
+    check("V53: after a write error the notice shows and the bar starts over", any("Retrying at 460,800 Baud..." in t for t, _ in pg.status)
           and restart and pcts[restart[0]] == 0, str(pcts))
     pg.close()
     pg, log, saved = run(b, "window.__badBaud = [921600, 460800, 230400];")

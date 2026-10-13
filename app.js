@@ -36,7 +36,6 @@ const installer = $("installer");
 const consoleOut = $("console-out");
 const consoleIn = $("console-in");
 const consoleSend = $("console-send");
-const consoleNote = $("console-note");
 const connectBtn = $("connect");
 const disconnectBtn = $("disconnect");
 const resetBtn = $("reset");
@@ -256,9 +255,14 @@ function trackBoard(line) {
     // A board running GSP32 finished its install: the note of an unfinished one no longer applies
     if (flashNoteGet() && !busy && !flashing) {
       flashNoteSet(null);
-      if (/^Incomplete Install/.test(boardStatus.textContent)) {
-        bootingNote = null;
-        setStatus("");
+      // Version 61: the boot banner keeps the status shown before it and puts it back afterwards, so a stale
+      //  "Incomplete Install Detected. Click Recover GSP32..." came back beside a Reinstall GSP32 button. Drop it
+      //  from both places: the board runs GSP32, there is nothing to recover
+      const stale = /^Incomplete Install/;
+      if (bootingNote && stale.test(bootingNote.nodes.map((node) => node.textContent).join(""))) bootingNote = "";
+      if (stale.test(boardStatus.textContent)) {
+        if (bootingNote === null) setStatus("");
+        else bootingNote = "";
       }
     }
     board.readyAt = Date.now();
@@ -741,8 +745,8 @@ function syncConsoleButtons() {
   const working = flasherWorking();
   consoleIn.disabled = !on || working;
   consoleSend.disabled = !on || working;
-  consoleIn.placeholder = on && working ? "The Flasher Is Working, Typing Is Back When It Finishes" : "";
-  consoleNote.hidden = !(on && working);
+  // Version 61 (Gene): just "Busy ..." in the box, no tip under it
+  consoleIn.placeholder = on && working ? "Busy ..." : "";
   syncBoardUi();
 }
 
@@ -1003,7 +1007,7 @@ function baudText(rate) {
 }
 function stepDownNotice(rate) {
   installRate = 0;
-  setProgress("Fast speed didn't work, retrying at " + baudText(rate) + "...", 0, "Fast Speed Didn't Work, Retrying at " + baudText(rate) + " Baud...", true);
+  setProgress("Fast speed didn't work, retrying at " + baudText(rate) + "...", 0, "Installing " + installName() + ": Calibrating Transfer Speed... Retrying at " + baudText(rate) + " Baud...", true);
 }
 function lowerRate(ladder, rate) {
   return ladder.find((r) => r < rate) || FLASH_BAUD;
@@ -1021,6 +1025,37 @@ async function reopenPort(baud) {
   // DTR and RTS off together straight away: the board keeps running the flasher stub
   await setRunState().catch(() => {});
 }
+// Version 61: every connect and speed step has a hard time limit. A step either works within a few seconds or
+//  it doesn't (Gene), so a stuck one is dropped and the next slower rate is tried.
+const SPEED_STEP_MS = 3000;   // one rate: change, reopen, two MAC reads
+const CONNECT_MS = 12000;     // reset into the bootloader, sync and load the stub at 115200
+function withTimeout(promise, ms, what) {
+  let timer;
+  const limit = new Promise((resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(what + " took longer than " + Math.round(ms / 1000) + " s")), ms);
+  });
+  return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+}
+// Version 61: full cleanup between attempts. Cancel and release esptool's reader (a read left pending on a dead
+//  rate keeps the stream locked), then close the port and open it fresh at 115200. Each part is time-limited too.
+async function resetLink(link) {
+  const transport = link && link.transport;
+  if (transport && transport.reader) {
+    await withTimeout(transport.reader.cancel(), 1000, "Releasing the port").catch(() => {});
+    try {
+      transport.reader.releaseLock();
+    } catch (err) {
+      // Released already
+    }
+    transport.reader = undefined;
+  }
+  if (transport) transport.buffer = new Uint8Array(0);
+  if (!port) return;
+  await withTimeout(port.close(), 2000, "Closing the port").catch(() => {});
+  await withTimeout(port.open({ baudRate: FLASH_BAUD }), 2000, "Opening the port");
+  portBaud = FLASH_BAUD;
+  await setRunState().catch(() => {});
+}
 // A borrowed transport on the open port and a loader in the board's flasher stub at 115200
 async function connectLoader(terminal) {
   await reopenPort(FLASH_BAUD);
@@ -1033,7 +1068,7 @@ async function connectLoader(terminal) {
   };
   transport.disconnect = async function () {
     if (this.reader) {
-      await this.reader.cancel().catch(() => {});
+      await withTimeout(this.reader.cancel(), 1000, "Releasing the port").catch(() => {});
       try {
         this.reader.releaseLock();
       } catch (err) {
@@ -1042,40 +1077,57 @@ async function connectLoader(terminal) {
     }
     this.reader = undefined;
   };
+  // Version 61: esptool-js 0.5.7's flushInput awaits reader.closed, which only settles once the port closes, so
+  //  on an open port it waits forever (the Version 60 hang at "Connecting to the Board..."). Drop the buffered
+  //  bytes instead; a reply that arrives late is skipped by the packet reader anyway.
+  transport.flushInput = async function () {
+    this.buffer = new Uint8Array(0);
+  };
   const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
-  const chip = await loader.main("default_reset");
+  const link = { transport, loader, chip: "" };
   try {
-    board.chip = (await loader.chip.getChipDescription(loader)) || chip;
-    board.mac = (await loader.chip.readMac(loader)) || "";
+    link.chip = await withTimeout(loader.main("default_reset"), CONNECT_MS, "Connecting to the board");
+    board.chip = (await withTimeout(loader.chip.getChipDescription(loader), SPEED_STEP_MS, "Reading the chip")) || link.chip;
+    board.mac = (await withTimeout(loader.chip.readMac(loader), SPEED_STEP_MS, "Reading the MAC")) || "";
     flashNoteSet(Object.assign(flashNoteGet() || {}, { mac: board.mac }));
   } catch (err) {
-    board.chip = chip;
+    if (!link.chip) {
+      await resetLink(link).catch(() => {});
+      throw err;
+    }
+    board.chip = link.chip;
   }
-  return { transport, loader, chip };
+  return link;
 }
-// Tries each faster rate: the stub switches, the port reopens, two reads must match the MAC. A failed rate resets
-//  the board back to a fresh 115200 link and the next lower rate is tried. Returns the rate in use.
+// Version 61 (Gene): while rates are tried the status reads Calibrating Transfer Speed... and pulses, until writing
+function calibrating(note) {
+  setProgress(note || "Calibrating transfer speed...", 0, "Installing " + installName() + ": Calibrating Transfer Speed..." + (note ? " " + note : ""), true);
+}
+// Tries each faster rate: the stub switches, the port reopens, two reads must match the MAC. A failed or stuck rate
+//  (3 s limit) is cleaned up, the board is reset to a fresh 115200 link and the next lower rate is tried. Never saved.
 async function raiseBaud(link, rates) {
   for (const rate of rates) {
     if (rate <= FLASH_BAUD) break;
     try {
       appendConsole("[Trying " + rate + " baud]\n");
-      link.loader.baudrate = rate;
-      await link.loader.changeBaud();
-      await new Promise((r) => setTimeout(r, 60));
-      await link.transport.flushInput().catch(() => {});
-      const macs = [await link.loader.chip.readMac(link.loader), await link.loader.chip.readMac(link.loader)];
-      if (macs[0] !== macs[1] || (board.mac && macs[0] !== board.mac)) throw new Error("check read did not match");
+      await withTimeout((async () => {
+        link.loader.baudrate = rate;
+        await link.loader.changeBaud();
+        await delay(60);
+        link.transport.buffer = new Uint8Array(0);
+        const macs = [await link.loader.chip.readMac(link.loader), await link.loader.chip.readMac(link.loader)];
+        if (macs[0] !== macs[1] || (board.mac && macs[0] !== board.mac)) throw new Error("check read did not match");
+      })(), SPEED_STEP_MS, "Speed " + rate);
       appendConsole("[Speed " + rate + " baud checked]\n");
       installRate = rate;
       return rate;
     } catch (err) {
-      appendConsole("[Speed " + rate + " did not work (" + (err && err.message ? err.message : err) + "), stepping down]\n");
-      stepDownNotice(lowerRate(rates.concat([FLASH_BAUD]), rate));
-      await link.transport.disconnect();
-      await reopenPort(FLASH_BAUD).catch(() => {});
-      const fresh = await connectLoader(link.loader.terminal);
-      Object.assign(link, fresh);
+      const next = lowerRate(rates.concat([FLASH_BAUD]), rate);
+      appendConsole("[Speed " + rate + " did not work (" + (err && err.message ? err.message : err) + "), stepping down to " + next + "]\n");
+      stepDownNotice(next);
+      await resetLink(link);
+      Object.assign(link, await connectLoader(link.loader.terminal));
+      calibrating(baudText(rate) + " Baud Didn't Work, Trying " + baudText(next) + "...");
     }
   }
   link.loader.baudrate = FLASH_BAUD;
@@ -1114,8 +1166,20 @@ async function install() {
     installRate = 0;  // rates at or above a failed one are skipped
     for (;;) {
       if (!floor) setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
-      const link = await connectLoader(terminal);
+      let link;
+      try {
+        link = await connectLoader(terminal);
+      } catch (err) {
+        // Version 61: one more try from a clean port, then a clear error with Retry
+        appendConsole("[Connect did not answer (" + (err && err.message ? err.message : err) + "), trying once more]\n");
+        try {
+          link = await connectLoader(terminal);
+        } catch (again) {
+          throw new Error("The board did not answer. Unplug it, plug it back in and click Try Again. If it still does not answer, hold the BOOT button while you click Try Again.");
+        }
+      }
       const chip = link.chip;
+      if (!floor) calibrating();
       if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
       const ladder = baudLadder();
       const rate = await raiseBaud(link, ladder.filter((r) => !floor || r < floor));

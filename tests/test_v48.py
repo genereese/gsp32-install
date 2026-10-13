@@ -54,7 +54,7 @@ with sync_playwright() as p:
     pg.fill("#console-in", "x"); pg.wait_for_timeout(50)
     check("Send button enabled when idle", pg.is_enabled("#console-send"))
     pg.click("#wifi-setup"); pg.wait_for_timeout(800)
-    check("Wi-Fi step: input and Send disabled with note", not pg.is_enabled("#console-in") and not pg.is_enabled("#console-send") and pg.is_visible("#console-note"))
+    check("Wi-Fi step: input and Send disabled, V61 Busy ... with no tip", not pg.is_enabled("#console-in") and not pg.is_enabled("#console-send") and pg.get_attribute("#console-in", "placeholder") == "Busy ..." and pg.locator("#console-note").count() == 0)
     if shots: pg.screenshot(path=shots + "/flasher-after-busy-console-1440.png", full_page=True)
     pg.click("#wifi-cancel"); pg.wait_for_timeout(900)
     check("Cancel restores typing", pg.is_enabled("#console-in") and not pg.is_visible("#console-note"))
