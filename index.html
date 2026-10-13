@@ -66,6 +66,19 @@
         </div>
         <span id="board-state" class="board-state">Checking the Board...</span>
       </div>
+      <div class="actions" id="board-actions">
+        <button id="install-btn" class="primary" type="button">Install GSP32</button>
+        <button id="wifi-setup" type="button" hidden>Set Up Wi-Fi</button>
+        <a id="console-webui" class="button" href="#" target="_blank" rel="noopener" hidden>Open GSP32 Web UI</a>
+      </div>
+      <!-- Version 43.1 (Gene): status and progress under the buttons, so buttons coming and going above never move it -->
+      <p id="board-status" class="board-status" role="status" aria-live="polite" hidden></p>
+      <div id="check-wait" class="check-wait" role="status" hidden>
+        <span id="check-wait-text">Checking for GSP32&hellip;</span>
+        <div class="progress"><div id="check-wait-bar" class="progress-bar"></div></div>
+      </div>
+      <div id="flash-warn" class="flash-warn" role="alert" hidden>Changing Tabs Could Cause the Install to Fail</div>
+      <!-- Version 43.2 (Gene): the steps (Wi-Fi networks, password, buttons) sit under the status line they belong to -->
       <div id="wizard" class="wizard" hidden>
         <div class="step" data-step="prep" hidden>
           <h3>Install GSP32</h3>
@@ -122,19 +135,6 @@
           </div>
         </div>
       </div>
-
-      <div class="actions" id="board-actions">
-        <button id="install-btn" class="primary" type="button">Install GSP32</button>
-        <button id="wifi-setup" type="button" hidden>Set Up Wi-Fi</button>
-        <a id="console-webui" class="button" href="#" target="_blank" rel="noopener" hidden>Open GSP32 Web UI</a>
-      </div>
-      <!-- Version 43.1 (Gene): status and progress under the buttons, so buttons coming and going above never move it -->
-      <p id="board-status" class="board-status" role="status" aria-live="polite" hidden></p>
-      <div id="check-wait" class="check-wait" role="status" hidden>
-        <span id="check-wait-text">Checking for GSP32&hellip;</span>
-        <div class="progress"><div id="check-wait-bar" class="progress-bar"></div></div>
-      </div>
-      <div id="flash-warn" class="flash-warn" role="alert" hidden>Do Not Change Tabs or the Install Will Fail</div>
     </section>
 
     <section id="console-card" class="card console-card" hidden>

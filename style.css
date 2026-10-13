@@ -190,6 +190,8 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .board-status::before { content: ""; position: absolute; inset: 0; z-index: -1; background: #c9dcff; opacity: 0;
   transition: opacity 0.4s ease-out; pointer-events: none; }
 .board-status.erasing::before { animation: erase-pulse 1.8s ease-in-out infinite; }
+/* Version 43.2 (Gene, standing rule): every wait with nothing else moving pulses the same way */
+.board-status.waiting::before { animation: erase-pulse 1.8s ease-in-out infinite; }
 @keyframes erase-pulse { 0%, 100% { opacity: 0; } 50% { opacity: 0.85; } }
 
 /* Version 42.1 (Gene): one shared design system, taken from the Web UI's file manager (16 px card gaps, 16 px around

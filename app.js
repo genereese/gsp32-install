@@ -113,7 +113,14 @@ function foldShut(element, done) {
 let bootingNote = null;
 function startBooting() {
   if (busy || flashing) return;
-  if (bootingNote === null) bootingNote = boardStatus.hidden ? "" : boardStatus.textContent + "|" + boardStatus.className;
+  // Version 43.2 (Gene): the status is kept as nodes, not text, so "Wi-Fi Connected!" comes back with its second line
+  //  and its link (as text both were lost: "Connected!Your board..." with a plain address)
+  if (bootingNote === null) {
+    bootingNote = boardStatus.hidden ? "" : {
+      nodes: Array.from(boardStatus.childNodes, (node) => node.cloneNode(true)),
+      kind: boardStatus.className.replace(/\b(board-status|waiting|filling|erasing)\b/g, "").trim(),
+    };
+  }
   setStatus("Board Booting Up...");
   startCheckWait();
 }
@@ -123,8 +130,8 @@ function endBooting() {
   const before = bootingNote;
   bootingNote = null;
   if (before) {
-    const [text, kind] = before.split("|");
-    setStatus(text, kind.replace("board-status", "").trim());
+    setStatus(" ", before.kind);
+    boardStatus.replaceChildren(...before.nodes);
   } else {
     setStatus("");
   }
@@ -151,11 +158,27 @@ function startCheckWait() {
   tick();
   checkWaitTimer = setInterval(tick, 250);
   setFolded(box, true);
+  statusWait("check", true);
 }
 function stopCheckWait() {
   clearInterval(checkWaitTimer);
   checkWaitTimer = null;
   setFolded($("check-wait"), false);
+  statusWait("check", false);
+}
+
+// Version 43.2 (Gene, standing rule): whenever the page waits with nothing else moving (checking for the board,
+//  restarting it, scanning, connecting to Wi-Fi up to a wrong password's timeout), the status line pulses blue like
+//  the erase step, so it never looks frozen. Each wait adds its reason; an answer (ok, error) ends the pulse
+const statusWaits = new Set();
+function statusWait(reason, on) {
+  if (on) statusWaits.add(reason);
+  else statusWaits.delete(reason);
+  syncStatusWait();
+}
+function syncStatusWait() {
+  const kind = /\b(ok|error)\b/.test(boardStatus.className);
+  boardStatus.classList.toggle("waiting", statusWaits.size > 0 && !kind);
 }
 
 // Version 42.1 (Gene): an install cut short (page refreshed, cable pulled) leaves the board restarting over and over.
@@ -338,6 +361,8 @@ function setShown(element, on) {
 
 // Panels inside a wizard step (Wi-Fi form, wait note, error) fold up and down instead of jumping
 function setFolded(element, on) {
+  // Version 43.2: the Wi-Fi step's wait (board restart, scan, connect) is a wait with nothing moving: pulse
+  if (element === wifiWait) statusWait("wifi", on);
   if (on) {
     if (element.hidden || element.shutting) foldOpen(element);
   } else if (!element.hidden && !element.shutting) {
@@ -589,6 +614,7 @@ function closeWizard() {
   onImprov = null;
   keepSession(false);
   foldShut(wizard);
+  statusWait("wifi", false);
   syncConsoleButtons();
 }
 
@@ -896,11 +922,7 @@ function setProgress(text, percent, status, erasing) {
 function mirrorStatus() {
   new MutationObserver(function () {
     if (wifiStatus.textContent && !wifiStatus.closest(".step").hidden) setStatus(wifiStatus.textContent);
-    boardStatus.classList.toggle("working", !wifiWait.hidden && !wifiWait.closest(".step").hidden);
   }).observe(wifiStatus, { childList: true, characterData: true, subtree: true });
-  new MutationObserver(function () {
-    boardStatus.classList.toggle("working", !wifiWait.hidden && !wifiWait.closest(".step").hidden);
-  }).observe(wifiWait, { attributes: true, attributeFilter: ["hidden"] });
   new MutationObserver(function () {
     if (errorText.textContent) setStatus(errorText.textContent, "error");
   }).observe(errorText, { childList: true, characterData: true, subtree: true });
@@ -924,8 +946,8 @@ function setStatus(text, kind, ip) {
     link.textContent = ip;
     boardStatus.append(": ", link);
   }
-  const working = boardStatus.classList.contains("working");
-  boardStatus.className = "board-status" + (kind ? " " + kind : "") + (working && !kind ? " working" : "");
+  boardStatus.className = "board-status" + (kind ? " " + kind : "");
+  syncStatusWait();
   boardStatus.style.removeProperty("--fill");
   if (boardStatus.hidden) foldOpen(boardStatus);
 }
@@ -1055,12 +1077,24 @@ function waitForPackets(timeoutMs, onPacket) {
 // The board answers Improv once its web UI runs (a few seconds after a reset; while the boot Wi-Fi prompt waits,
 // that prompt answers). Ask for the state every 1.5 s until it does
 // Resolves once the board says it listens for Improv (or after timeoutMs)
+//  Version 43.2 (Gene): GSP32 before 43.1 never says "Listening" on a board with Wi-Fi. Once the board is up (its
+//  network line or "main.py running") and OLD_FIRMWARE_MS pass without it, board.oldFirmware is set and this ends
+const OLD_FIRMWARE_MS = 8000;
 function waitListening(timeoutMs) {
   const since = Date.now();
+  let upAt = 0;
+  const watch = (line) => {
+    if (!upAt && /^main\.py running|^Network config:/.test(line)) upAt = Date.now();
+  };
+  lineWatchers.push(watch);
+  board.oldFirmware = false;
   return new Promise((resolve) => {
     const timer = setInterval(() => {
-      if (board.listening || board.kind === "other" || Date.now() - since > timeoutMs) {
+      const old = !board.listening && upAt > 0 && Date.now() - upAt > OLD_FIRMWARE_MS;
+      if (board.listening || board.kind === "other" || old || Date.now() - since > timeoutMs) {
         clearInterval(timer);
+        lineWatchers = lineWatchers.filter((item) => item !== watch);
+        board.oldFirmware = old;
         resolve(board.listening);
       }
     }, 100);
@@ -1186,6 +1220,7 @@ async function startWifi(fresh) {
       await waitListening(45000);
     }
     const state = board.listening ? await waitBoardReady(8000) : null;
+    if (state === null && board.oldFirmware) throw new Error("This board runs an older GSP32. Install Version 43.1 or newer to change Wi-Fi here.");
     if (state === null && board.kind === "other") throw new Error("This board does not run GSP32. Install GSP32 first to set up Wi-Fi.");
     if (state === null) throw new Error("The board did not answer. Check that GSP32 is installed, then try again.");
     await scanForWifi();
@@ -1299,7 +1334,8 @@ function finishWifi(url) {
   link.rel = "noopener";
   link.textContent = "http://" + ip + "/";
   ready.append("Your board is ready. Open ", link, " in a browser on the same network to use GSP32, or click Open Web UI.");
-  boardStatus.append(ready);
+  // Version 43.2 (Gene): a space after "Wi-Fi Connected!" (copied or read aloud, the lines no longer run together)
+  boardStatus.append(" ", ready);
   onImprov = null;
   foldShut(wizard);
   syncConsoleButtons();
