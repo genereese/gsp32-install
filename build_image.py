@@ -35,8 +35,11 @@ for name in fs.listdir("/"):
     if name.startswith("webui") and name.endswith((".py", ".mpy")):
         fs.remove("/" + name)
 # Version 35: the stock start page comes from the repo too (Examples link removed)
-with fs.open("/gsp32-httpd/pages/index.html", "wb") as f:
-    f.write(open(os.path.join(repo, "gsp32-httpd", "pages", "index.html"), "rb").read())
+# Version 60: plus the Dashboard starter page (live number, graph, log and button from main.py's pages module)
+for page in ("index.html", "dashboard.html"):
+    if os.path.exists(os.path.join(repo, "gsp32-httpd", "pages", page)):
+        with fs.open("/gsp32-httpd/pages/" + page, "wb") as f:
+            f.write(open(os.path.join(repo, "gsp32-httpd", "pages", page), "rb").read())
 for bad in ("/config.json", "/webui_auth.json"):
     assert bad[1:] not in fs.listdir("/"), bad
 image = bytearray(b"\xff" * 0x400000)
