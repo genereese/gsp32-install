@@ -164,7 +164,7 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .step-icon { font-size: 1rem; }
 .hint.small { font-size: 0.88rem; margin: 0; }
 /* Version 38: the red warning sits right under the progress bar (the status line), the same height */
-.flash-warn { margin: 6px 0 0; padding: 8px 12px; border-radius: 8px; border: 1px solid #d93025; background: #d93025; color: #fff; font-weight: 700; text-align: center; overflow: hidden; }
+.flash-warn { margin: 6px 0 0; padding: 0; border: 0; background: none; color: var(--danger); font-size: var(--text-sm); font-weight: 600; text-align: center; overflow: hidden; }
 .flash-warn[hidden] { display: none; }
 .version-line { margin: 0 0 12px; }
 
@@ -184,15 +184,6 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 /* Version 39: the second line of "Wi-Fi Connected!" */
 .board-status .status-more { display: block; margin-top: 4px; font-weight: 400; }
 
-/* Version 42 (Gene): 15 px body text. The root is 15/17 of 16 px, so the headings, the Install button and every other
-   rem size shrink with it in the same proportions; the console keeps its own 13.6 px */
-html { font-size: 88.2353%; }
-/* Version 42: the Wi-Fi wizard's network rows and password box a little under the 15 px text */
-.nets label { padding: 6px 10px; gap: 8px; font-size: 14px; line-height: 1.4; }
-.net-info { font-size: 12.5px; }
-.nets input { margin: 0; }
-#wifi-password { font-size: 14px; padding: 6px 10px; }
-.field:has(#wifi-password) { font-size: 14px; }
 /* Version 42 (Gene): while the board erases, the status bar pulses a soft blue so the notice stands out; writing
    takes over with the normal fill */
 .board-status { isolation: isolate; }
@@ -200,3 +191,85 @@ html { font-size: 88.2353%; }
   transition: opacity 0.4s ease-out; pointer-events: none; }
 .board-status.erasing::before { animation: erase-pulse 1.8s ease-in-out infinite; }
 @keyframes erase-pulse { 0%, 100% { opacity: 0; } 50% { opacity: 0.85; } }
+
+/* Version 42.1 (Gene): one shared design system, taken from the Web UI's file manager (16 px card gaps, 16 px around
+   the page, 8 px cards, 6 px buttons and inputs). Every size, weight and space below comes from these tokens:
+   five text sizes, two weights (600 only for titles and the main button), one spacing scale. No root % scale, so px
+   padding and button heights are back to their pre Version 42 sizes; the body text stays 15 px (Version 42) */
+:root {
+  --text-xs: 13px;
+  --text-sm: 14px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 26px;
+  --weight-normal: 400;
+  --weight-strong: 600;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --line: #d8dee6;
+  --page: #f4f6f9;
+  --muted: #5f6b7a;
+  --danger: #c62828;
+}
+body { font-size: var(--text-md); line-height: 1.45; font-weight: var(--weight-normal); }
+main { padding: var(--space-4) var(--space-4) var(--space-4); }
+h1 { font-size: var(--text-xl); font-weight: var(--weight-strong); margin: var(--space-3) 0 var(--space-2); }
+h2 { font-size: var(--text-lg); font-weight: var(--weight-strong); }
+h3 { font-size: var(--text-lg); font-weight: var(--weight-strong); }
+.lede { font-size: var(--text-md); }
+.hint, .hint.small, .small-link { font-size: var(--text-sm); }
+b, strong { font-weight: var(--weight-strong); }
+
+/* Cards: the file manager's look, 16 px apart */
+.card { border-color: var(--line); border-radius: var(--radius-card); padding: var(--space-4); margin-top: var(--space-4); }
+.board-help { border-radius: var(--radius-card); font-size: var(--text-sm); }
+
+/* Buttons: regular weight; only the solid blue next step is bold. Only buttons lift on hover (unchanged) */
+button, .button { font-weight: var(--weight-normal); border-radius: var(--radius-control); font-size: var(--text-md); }
+.primary { font-weight: var(--weight-strong); }
+/* The board card's row swaps which button is primary (Version 37 fade, no shift): all three keep one weight */
+#board-actions > * { font-weight: var(--weight-strong); }
+.big { font-size: var(--text-lg); }
+.link-button { font-weight: var(--weight-normal); }
+.actions { gap: var(--space-2); margin-top: var(--space-3); }
+.actions.tight button { font-size: var(--text-sm); }
+
+/* Inputs and labels */
+.field { font-weight: var(--weight-normal); color: var(--ink); }
+.field input, .field select { border-radius: var(--radius-control); border-color: var(--line); }
+.check, .warn-check { font-weight: var(--weight-normal); }
+.warn-box { border-radius: var(--radius-control); }
+
+/* Status and lines: regular text; colour carries the meaning */
+.board-status { font-weight: var(--weight-normal); border-radius: var(--radius-control); }
+.status-line, .error-line, .danger-note { font-weight: var(--weight-normal); }
+.ok-line { font-weight: var(--weight-strong); font-size: var(--text-lg); }
+.board-state { font-size: var(--text-sm); font-weight: var(--weight-normal); }
+.board-state .web-line { font-size: var(--text-xs); font-weight: var(--weight-normal); }
+.board-mac { font-size: var(--text-xs); }
+
+/* Restored to their pre Version 42 sizes (Gene): the steps row above Get Started (0.92rem of 16 px) and the Console
+   heading (1.05rem of 16 px); the console text stays 13.6 px */
+.steps-row { font-size: 14.72px; font-weight: var(--weight-normal); }
+.step-icon { font-size: 16px; }
+.console-bar h3 { font-size: 16.8px; }
+
+/* The Wi-Fi wizard on the same scale: compact rows and a normal height password box */
+.nets label { padding: 6px 10px; gap: var(--space-2); font-size: var(--text-sm); line-height: 1.4; border-radius: var(--radius-control); }
+.net-name { font-weight: var(--weight-normal); }
+.net-info { font-size: var(--text-xs); }
+.nets input { margin: 0; }
+.field:has(#wifi-password) { font-size: var(--text-sm); }
+#wifi-password { font-size: var(--text-sm); padding: 6px 10px; }
+
+/* Version 42.1: the countdown while the page decides whether the board runs GSP32 (about 20 s), and the recovery
+   offer for a half-finished install */
+.check-wait { margin: var(--space-2) 0 0; font-size: var(--text-sm); color: var(--muted); overflow: hidden; }
+.check-wait .progress { height: 4px; margin: var(--space-1) 0 0; }
+.check-wait .progress-bar { transition: width 1s linear; }
+.recover-note { margin: var(--space-3) 0 0; color: var(--danger); font-size: var(--text-sm); overflow: hidden; }
