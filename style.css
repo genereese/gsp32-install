@@ -79,7 +79,7 @@ button:active:not(:disabled), .button:active { transform: none; box-shadow: none
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 .primary { background: var(--blue); border-color: var(--blue); color: #fff; }
 .primary:hover:not(:disabled) { background: var(--blue-dark); }
-.big { font-size: 1.15rem; padding: 12px 28px; min-height: 52px; }
+.big { font-size: 1.15rem; padding: 10px 24px; min-height: 46px; }
 .link-button { background: none; border: none; color: var(--blue); padding: 4px 0; min-height: 0; font-weight: 500; }
 .secondary { background: #e8f0fe; border-color: #c9dbfb; color: var(--blue-dark); }
 .secondary:hover:not(:disabled) { background: #dbe7fd; }
@@ -183,3 +183,20 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 
 /* Version 39: the second line of "Wi-Fi Connected!" */
 .board-status .status-more { display: block; margin-top: 4px; font-weight: 400; }
+
+/* Version 42 (Gene): 15 px body text. The root is 15/17 of 16 px, so the headings, the Install button and every other
+   rem size shrink with it in the same proportions; the console keeps its own 13.6 px */
+html { font-size: 88.2353%; }
+/* Version 42: the Wi-Fi wizard's network rows and password box a little under the 15 px text */
+.nets label { padding: 6px 10px; gap: 8px; font-size: 14px; line-height: 1.4; }
+.net-info { font-size: 12.5px; }
+.nets input { margin: 0; }
+#wifi-password { font-size: 14px; padding: 6px 10px; }
+.field:has(#wifi-password) { font-size: 14px; }
+/* Version 42 (Gene): while the board erases, the status bar pulses a soft blue so the notice stands out; writing
+   takes over with the normal fill */
+.board-status { isolation: isolate; }
+.board-status::before { content: ""; position: absolute; inset: 0; z-index: -1; background: #c9dcff; opacity: 0;
+  transition: opacity 0.4s ease-out; pointer-events: none; }
+.board-status.erasing::before { animation: erase-pulse 1.8s ease-in-out infinite; }
+@keyframes erase-pulse { 0%, 100% { opacity: 0; } 50% { opacity: 0.85; } }

@@ -778,11 +778,13 @@ function showActions(on) {
 }
 
 // The status line is the progress bar: its background fills left to right (--fill) under the text
-function setProgress(text, percent, status) {
+//  Version 42: erasing gently pulses the bar blue (nothing else moves then); the next setProgress, writing, ends it
+function setProgress(text, percent, status, erasing) {
   flashStatus.textContent = text;
   if (percent != null) flashBar.style.width = Math.max(0, Math.min(100, percent)) + "%";
   setStatus(status || "Installing " + installName() + " (" + Math.max(0, Math.round(percent || 0)) + "%)");
   boardStatus.classList.add("filling");
+  boardStatus.classList.toggle("erasing", !!erasing);
   if (percent != null) boardStatus.style.setProperty("--fill", Math.max(0, Math.min(100, percent)) + "%");
 }
 
@@ -874,7 +876,7 @@ async function install() {
       board.chip = chip;
     }
     if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
-    setProgress("Erasing the board (about 15 seconds)...", 0, "Installing " + installName() + ": Erasing the Board...");
+    setProgress("Erasing the board (about 15 seconds)...", 0, "Installing " + installName() + ": Erasing the Board...", true);
     let lastPercent = -1;
     await loader.writeFlash({
       fileArray: files,
