@@ -55,6 +55,7 @@
   const port = {
     get readable() { if (!isOpen) return null; if (!rs) rs = fresh(); return rs; },
     writable: null,
+    getInfo() { return window.__usb || { usbVendorId: 0x10c4, usbProductId: 0xea60 }; },
     async open(o) { log.push("open " + o.baudRate); isOpen = true; rs = null; this.writable = new WritableStream({ write: (c) => onWrite(c) }); },
     async close() { log.push("close dtr=" + dtr + " rts=" + rts); isOpen = false; rs = null; this.writable = null; },
     async setSignals(s) {

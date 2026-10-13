@@ -78,7 +78,9 @@ with sync_playwright() as p:
     out = pg.inner_text("#console-out")
     check("esptool output in the one console", "[esptool]" in out and "[Installing" in out, out[-300:].replace("\n"," | "))
     log = pg.evaluate("window.__log")
-    check("one open, run state, reset after flash", log.count("open 115200") == 1 and log[1] == "signals dtr=false rts=false" and "RESET" in log)
+    opens = [l for l in log if isinstance(l, str) and l.startswith("open")]
+    # V49: the install reopens the port for the faster rate and back to 115200 after; the pick opens it once
+    check("one open at pick, back at 115200 after, run state, reset after flash", opens[0] == "open 115200" and opens[-1] == "open 115200" and log.index("open 921600") > 1 and log[1] == "signals dtr=false rts=false" and "RESET" in log)
     pg.wait_for_timeout(800)
     check("re-detected GSP32 after install", pg.is_visible("#wifi-setup") and pg.inner_text("#wifi-setup") == "Set Up Wi-Fi" and pg.inner_text("#install-btn") == "Reinstall GSP32"
           and pg.inner_text("#board-state") == "GSP32 " + LISTED + " Found" and pg.locator("#board-hint, [data-step=choice], [data-step=usb]").count() == 0 and not pg.is_visible("#console-webui"), pg.inner_text("#board-state"))

@@ -809,6 +809,7 @@ async function openPort(selected) {
   if (port === selected && portOpen()) return;
   if (port && port !== selected) await closePort();
   await selected.open({ baudRate: FLASH_BAUD });
+  portBaud = FLASH_BAUD;
   port = selected;
   await setRunState();
   pending = new Uint8Array(0);
@@ -969,6 +970,109 @@ function setStatus(text, kind, ip) {
   if (boardStatus.hidden) foldOpen(boardStatus);
 }
 
+// Version 49: install speed. The fastest rate each USB-serial chip handles, then lower ones; 115200 always last.
+//  Measured on the dev board (CP2102, esptool, full 4 MB image, compressed, erase all): 115200 199.7 s,
+//  921600 46.9 s, 2000000 no answer. So CP210x and CH340 stop at 921600.
+const BAUD_LADDERS = {
+  "10c4": [921600, 460800, 230400],            // Silicon Labs CP210x
+  "1a86:55d4": [2000000, 921600, 460800, 230400], // WCH CH9102
+  "1a86": [921600, 460800, 230400],            // WCH CH340 / CH341
+  "0403": [2000000, 921600, 460800, 230400],   // FTDI
+  "303a": [921600, 460800],                    // Espressif USB (rate barely matters)
+};
+let portBaud = FLASH_BAUD;
+function usbIds() {
+  const info = port && port.getInfo ? port.getInfo() : {};
+  const hex = (n) => (n || 0).toString(16).padStart(4, "0");
+  return { vid: hex(info.usbVendorId), pid: hex(info.usbProductId) };
+}
+function baudKey() {
+  const ids = usbIds();
+  return "gsp32-baud:" + ids.vid + ":" + ids.pid + ":" + (board.mac || "any");
+}
+function baudLadder() {
+  const ids = usbIds();
+  const rates = (BAUD_LADDERS[ids.vid + ":" + ids.pid] || BAUD_LADDERS[ids.vid] || [460800, 230400]).slice();
+  let saved = 0;
+  try { saved = Number(localStorage.getItem(baudKey())) || 0; } catch (err) { saved = 0; }
+  // A board that worked (or was stepped down) at a rate starts there
+  const list = saved ? rates.filter((r) => r <= saved) : rates;
+  return list.concat([FLASH_BAUD]).filter((r, i, all) => all.indexOf(r) === i);
+}
+function lowerRate(ladder, rate) {
+  return ladder.find((r) => r < rate) || FLASH_BAUD;
+}
+function baudRemember(rate) {
+  try { localStorage.setItem(baudKey(), String(rate)); } catch (err) { /* private mode: no memory, still works */ }
+}
+async function reopenPort(baud) {
+  if (!port || portBaud === baud) return;
+  await port.close();
+  await port.open({ baudRate: baud });
+  portBaud = baud;
+  // DTR and RTS off together straight away: the board keeps running the flasher stub
+  await setRunState().catch(() => {});
+}
+// A borrowed transport on the open port and a loader in the board's flasher stub at 115200
+async function connectLoader(terminal) {
+  await reopenPort(FLASH_BAUD);
+  const transport = new Transport(port, false);
+  // The port is already open: esptool-js borrows its reader; a speed change reopens it at the new rate
+  transport.connect = async function (baud) {
+    this.baudrate = baud;
+    await reopenPort(baud);
+    this.reader = port.readable.getReader();
+  };
+  transport.disconnect = async function () {
+    if (this.reader) {
+      await this.reader.cancel().catch(() => {});
+      try {
+        this.reader.releaseLock();
+      } catch (err) {
+        // Released already
+      }
+    }
+    this.reader = undefined;
+  };
+  const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
+  const chip = await loader.main("default_reset");
+  try {
+    board.chip = (await loader.chip.getChipDescription(loader)) || chip;
+    board.mac = (await loader.chip.readMac(loader)) || "";
+    flashNoteSet(Object.assign(flashNoteGet() || {}, { mac: board.mac }));
+  } catch (err) {
+    board.chip = chip;
+  }
+  return { transport, loader, chip };
+}
+// Tries each faster rate: the stub switches, the port reopens, two reads must match the MAC. A failed rate resets
+//  the board back to a fresh 115200 link and the next lower rate is tried. Returns the rate in use.
+async function raiseBaud(link, rates) {
+  for (const rate of rates) {
+    if (rate <= FLASH_BAUD) break;
+    try {
+      appendConsole("[Trying " + rate + " baud]\n");
+      link.loader.baudrate = rate;
+      await link.loader.changeBaud();
+      await new Promise((r) => setTimeout(r, 60));
+      await link.transport.flushInput().catch(() => {});
+      const macs = [await link.loader.chip.readMac(link.loader), await link.loader.chip.readMac(link.loader)];
+      if (macs[0] !== macs[1] || (board.mac && macs[0] !== board.mac)) throw new Error("check read did not match");
+      appendConsole("[Speed " + rate + " baud checked]\n");
+      return rate;
+    } catch (err) {
+      appendConsole("[Speed " + rate + " did not work (" + (err && err.message ? err.message : err) + "), stepping down]\n");
+      baudRemember(lowerRate(rates, rate));
+      await link.transport.disconnect();
+      await reopenPort(FLASH_BAUD).catch(() => {});
+      const fresh = await connectLoader(link.loader.terminal);
+      Object.assign(link, fresh);
+    }
+  }
+  link.loader.baudrate = FLASH_BAUD;
+  return FLASH_BAUD;
+}
+
 // Step 2: port, then flash with esptool-js on the same open port
 async function install() {
   showActions(false);
@@ -987,61 +1091,59 @@ async function install() {
     setProgress("Downloading the firmware...", 0, "Installing " + installName() + ": Downloading the Firmware...");
     const files = await loadFirmware();
     await stopReading();
-    const transport = new Transport(port, false);
-    // The port is already open: esptool-js only borrows its reader, never closes or reopens it
-    transport.connect = async function (baud) {
-      this.baudrate = baud;
-      this.reader = port.readable.getReader();
-    };
-    transport.disconnect = async function () {
-      if (this.reader) {
-        await this.reader.cancel().catch(() => {});
-        try {
-          this.reader.releaseLock();
-        } catch (err) {
-          // Released already
-        }
-      }
-      this.reader = undefined;
-    };
     const terminal = {
       clean() {},
       writeLine(text) { appendConsole("[esptool] " + text + "\n"); },
       write(text) { appendConsole(text); },
     };
-    const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
     const pickedStart = versionSelect.textContent.match(/Version (\d+(?:\.\d+)?)/);
     flashNoteSet({ mac: board.mac || "", version: pickedStart ? pickedStart[1] : "", startedAt: Date.now() });
-    setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
-    const chip = await loader.main("default_reset");
-    try {
-      board.chip = (await loader.chip.getChipDescription(loader)) || chip;
-      board.mac = (await loader.chip.readMac(loader)) || "";
-      flashNoteSet(Object.assign(flashNoteGet() || {}, { mac: board.mac }));
-    } catch (err) {
-      board.chip = chip;
+    // Version 49: connect at 115200, raise the speed the USB chip allows (checked with a read), always the full
+    //  image; any speed error steps down one rate and starts the full install again, 115200 is the last try
+    let floor = 0;  // rates at or above a failed one are skipped
+    for (;;) {
+      setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
+      const link = await connectLoader(terminal);
+      const chip = link.chip;
+      if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
+      const ladder = baudLadder();  // after connecting: the board's MAC picks its saved rate
+      const rate = await raiseBaud(link, ladder.filter((r) => !floor || r < floor));
+      setProgress("Erasing the board (about 15 seconds)...", 0, "Installing " + installName() + ": Erasing the Board...", true);
+      let lastPercent = -1;
+      const started = Date.now();
+      try {
+        await link.loader.writeFlash({
+          fileArray: files,
+          flashSize: "keep",
+          flashMode: "keep",
+          flashFreq: "keep",
+          eraseAll: true,
+          compress: true,
+          reportProgress: (index, written, total) => {
+            const percent = Math.floor((written / total) * 100);
+            if (percent !== lastPercent) {
+              lastPercent = percent;
+              setProgress("Writing the firmware... " + percent + "%", percent);
+              if (percent % 10 === 0) appendConsole("[esptool] Written " + percent + "%\n");
+            }
+          },
+        });
+      } catch (err) {
+        await link.transport.disconnect();
+        if (rate <= FLASH_BAUD) throw err;
+        appendConsole("[Speed " + rate + " failed while writing (" + (err && err.message ? err.message : err) + "). Trying again slower.]\n");
+        floor = rate;
+        baudRemember(lowerRate(ladder, rate));
+        await reopenPort(FLASH_BAUD).catch(() => {});
+        continue;
+      }
+      appendConsole("[Written in " + Math.round((Date.now() - started) / 1000) + " s at " + rate + " baud, compressed]\n");
+      baudRemember(rate);
+      await link.transport.disconnect();
+      break;
     }
-    if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
-    setProgress("Erasing the board (about 15 seconds)...", 0, "Installing " + installName() + ": Erasing the Board...", true);
-    let lastPercent = -1;
-    await loader.writeFlash({
-      fileArray: files,
-      flashSize: "keep",
-      flashMode: "keep",
-      flashFreq: "keep",
-      eraseAll: true,
-      compress: true,
-      reportProgress: (index, written, total) => {
-        const percent = Math.floor((written / total) * 100);
-        if (percent !== lastPercent) {
-          lastPercent = percent;
-          setProgress("Writing the firmware... " + percent + "%", percent);
-          if (percent % 10 === 0) appendConsole("[esptool] Written " + percent + "%\n");
-        }
-      },
-    });
+    await reopenPort(FLASH_BAUD);
     setProgress("Restarting the board...", 100, "Installing " + installName() + " (100%): Restarting the Board...");
-    await transport.disconnect();
     // Detect again from the new boot: the buttons follow what the fresh firmware prints
     board.kind = "unknown";
     board.ip = "";
@@ -1061,6 +1163,7 @@ async function install() {
     showActions(true);
     syncActions();
   } catch (err) {
+    await reopenPort(FLASH_BAUD).catch(() => {});
     await setRunState().catch(() => {});
     startReading();
     setBusy(false);
