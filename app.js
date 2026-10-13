@@ -934,7 +934,7 @@ function showActions(on) {
 function setProgress(text, percent, status, erasing) {
   flashStatus.textContent = text;
   if (percent != null) flashBar.style.width = Math.max(0, Math.min(100, percent)) + "%";
-  setStatus(status || "Installing " + installName() + (installRate ? " at " + baudText(installRate) + " Baud" : "") + " (" + Math.max(0, Math.round(percent || 0)) + "%)");
+  setStatus(status || "Installing " + installName() + " (" + Math.max(0, Math.round(percent || 0)) + "%)");
   boardStatus.classList.add("filling");
   boardStatus.classList.toggle("erasing", !!erasing);
   if (percent != null) boardStatus.style.setProperty("--fill", Math.max(0, Math.min(100, percent)) + "%");
@@ -974,62 +974,18 @@ function setStatus(text, kind, ip) {
   if (boardStatus.hidden) foldOpen(boardStatus);
 }
 
-// Version 49: install speed. The fastest rate each USB-serial chip handles, then lower ones; 115200 always last.
-//  Version 53: 921600 -> 460800 -> 230400 -> 115200 for every chip (CH9102 / FTDI try 2000000 first), within one install
-//  Measured on the dev board (CP2102, esptool, full 4 MB image, compressed, erase all): 115200 199.7 s,
-//  921600 46.9 s, 2000000 no answer. So CP210x and CH340 stop at 921600.
-const BAUD_LADDERS = {
-  "10c4": [921600, 460800, 230400],            // Silicon Labs CP210x
-  "1a86:55d4": [2000000, 921600, 460800, 230400], // WCH CH9102
-  "1a86": [921600, 460800, 230400],            // WCH CH340 / CH341
-  "0403": [2000000, 921600, 460800, 230400],   // FTDI
-  "303a": [921600, 460800, 230400],            // Espressif USB (rate barely matters)
-};
-// Any other USB-serial chip: the same chain as CP210x (Version 53)
-const BAUD_DEFAULT = [921600, 460800, 230400];
+// Version 64 (Gene): every install runs at 115200. Faster rates were tried in Versions 49-63; Chrome and Edge on
+//  Windows restart CP2102 boards whenever the port reopens for a speed change, so none held up (see IDEAS.md)
 let portBaud = FLASH_BAUD;
-function usbIds() {
-  const info = port && port.getInfo ? port.getInfo() : {};
-  const hex = (n) => (n || 0).toString(16).padStart(4, "0");
-  return { vid: hex(info.usbVendorId), pid: hex(info.usbProductId) };
-}
-// Version 53 (Gene): never remember a speed. Every install starts at the chip's fastest rate and steps down only for
-//  that install; the old per-board entries (Version 49-52) are cleared once on load
-function baudLadder() {
-  const ids = usbIds();
-  const rates = (BAUD_LADDERS[ids.vid + ":" + ids.pid] || BAUD_LADDERS[ids.vid] || BAUD_DEFAULT).slice();
-  return rates.concat([FLASH_BAUD]).filter((r, i, all) => all.indexOf(r) === i);
-}
-// Version 53 (Gene): the speed in use shows in the status line; a step-down says so plainly and the bar starts over
-let installRate = 0;
-function baudText(rate) {
-  return Number(rate).toLocaleString("en-US");
-}
-function stepDownNotice(rate) {
-  installRate = 0;
-  setProgress("Fast speed didn't work, retrying at " + baudText(rate) + "...", 0, "Installing " + installName() + ": Calibrating Transfer Speed... Retrying at " + baudText(rate) + " Baud...", true);
-}
-function lowerRate(ladder, rate) {
-  return ladder.find((r) => r < rate) || FLASH_BAUD;
-}
-try {
-  Object.keys(localStorage).filter((key) => key.startsWith("gsp32-baud:")).forEach((key) => localStorage.removeItem(key));
-} catch (err) {
-  // No storage (private mode): nothing to clear
-}
-async function reopenPort(baud, keepSignals) {
+async function reopenPort(baud) {
   if (!port || portBaud === baud) return;
   await port.close();
   await port.open({ baudRate: baud });
   portBaud = baud;
-  // Version 63: a speed change leaves the control lines exactly as the reopen left them, like esptool-js's own
-  //  changeBaud. Setting them again right after the reopen is the one step esptool-js does not take, and Gene's
-  //  board restarted there (out of the flasher stub, printing at its own rate). Other reopens set the run state
-  if (!keepSignals) await setRunState().catch(() => {});
+  await setRunState().catch(() => {});
 }
-// Version 61: every connect and speed step has a hard time limit. A step either works within a few seconds or
-//  it doesn't (Gene), so a stuck one is dropped and the next slower rate is tried.
-const SPEED_STEP_MS = 3000;   // one rate: change, reopen, two MAC reads
+// Version 61: every connect step has a hard time limit, so a board that does not answer never hangs the page
+const READ_MS = 3000;         // one chip or MAC read
 const CONNECT_MS = 12000;     // reset into the bootloader, sync and load the stub at 115200
 function withTimeout(promise, ms, what) {
   let timer;
@@ -1062,10 +1018,10 @@ async function resetLink(link) {
 async function connectLoader(terminal) {
   await reopenPort(FLASH_BAUD);
   const transport = new Transport(port, false);
-  // The port is already open: esptool-js borrows its reader; a speed change reopens it at the new rate
+  // The port is already open at 115200: esptool-js borrows its reader
   transport.connect = async function (baud) {
     this.baudrate = baud;
-    await reopenPort(baud, baud !== FLASH_BAUD);
+    await reopenPort(baud);
     this.reader = port.readable.getReader();
   };
   transport.disconnect = async function () {
@@ -1080,7 +1036,7 @@ async function connectLoader(terminal) {
     this.reader = undefined;
   };
   // Version 61: esptool-js 0.5.7's flushInput awaits reader.closed, which only settles once the port closes, so
-  //  on an open port it waits forever (the Version 60 hang). Version 62: ours really drains (see drainInput)
+  //  on an open port it waits forever (the Version 60 hang). Ours drains, bounded (see drainInput)
   transport.flushInput = async function () {
     await drainInput(this);
   };
@@ -1088,8 +1044,8 @@ async function connectLoader(terminal) {
   const link = { transport, loader, chip: "" };
   try {
     link.chip = await withTimeout(loader.main("default_reset"), CONNECT_MS, "Connecting to the board");
-    board.chip = (await withTimeout(loader.chip.getChipDescription(loader), SPEED_STEP_MS, "Reading the chip")) || link.chip;
-    board.mac = (await withTimeout(loader.chip.readMac(loader), SPEED_STEP_MS, "Reading the MAC")) || "";
+    board.chip = (await withTimeout(loader.chip.getChipDescription(loader), READ_MS, "Reading the chip")) || link.chip;
+    board.mac = (await withTimeout(loader.chip.readMac(loader), READ_MS, "Reading the MAC")) || "";
     flashNoteSet(Object.assign(flashNoteGet() || {}, { mac: board.mac }));
   } catch (err) {
     if (!link.chip) {
@@ -1100,10 +1056,8 @@ async function connectLoader(terminal) {
   }
   return link;
 }
-// Version 62: after a speed change the UART switch can leave a stray byte or two in the port's stream (Gene's first
-//  real install: "Invalid head of packet (0x80)" at every rate). Clearing esptool's buffer alone missed them, they
-//  sit in the stream. Read and discard until 100 ms pass with nothing (500 ms at most), then a fresh reader, which
-//  also drops any read left waiting by an earlier timeout. Bounded throughout, so it can never hang
+// Read and discard what is waiting until 100 ms pass with nothing (500 ms at most), then a fresh reader, which also
+//  drops any read left waiting by an earlier timeout. Bounded throughout, so it can never hang
 async function drainInput(transport, quietMs = 100, maxMs = 500) {
   let dropped = transport.buffer ? transport.buffer.length : 0;
   transport.buffer = new Uint8Array(0);
@@ -1127,66 +1081,6 @@ async function drainInput(transport, quietMs = 100, maxMs = 500) {
   transport.buffer = new Uint8Array(0);
   return dropped;
 }
-// The MAC read that checks a rate: drained first, and up to three tries (a stray byte costs one try, not the rate)
-async function checkedMac(link) {
-  let last;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const dropped = await drainInput(link.transport);
-    // Version 63: always logged, so a log shows which flasher ran and what the line did
-    appendConsole("[Drained " + dropped + " byte" + (dropped === 1 ? "" : "s") + " after the speed change]\n");
-    // Hundreds of bytes in half a second: the board restarted and talks at its own rate, the stub is gone. Faster
-    //  rates would only do the same, so the install goes straight to 115,200
-    if (dropped > 64) throw Object.assign(new Error("the board restarted on the speed change"), { restarted: true });
-    try {
-      return await link.loader.chip.readMac(link.loader);
-    } catch (err) {
-      last = err;
-    }
-  }
-  throw last;
-}
-// Version 61 (Gene): while rates are tried the status reads Calibrating Transfer Speed... and pulses, until writing
-function calibrating(note) {
-  setProgress(note || "Calibrating transfer speed...", 0, "Installing " + installName() + ": Calibrating Transfer Speed..." + (note ? " " + note : ""), true);
-}
-// Tries each faster rate: the stub switches, the port reopens, two reads must match the MAC. A failed or stuck rate
-//  (3 s limit) is cleaned up, the board is reset to a fresh 115200 link and the next lower rate is tried. Never saved.
-async function raiseBaud(link, rates) {
-  for (const rate of rates) {
-    if (rate <= FLASH_BAUD) break;
-    try {
-      appendConsole("[Trying " + rate + " baud]\n");
-      await withTimeout((async () => {
-        link.loader.baudrate = rate;
-        await link.loader.changeBaud();
-        await delay(60);
-        const macs = [await checkedMac(link), await checkedMac(link)];
-        if (macs[0] !== macs[1] || (board.mac && macs[0] !== board.mac)) throw new Error("check read did not match");
-      })(), SPEED_STEP_MS, "Speed " + rate);
-      appendConsole("[Speed " + rate + " baud checked]\n");
-      installRate = rate;
-      return rate;
-    } catch (err) {
-      const next = lowerRate(rates.concat([FLASH_BAUD]), rate);
-      appendConsole("[Speed " + rate + " did not work (" + (err && err.message ? err.message : err) + "), stepping down to " + next + "]\n");
-      if (err && err.restarted) {
-        appendConsole("[The board restarts on a speed change with this cable or adapter. Using 115200 baud.]\n");
-        stepDownNotice(FLASH_BAUD);
-        await resetLink(link);
-        Object.assign(link, await connectLoader(link.loader.terminal));
-        break;
-      }
-      stepDownNotice(next);
-      await resetLink(link);
-      Object.assign(link, await connectLoader(link.loader.terminal));
-      calibrating(baudText(rate) + " Baud Didn't Work, Trying " + baudText(next) + "...");
-    }
-  }
-  link.loader.baudrate = FLASH_BAUD;
-  installRate = FLASH_BAUD;
-  return FLASH_BAUD;
-}
-
 // Step 2: port, then flash with esptool-js on the same open port
 async function install() {
   showActions(false);
@@ -1212,12 +1106,10 @@ async function install() {
     };
     const pickedStart = versionSelect.textContent.match(/Version (\d+(?:\.\d+)?)/);
     flashNoteSet({ mac: board.mac || "", version: pickedStart ? pickedStart[1] : "", startedAt: Date.now() });
-    // Version 49: connect at 115200, raise the speed the USB chip allows (checked with a read), always the full
-    //  image; any speed error steps down one rate and starts the full install again, 115200 is the last try
-    let floor = 0;
-    installRate = 0;  // rates at or above a failed one are skipped
-    for (;;) {
-      if (!floor) setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
+    // Version 64: connect and write at 115200, always the full image. A write error (the occasional
+    //  "Invalid head of packet (0xff)") gets one fresh connect and a second full try before it is shown
+    for (let attempt = 1; ; attempt++) {
+      setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
       let link;
       try {
         link = await connectLoader(terminal);
@@ -1231,11 +1123,8 @@ async function install() {
         }
       }
       const chip = link.chip;
-      if (!floor) calibrating();
       if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
-      const ladder = baudLadder();
-      const rate = await raiseBaud(link, ladder.filter((r) => !floor || r < floor));
-      setProgress("Erasing the board (about 15 seconds)...", 0, "Installing " + installName() + " at " + baudText(installRate) + " Baud: Erasing the Board...", true);
+      setProgress("Erasing the board (about 15 seconds)...", 0, "Installing " + installName() + ": Erasing the Board...", true);
       let lastPercent = -1;
       const started = Date.now();
       try {
@@ -1257,14 +1146,12 @@ async function install() {
         });
       } catch (err) {
         await link.transport.disconnect();
-        if (rate <= FLASH_BAUD) throw err;
-        appendConsole("[Speed " + rate + " failed while writing (" + (err && err.message ? err.message : err) + "). Trying again slower.]\n");
-        floor = rate;
-        stepDownNotice(lowerRate(ladder, rate));
-        await reopenPort(FLASH_BAUD).catch(() => {});
+        if (attempt >= 2) throw err;
+        appendConsole("[Write failed (" + (err && err.message ? err.message : err) + "). Starting over once.]\n");
+        await resetLink(link).catch(() => {});
         continue;
       }
-      appendConsole("[Written in " + Math.round((Date.now() - started) / 1000) + " s at " + rate + " baud, compressed]\n");
+      appendConsole("[Written in " + Math.round((Date.now() - started) / 1000) + " s, compressed]\n");
       await link.transport.disconnect();
       break;
     }

@@ -1,4 +1,4 @@
-# Version 61: hard time limits on connect and every speed step, clean fallback, Calibrating Transfer Speed..., console box
+# Version 61 (kept in 64): hard time limits on connect, retry with a clear error, Recover note fix, console box
 import sys, os, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import importlib.util
@@ -37,29 +37,18 @@ with sync_playwright() as p:
     b = p.chromium.launch()
     # 1: the V60 hang: real flushInput semantics, nothing else wrong. V60 never got past it.
     pg, log, texts, st = run(b, shot=busy_shot)
-    check("no hang on flushInput: written at 921600", "write at 921600" in log, str([l for l in log if l.startswith(("write", "open", "change"))]))
-    check("Calibrating Transfer Speed... shown, pulsing", any("Calibrating Transfer Speed..." in t and e for t, e in st), str(texts[:6]))
+    check("no hang on flushInput: written at 115200", "write at 115200" in log, str([l for l in log if l.startswith(("write", "open", "change"))]))
+    check("V64: no speed change at all", not any(l.startswith("change baud") for l in log) and not any(l.startswith("open") and l != "open 115200" for l in log))
     check("installed", "Installed" in pg.inner_text("body"))
-    pg.close()
-    # 2: 921600 hangs forever -> dropped within ~3 s, 460800 used
-    pg, log, texts, st = run(b, "window.__hangBaud = [921600];", wait=9000)
-    check("stuck 921600 dropped, written at 460800", "hang at 921600" in log and "write at 460800" in log, str([l for l in log if l.startswith(("write", "hang", "change"))]))
-    check("step-down notice visible", any("921,600 Baud Didn't Work" in t or "Retrying at 460,800" in t for t in texts), str(texts))
-    check("installed after fallback", "Installed" in pg.inner_text("body"))
-    pg.close()
-    # 3: every fast rate hangs -> 115200
-    pg, log, texts, st = run(b, "window.__hangBaud = [921600, 460800, 230400];", wait=16000)
-    check("all fast rates hang: written at 115200", "write at 115200" in log, str([l for l in log if l.startswith(("write", "hang"))]))
     pg.close()
     # 4: connect hangs once -> retried; hangs always -> clear error with Retry
     pg, log, texts, st = run(b, "window.__hangConnect = 1;", wait=16000)
-    check("one stuck connect is retried", "write at 921600" in log, str(texts[-3:]))
+    check("one stuck connect is retried", "write at 115200" in log, str(texts[-3:]))
     pg.close()
     pg, log, texts, st = run(b, "window.__hangConnect = 9;", wait=28000)
     body = pg.inner_text("body")
     check("connect never answers: clear error", "did not answer" in body, texts[-1] if texts else "")
     check("Try Again offered", pg.locator("#error-retry:visible").count() > 0)
-    check("nothing saved", pg.evaluate("Object.keys(localStorage).filter(k => k.startsWith('gsp32-baud:')).length") == 0)
     # 6: Version 61 hotfix: an install that hung before erasing leaves the note; the board still runs GSP32. After a
     #  reload the boot banner must not bring back "Click Recover GSP32" beside a Reinstall GSP32 button
     pg = b.new_page(); pg.add_init_script(path=here + "/mock.js")
@@ -75,17 +64,5 @@ with sync_playwright() as p:
     # 7: the note is cleared by a successful install
     pg, log, texts, st = run(b)
     check("successful install clears the note", pg.evaluate("localStorage.getItem('gsp32.flash')") is None)
-    # 8: Version 62: a stray byte after each speed change (the real Chrome failure) is drained, 921600 is kept
-    pg, log, texts, st = run(b, "window.__glitch = true;", wait=6000)
-    check("V62: stray byte after the switch: still written at 921600", "stray byte" in log and "write at 921600" in log and "invalid head" not in log, str([l for l in log if l.startswith(("write", "stray", "invalid", "change"))]))
-    check("V62: the console says the byte was dropped", "Drained 1 byte" in pg.inner_text("#console-out"))
-    pg.close()
-    # 9: Version 63: the board restarts on the speed change (hundreds of bytes): straight to 115200, no more fast tries
-    pg, log, texts, st = run(b, "window.__restartOnSwitch = true;", wait=9000)
-    w = [l for l in log if l.startswith(("write", "change"))]
-    check("V63: restart on the switch: one fast try, then 115200", w == ["change baud 921600", "write at 115200"], str(w))
-    out = pg.inner_text("#console-out")
-    check("V63: drain count always logged, restart explained", "Drained" in out and "restarts on a speed change" in out)
-    check("V63: speed reopen leaves the lines alone", pg.evaluate("window.__signalsAfterFast") == 0, str(pg.evaluate("window.__signalsAfterFast")))
     pg.close(); b.close()
 print("FAILS", fails); sys.exit(1 if fails else 0)
