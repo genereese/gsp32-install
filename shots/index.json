@@ -1,0 +1,34 @@
+[
+ {
+  "key": "home",
+  "title": "Home and Graphs"
+ },
+ {
+  "key": "files",
+  "title": "File Manager"
+ },
+ {
+  "key": "editor",
+  "title": "Code Editor"
+ },
+ {
+  "key": "pins",
+  "title": "Pin Panel"
+ },
+ {
+  "key": "console",
+  "title": "Web Console"
+ },
+ {
+  "key": "libraries",
+  "title": "Libraries"
+ },
+ {
+  "key": "backup",
+  "title": "Backup"
+ },
+ {
+  "key": "settings",
+  "title": "Settings"
+ }
+]

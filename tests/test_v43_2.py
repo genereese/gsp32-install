@@ -39,7 +39,7 @@ with sync_playwright() as p:
     check("networks listed: no pulse", not pg.evaluate(PULSE))
     gap = pg.evaluate("document.getElementById('wifi-list').getBoundingClientRect().top - document.getElementById('board-status').getBoundingClientRect().bottom")
     check("Wi-Fi list below 'Pick your network...'", gap > 0 and "Pick your network" in pg.inner_text("#board-status"), gap)
-    pg.click("#wifi-list li:first-child label"); pg.fill("#wifi-password", "x-test-pass"); pg.click("#wifi-connect"); pg.wait_for_timeout(100)
+    pg.click("#wifi-list li:first-child label"); pg.click("#wifi-connect"); pg.fill("#wifi-password", "x-test-pass"); pg.click("#wifi-modal-connect"); pg.wait_for_timeout(100)
     check("connecting: status pulses", pg.evaluate(PULSE) == "erase-pulse", pg.evaluate(PULSE))
     pg.wait_for_function("document.getElementById('wizard').hidden", timeout=30000); pg.wait_for_timeout(300)
     text = pg.evaluate("document.getElementById('board-status').textContent")

@@ -22,7 +22,7 @@ with sync_playwright() as p:
     pg.screenshot(path=shots + "/01-page.png")
     sr = pg.locator(".steps-row").bounding_box(); cb = pg.locator("#connect").bounding_box()
     check("steps and Get Started centered", abs((sr["x"] + sr["width"] / 2) - 640) < 30 and abs((cb["x"] + cb["width"] / 2) - (sr["x"] + sr["width"] / 2)) < 4 and cb["y"] - (sr["y"] + sr["height"]) >= 20, str((sr, cb)))
-    check("no dialog, one Get Started button, steps row", pg.locator("dialog").count() == 0 and pg.inner_text("#connect") == "Get Started"
+    check("no dialog, one Get Started button, steps row", pg.locator("dialog[open]").count() == 0 and pg.inner_text("#connect") == "Get Started"
           and "1. Plug In Your Board" in pg.inner_text(".steps-row") and "Works in Chrome or Edge on a computer." in pg.inner_text("#installer"))
     check("board card hidden at first", not pg.is_visible("#console"))
     hb = pg.locator("#installer .hint").bounding_box()
@@ -100,7 +100,7 @@ with sync_playwright() as p:
     check("Wi-Fi wizard scrolled into view", pg.evaluate("(() => { const r = document.getElementById('wizard').getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; })()"))
     pg.wait_for_selector("#wifi-list li", timeout=20000)
     check("networks listed", pg.locator("#wifi-list li").count() == 2)
-    pg.click("#wifi-list li:first-child label"); pg.fill("#wifi-password", "secret"); pg.click("#wifi-connect")
+    pg.click("#wifi-list li:first-child label"); pg.click("#wifi-connect"); pg.fill("#wifi-password", "secret"); pg.click("#wifi-modal-connect")
     pg.wait_for_function("document.getElementById('wizard').hidden", timeout=30000); pg.wait_for_timeout(400)
     pg.screenshot(path=shots + "/04-done.png")
     check("V39: status line: Wi-Fi Connected! + ready text with the address as a link", pg.inner_text("#board-status").startswith("Wi-Fi Connected!")

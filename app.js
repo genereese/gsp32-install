@@ -20,7 +20,10 @@ const flashBar = $("flash-bar");
 const wifiStatus = $("wifi-status");
 const wifiWait = $("wifi-wait");
 const wifiList = $("wifi-list");
-const wifiForm = $("wifi-form");
+const wifiModal = $("wifi-modal");
+const wifiModalStatus = $("wifi-modal-status");
+const wifiModalConnect = $("wifi-modal-connect");
+const wifiModalCancel = $("wifi-modal-cancel");
 const wifiPassword = $("wifi-password");
 const wifiError = $("wifi-error");
 const wifiRescan = $("wifi-rescan");
@@ -1192,8 +1195,10 @@ function renderNetworks(networks) {
 
 function syncWifiConnect() {
   const picked = wifiList.querySelector("input:checked");
-  setFolded(wifiForm, !(!picked || !!picked.dataset.open));
   wifiConnect.disabled = busy || !picked;
+  wifiModalConnect.disabled = busy;
+  wifiModalCancel.disabled = busy;
+  wifiPassword.disabled = busy;
 }
 
 async function startWifi(fresh) {
@@ -1201,7 +1206,6 @@ async function startWifi(fresh) {
   setTimeout(() => wizard.scrollIntoView({ behavior: motionOk() ? "smooth" : "auto", block: "nearest" }), motionOk() ? FOLD_MS : 0);
   setFolded(wifiError, false);
   setShown(wifiRescan, false);
-  setFolded(wifiForm, false);
   wifiPassword.value = "";
   wifiList.replaceChildren();
   setFolded(wifiWait, true);
@@ -1255,7 +1259,7 @@ async function scanForWifi() {
   setShown(wifiRescan, true);
   wifiRescan.textContent = "Scan Again";
   wifiStatus.textContent = networks.length
-    ? "Pick your network and enter its password."
+    ? "Pick your network, then click Connect."
     : "No networks found. Move the board closer to the router, then click Scan Again.";
   syncWifiConnect();
 }
@@ -1274,6 +1278,7 @@ async function connectWifi() {
   setBusy(true);
   syncWifiConnect();
   setFolded(wifiWait, true);
+  modalWait("Connecting to Wi-Fi (" + picked.value + ")...");
   wifiStatus.textContent = "Connecting to Wi-Fi (" + picked.value + ")...";
   setStatus("Connecting to Wi-Fi (" + picked.value + ")...");
   appendConsole("\n[Connecting to Wi-Fi (" + picked.value + ")...]\n");
@@ -1298,6 +1303,8 @@ async function connectWifi() {
     await writeImprov(buildWifiRpc(picked.value, wifiPassword.value));
     const url = safeHttpUrl(await result);
     wifiPassword.value = "";
+    modalWait("");
+    if (wifiModal.open) wifiModal.close();
     finishWifi(url);
   } catch (err) {
     setFolded(wifiWait, false);
@@ -1308,10 +1315,37 @@ async function connectWifi() {
       : err.code === 3
       ? "Could not connect. Check the password and try again."
       : "Could not connect. Move the board closer to the router and try again.";
-    wifiStatus.textContent = "Pick your network and enter its password.";
+    wifiStatus.textContent = "Pick your network, then click Connect.";
     setStatus(wifiError.textContent, "error");
+    modalWait("");
     syncWifiConnect();
+    if (wifiModal.open) {
+      wifiPassword.select();
+      wifiPassword.focus();
+    }
   }
+}
+
+// Version 46: the password window's status line pulses while the board connects (a wait with nothing moving)
+function modalWait(text) {
+  wifiModalStatus.textContent = text;
+  wifiModalStatus.classList.toggle("waiting", !!text);
+  setFolded(wifiModalStatus, !!text);
+}
+
+function openWifiModal() {
+  const picked = wifiList.querySelector("input:checked");
+  if (!picked || busy) return;
+  if (picked.dataset.open) {
+    connectWifi();
+    return;
+  }
+  $("wifi-modal-title").textContent = "Wi-Fi Password for " + picked.value;
+  wifiPassword.value = "";
+  setFolded(wifiError, false);
+  modalWait("");
+  wifiModal.showModal();
+  wifiPassword.focus();
 }
 
 // Step 5: the board joined Wi-Fi on its own (the Improv result carries its address): no reset; the card shows it
@@ -1448,19 +1482,18 @@ $("error-retry").addEventListener("click", () => {
 });
 wifiList.addEventListener("change", () => {
   syncWifiConnect();
-  if (!wifiForm.hidden) wifiPassword.focus();
 });
 wifiRescan.addEventListener("click", () => {
   if (wifiRescan.textContent === "Try Again") startWifi(false);
   else scanForWifi();
 });
-wifiConnect.addEventListener("click", () => connectWifi());
-wifiPassword.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    connectWifi();
-  }
+wifiConnect.addEventListener("click", () => openWifiModal());
+$("wifi-modal-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  connectWifi();
 });
+wifiModalCancel.addEventListener("click", () => wifiModal.close());
+wifiModal.addEventListener("cancel", (event) => { if (busy) event.preventDefault(); });
 for (const button of wizard.querySelectorAll("[data-action]")) {
   button.addEventListener("click", () => {
     if (button.id === "wifi-cancel" && busy) return;
