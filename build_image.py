@@ -1,6 +1,6 @@
 """ Rebuilds firmware/gsp32-esp32.bin: bootloader 0x1000, partitions 0x8000, app 0x10000 from an ESP32-httpd firmware
 build (out/<commit>-heap72), and the LittleFS vfs at 0x200000 with the current web UI files (Version 43: the
-web UI's styles, scripts and examples are in the firmware and removed from the image). boot.py, main.py, pages and the default settings.json are kept from the previous image. No secrets:
+web UI's styles, scripts and examples are in the firmware and removed from the image). boot.py, your other pages and the default settings.json are kept from the previous image; main.py, index.html and menu.html come from the repo (Version 65). No secrets:
 no config.json or webui_auth.json is ever added.
 Usage: build_image.py <ESP32-httpd checkout> <firmware out dir> """
 import os, sys, littlefs
@@ -35,11 +35,15 @@ for name in fs.listdir("/"):
     if name.startswith("webui") and name.endswith((".py", ".mpy")):
         fs.remove("/" + name)
 # Version 35: the stock start page comes from the repo too (Examples link removed)
-# Version 60: plus the Dashboard starter page (live number, graph, log and button from main.py's pages module)
-for page in ("index.html", "dashboard.html"):
-    if os.path.exists(os.path.join(repo, "gsp32-httpd", "pages", page)):
-        with fs.open("/gsp32-httpd/pages/" + page, "wb") as f:
-            f.write(open(os.path.join(repo, "gsp32-httpd", "pages", page), "rb").read())
+# Version 65: the stock main.py, start page and menu come from the repo (a working Pages example); the Dashboard,
+#  control and live value starter pages are gone
+for name in ("dashboard.html", "example.html", "live.html"):
+    if name in fs.listdir("/gsp32-httpd/pages"):
+        fs.remove("/gsp32-httpd/pages/" + name)
+for source, target in (("gsp32-httpd/pages/index.html", "/gsp32-httpd/pages/index.html"), ("gsp32-httpd/pages/menu.html", "/gsp32-httpd/pages/menu.html"),
+                       ("main.py", "/main.py")):
+    with fs.open(target, "wb") as f:
+        f.write(open(os.path.join(repo, source), "rb").read())
 for bad in ("/config.json", "/webui_auth.json"):
     assert bad[1:] not in fs.listdir("/"), bad
 image = bytearray(b"\xff" * 0x400000)
