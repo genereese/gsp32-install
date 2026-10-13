@@ -930,7 +930,7 @@ function showActions(on) {
 function setProgress(text, percent, status, erasing) {
   flashStatus.textContent = text;
   if (percent != null) flashBar.style.width = Math.max(0, Math.min(100, percent)) + "%";
-  setStatus(status || "Installing " + installName() + " (" + Math.max(0, Math.round(percent || 0)) + "%)");
+  setStatus(status || "Installing " + installName() + (installRate ? " at " + baudText(installRate) + " Baud" : "") + " (" + Math.max(0, Math.round(percent || 0)) + "%)");
   boardStatus.classList.add("filling");
   boardStatus.classList.toggle("erasing", !!erasing);
   if (percent != null) boardStatus.style.setProperty("--fill", Math.max(0, Math.min(100, percent)) + "%");
@@ -971,6 +971,7 @@ function setStatus(text, kind, ip) {
 }
 
 // Version 49: install speed. The fastest rate each USB-serial chip handles, then lower ones; 115200 always last.
+//  Version 53: 921600 -> 460800 -> 230400 -> 115200 for every chip (CH9102 / FTDI try 2000000 first), within one install
 //  Measured on the dev board (CP2102, esptool, full 4 MB image, compressed, erase all): 115200 199.7 s,
 //  921600 46.9 s, 2000000 no answer. So CP210x and CH340 stop at 921600.
 const BAUD_LADDERS = {
@@ -978,32 +979,39 @@ const BAUD_LADDERS = {
   "1a86:55d4": [2000000, 921600, 460800, 230400], // WCH CH9102
   "1a86": [921600, 460800, 230400],            // WCH CH340 / CH341
   "0403": [2000000, 921600, 460800, 230400],   // FTDI
-  "303a": [921600, 460800],                    // Espressif USB (rate barely matters)
+  "303a": [921600, 460800, 230400],            // Espressif USB (rate barely matters)
 };
+// Any other USB-serial chip: the same chain as CP210x (Version 53)
+const BAUD_DEFAULT = [921600, 460800, 230400];
 let portBaud = FLASH_BAUD;
 function usbIds() {
   const info = port && port.getInfo ? port.getInfo() : {};
   const hex = (n) => (n || 0).toString(16).padStart(4, "0");
   return { vid: hex(info.usbVendorId), pid: hex(info.usbProductId) };
 }
-function baudKey() {
-  const ids = usbIds();
-  return "gsp32-baud:" + ids.vid + ":" + ids.pid + ":" + (board.mac || "any");
-}
+// Version 53 (Gene): never remember a speed. Every install starts at the chip's fastest rate and steps down only for
+//  that install; the old per-board entries (Version 49-52) are cleared once on load
 function baudLadder() {
   const ids = usbIds();
-  const rates = (BAUD_LADDERS[ids.vid + ":" + ids.pid] || BAUD_LADDERS[ids.vid] || [460800, 230400]).slice();
-  let saved = 0;
-  try { saved = Number(localStorage.getItem(baudKey())) || 0; } catch (err) { saved = 0; }
-  // A board that worked (or was stepped down) at a rate starts there
-  const list = saved ? rates.filter((r) => r <= saved) : rates;
-  return list.concat([FLASH_BAUD]).filter((r, i, all) => all.indexOf(r) === i);
+  const rates = (BAUD_LADDERS[ids.vid + ":" + ids.pid] || BAUD_LADDERS[ids.vid] || BAUD_DEFAULT).slice();
+  return rates.concat([FLASH_BAUD]).filter((r, i, all) => all.indexOf(r) === i);
+}
+// Version 53 (Gene): the speed in use shows in the status line; a step-down says so plainly and the bar starts over
+let installRate = 0;
+function baudText(rate) {
+  return Number(rate).toLocaleString("en-US");
+}
+function stepDownNotice(rate) {
+  installRate = 0;
+  setProgress("Fast speed didn't work, retrying at " + baudText(rate) + "...", 0, "Fast Speed Didn't Work, Retrying at " + baudText(rate) + " Baud...", true);
 }
 function lowerRate(ladder, rate) {
   return ladder.find((r) => r < rate) || FLASH_BAUD;
 }
-function baudRemember(rate) {
-  try { localStorage.setItem(baudKey(), String(rate)); } catch (err) { /* private mode: no memory, still works */ }
+try {
+  Object.keys(localStorage).filter((key) => key.startsWith("gsp32-baud:")).forEach((key) => localStorage.removeItem(key));
+} catch (err) {
+  // No storage (private mode): nothing to clear
 }
 async function reopenPort(baud) {
   if (!port || portBaud === baud) return;
@@ -1059,10 +1067,11 @@ async function raiseBaud(link, rates) {
       const macs = [await link.loader.chip.readMac(link.loader), await link.loader.chip.readMac(link.loader)];
       if (macs[0] !== macs[1] || (board.mac && macs[0] !== board.mac)) throw new Error("check read did not match");
       appendConsole("[Speed " + rate + " baud checked]\n");
+      installRate = rate;
       return rate;
     } catch (err) {
       appendConsole("[Speed " + rate + " did not work (" + (err && err.message ? err.message : err) + "), stepping down]\n");
-      baudRemember(lowerRate(rates, rate));
+      stepDownNotice(lowerRate(rates.concat([FLASH_BAUD]), rate));
       await link.transport.disconnect();
       await reopenPort(FLASH_BAUD).catch(() => {});
       const fresh = await connectLoader(link.loader.terminal);
@@ -1070,6 +1079,7 @@ async function raiseBaud(link, rates) {
     }
   }
   link.loader.baudrate = FLASH_BAUD;
+  installRate = FLASH_BAUD;
   return FLASH_BAUD;
 }
 
@@ -1100,15 +1110,16 @@ async function install() {
     flashNoteSet({ mac: board.mac || "", version: pickedStart ? pickedStart[1] : "", startedAt: Date.now() });
     // Version 49: connect at 115200, raise the speed the USB chip allows (checked with a read), always the full
     //  image; any speed error steps down one rate and starts the full install again, 115200 is the last try
-    let floor = 0;  // rates at or above a failed one are skipped
+    let floor = 0;
+    installRate = 0;  // rates at or above a failed one are skipped
     for (;;) {
-      setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
+      if (!floor) setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
       const link = await connectLoader(terminal);
       const chip = link.chip;
       if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
-      const ladder = baudLadder();  // after connecting: the board's MAC picks its saved rate
+      const ladder = baudLadder();
       const rate = await raiseBaud(link, ladder.filter((r) => !floor || r < floor));
-      setProgress("Erasing the board (about 15 seconds)...", 0, "Installing " + installName() + ": Erasing the Board...", true);
+      setProgress("Erasing the board (about 15 seconds)...", 0, "Installing " + installName() + " at " + baudText(installRate) + " Baud: Erasing the Board...", true);
       let lastPercent = -1;
       const started = Date.now();
       try {
@@ -1133,12 +1144,11 @@ async function install() {
         if (rate <= FLASH_BAUD) throw err;
         appendConsole("[Speed " + rate + " failed while writing (" + (err && err.message ? err.message : err) + "). Trying again slower.]\n");
         floor = rate;
-        baudRemember(lowerRate(ladder, rate));
+        stepDownNotice(lowerRate(ladder, rate));
         await reopenPort(FLASH_BAUD).catch(() => {});
         continue;
       }
       appendConsole("[Written in " + Math.round((Date.now() - started) / 1000) + " s at " + rate + " baud, compressed]\n");
-      baudRemember(rate);
       await link.transport.disconnect();
       break;
     }
