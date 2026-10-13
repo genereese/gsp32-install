@@ -255,9 +255,14 @@ function trackBoard(line) {
     // A board running GSP32 finished its install: the note of an unfinished one no longer applies
     if (flashNoteGet() && !busy && !flashing) {
       flashNoteSet(null);
-      if (/^Incomplete Install/.test(boardStatus.textContent)) {
-        bootingNote = null;
-        setStatus("");
+      // Version 61: the boot banner keeps the status shown before it and puts it back afterwards, so a stale
+      //  "Incomplete Install Detected. Click Recover GSP32..." came back beside a Reinstall GSP32 button. Drop it
+      //  from both places: the board runs GSP32, there is nothing to recover
+      const stale = /^Incomplete Install/;
+      if (bootingNote && stale.test(bootingNote.nodes.map((node) => node.textContent).join(""))) bootingNote = "";
+      if (stale.test(boardStatus.textContent)) {
+        if (bootingNote === null) setStatus("");
+        else bootingNote = "";
       }
     }
     board.readyAt = Date.now();

@@ -66,5 +66,9 @@
     },
   };
   window.__port = port;
-  Object.defineProperty(navigator, "serial", { value: { requestPort: async () => port, addEventListener() {} } });
+  // Version 61: a pulled cable: the port closes under the page, open readers error, then the disconnect event
+  const unplugged = [];
+  window.__unplug = () => { log.push("UNPLUG"); try { ctrl && ctrl.error(new TypeError("The device has been lost.")); } catch (e) {} isOpen = false; rs = null; port.writable = null;
+    unplugged.forEach((fn) => fn({ target: port })); };
+  Object.defineProperty(navigator, "serial", { value: { requestPort: async () => port, addEventListener(type, fn) { if (type === "disconnect") unplugged.push(fn); } } });
 })();
