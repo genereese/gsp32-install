@@ -92,7 +92,8 @@ with sync_playwright() as p:
     check("after install: Set Up Wi-Fi primary, Reinstall secondary", "primary" in pg.get_attribute("#wifi-setup", "class") and "secondary" in pg.get_attribute("#install-btn", "class"))
     check("chip title and MAC from esptool", pg.inner_text("#board-chip").startswith("ESP32-D0WD-V3") and "F8:B3:B7:22:05:E8" in pg.inner_text("#board-mac")
           and pg.evaluate("getComputedStyle(document.getElementById('board-mac')).textTransform") == "uppercase", pg.inner_text("#board-chip") + " / " + pg.inner_text("#board-mac"))
-    check("device info asked once GSP32 confirmed", pg.evaluate("window.__info || 0") >= 1)
+    # Version 43.1: the version is known from the install, so nothing is asked; nothing ever reaches a board that is not listening
+    check("V43.1: version known after install, no Improv to a quiet board", "Version 43" in pg.inner_text("#board-state") and pg.evaluate("window.__badPk") == 0, pg.inner_text("#board-state"))
     pg.screenshot(path=shots + "/03-choice.png")
     pg.click("#wifi-setup"); pg.wait_for_timeout(600)
     check("Wi-Fi wizard scrolled into view", pg.evaluate("(() => { const r = document.getElementById('wizard').getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; })()"))

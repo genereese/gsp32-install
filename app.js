@@ -55,8 +55,7 @@ let partial = "";
 let onImprov = null;
 let lineWatchers = [];
 // What the serial lines tell about the board: GSP32 or not, when its Improv listener is ready, its address
-const board = { installed: false, kind: "unknown", readyAt: 0, bootAt: 0, ip: "", name: "", repl: false, chip: "", mac: "", version: "", asked: 0 };
-const READY_WINDOW_MS = 25000;
+const board = { installed: false, kind: "unknown", readyAt: 0, bootAt: 0, ip: "", name: "", repl: false, chip: "", mac: "", version: "", asked: 0, listening: false };
 let otherTimer = null;
 const FOLD_MS = 220;
 
@@ -205,15 +204,20 @@ function flashNoteMatches() {
 }
 let wifiTimer = null;
 
-// Asks the board for its Improv device info (version, chip); once every 3 s at most, and once more 3 s later if the
-//  answer did not come (the Improv listener may not be up yet)
-function askVersion(always) {
-  if ((board.version && !always) || Date.now() - board.asked < 3000 || !portOpen()) return;
+// Version 43.1 (Gene): every Improv packet carries byte 3 (its RPC type), which is Ctrl-C to a board that is not
+//  listening: it stopped main.py, and at the >>> prompt each retry echoed (its 0x04 soft-rebooted the board) in a loop,
+//  Wi-Fi details included. Improv goes out only while the board said it listens ("GSP32 Improv Ready" at the boot
+//  Wi-Fi offer, "GSP32 Improv Listening" from the web UI) and not since "GSP32 Improv Off", a boot or a prompt
+function writeImprov(packet) {
+  if (!board.listening) return Promise.reject(Object.assign(new Error("not listening"), { code: "quiet" }));
+  return writeBytes(packet);
+}
+
+// Asks the board for its Improv device info (version, chip): once per boot, only while it listens, no retries
+function askVersion() {
+  if (board.version || board.asked > board.bootAt || !board.listening || !portOpen() || flashing) return;
   board.asked = Date.now();
-  writeBytes(buildRpc(3, new Uint8Array(0))).catch(() => {});
-  setTimeout(() => {
-    if (!board.version && board.kind === "gsp32") askVersion();
-  }, 3100);
+  writeImprov(buildRpc(3, new Uint8Array(0))).catch(() => {});
 }
 
 function trackBoard(line) {
@@ -231,12 +235,15 @@ function trackBoard(line) {
     board.readyAt = Date.now();
     clearTimeout(otherTimer);
     endBooting();
-    // Only once GSP32 is confirmed: ask its Improv device info (chip family, version); never sent to other programs
-    if (/GSP32 Improv Ready/.test(line) && board.asked <= board.bootAt) askVersion(true);
-    // Version 39: a board found already running (no boot lines seen, or the Ready line came before the page listened)
-    //  never got asked, so "GSP32 Found" had no version: ask whenever GSP32 is confirmed without one
-    else if (!board.version) askVersion();
   }
+  // Version 43.1: only these lines open the door for Improv; the version is asked then, once
+  if (/GSP32 Improv (Ready|Listening)/.test(line)) {
+    board.kind = "gsp32";
+    board.listening = true;
+    board.readyAt = Date.now();
+    askVersion();
+  }
+  if (/GSP32 Improv Off|No answer: starting without Wi-Fi|^Traceback|KeyboardInterrupt|^MicroPython v/.test(line)) board.listening = false;
   if (/invalid header|ota data partition invalid|checksum (error|failure)|image checksum|flash read err/i.test(line)) {
     markBroken();
     return;
@@ -249,6 +256,7 @@ function trackBoard(line) {
   if (/^rst:0x|^ets [A-Z][a-z]{2} /.test(line)) {
     board.bootAt = Date.now();
     board.repl = false;
+    board.listening = false;
     board.wifiWait = false;
     board.wifiFailed = false;
     clearTimeout(wifiTimer);
@@ -579,6 +587,7 @@ function showStep(name) {
 function closeWizard() {
   if (busy) return;
   onImprov = null;
+  keepSession(false);
   foldShut(wizard);
   syncConsoleButtons();
 }
@@ -631,7 +640,10 @@ function appendConsole(text) {
   partial += text;
   const pieces = partial.split("\n");
   partial = pieces.pop();
-  if (/>>> ?$/.test(partial)) board.repl = true;
+  if (/>>> ?$/.test(partial)) {
+    board.repl = true;
+    board.listening = false;
+  }
   if (partial.length > 2000) {
     pieces.push(partial);
     partial = "";
@@ -664,7 +676,8 @@ function consumeSerial(chunk) {
         if (n) board.version = n[1];
       }
     }
-    if (!board.version && !flashing) askVersion();
+    // An answer means a session is running on the board (it answers, so it listens)
+    board.listening = true;
     syncBoardUi();
     if (!onImprov) continue;
     try {
@@ -1041,26 +1054,43 @@ function waitForPackets(timeoutMs, onPacket) {
 
 // The board answers Improv once its web UI runs (a few seconds after a reset; while the boot Wi-Fi prompt waits,
 // that prompt answers). Ask for the state every 1.5 s until it does
-// Resolves once a GSP32 ready line arrives (or after timeoutMs)
-function waitReady(timeoutMs) {
+// Resolves once the board says it listens for Improv (or after timeoutMs)
+function waitListening(timeoutMs) {
   const since = Date.now();
   return new Promise((resolve) => {
     const timer = setInterval(() => {
-      if (board.readyAt >= since || board.kind === "other" || Date.now() - since > timeoutMs) {
+      if (board.listening || board.kind === "other" || Date.now() - since > timeoutMs) {
         clearInterval(timer);
-        resolve(board.readyAt >= since);
+        resolve(board.listening);
       }
     }, 100);
   });
 }
 
+// Version 43.1: the board's session ends after 60 s without a packet, and the web UI then stops listening; while the
+//  Wi-Fi step is open a state request every 20 s keeps it going (only while it still listens)
+let keepAliveTimer = null;
+function keepSession(on) {
+  clearInterval(keepAliveTimer);
+  keepAliveTimer = null;
+  if (!on) return;
+  keepAliveTimer = setInterval(() => {
+    if (busy || onImprov) return;
+    if (!board.listening || wizard.hidden) {
+      keepSession(false);
+      return;
+    }
+    waitBoardReady(1500).catch(() => null);
+  }, 20000);
+}
+
 async function waitBoardReady(timeoutMs) {
   const end = Date.now() + timeoutMs;
-  while (Date.now() < end) {
+  while (Date.now() < end && board.listening) {
     const answer = waitForPackets(1500, (packet, resolve) => {
       if (packet.type === 1) resolve(packet.data[0]);
     });
-    await writeBytes(buildRpc(2, new Uint8Array(0)));
+    await writeImprov(buildRpc(2, new Uint8Array(0)));
     try {
       return await answer;
     } catch (err) {
@@ -1088,7 +1118,7 @@ async function scanNetworks() {
     const rssi = Number(parsed.strings[1]);
     if (ssid && (!found.has(ssid) || rssi > found.get(ssid).rssi)) found.set(ssid, { ssid, rssi, auth: parsed.strings[2] || "YES" });
   });
-  await writeBytes(buildRpc(4, new Uint8Array(0)));
+  await writeImprov(buildRpc(4, new Uint8Array(0)));
   try {
     return await result;
   } catch (err) {
@@ -1146,25 +1176,20 @@ async function startWifi(fresh) {
   try {
     if (!portOpen()) await pickPort();
     wifiStatus.textContent = "Waiting for the board to start...";
-    // Never Ctrl-C: an interrupted boot drops to the REPL, which echoes Improv packets (and their 0x04 bytes
-    // soft-reboot it). Improv goes out only once GSP32 says it listens: the "GSP32 Improv Ready" line at the boot
-    // Wi-Fi offer, "Server listening" (listens for 30 s after a boot, and whenever it has no Wi-Fi)
-    if (Date.now() - board.readyAt > READY_WINDOW_MS) {
+    // Never Ctrl-C, never typed at the prompt: Improv goes out only while GSP32 says it listens (see writeImprov).
+    //  A board on Wi-Fi listens for 30 s after a boot, so one that is not listening is restarted first
+    if (!board.listening) {
       if (!fresh) {
         wifiStatus.textContent = "Restarting the board so GSP32 listens for Wi-Fi setup...";
         await resetBoard();
       }
-      await waitReady(45000);
+      await waitListening(45000);
     }
-    let state = await waitBoardReady(8000);
-    // Fallback, once: a board sitting at the REPL starts the Improv session when asked
-    if (state === null && board.repl) {
-      await writeBytes(textEncoder.encode("import webui_wifisetup; webui_wifisetup.improvSession()\r\n"));
-      state = await waitBoardReady(6000);
-    }
+    const state = board.listening ? await waitBoardReady(8000) : null;
     if (state === null && board.kind === "other") throw new Error("This board does not run GSP32. Install GSP32 first to set up Wi-Fi.");
     if (state === null) throw new Error("The board did not answer. Check that GSP32 is installed, then try again.");
     await scanForWifi();
+    keepSession(true);
   } catch (err) {
     setFolded(wifiWait, false);
     setBusy(false);
@@ -1176,6 +1201,8 @@ async function startWifi(fresh) {
 }
 
 async function scanForWifi() {
+  // Version 43.1: a board that stopped listening is restarted (startWifi) instead of reporting "No networks found"
+  if (!board.listening) return startWifi(false);
   setBusy(true);
   setFolded(wifiWait, true);
   setShown(wifiRescan, false);
@@ -1215,20 +1242,25 @@ async function connectWifi() {
   wifiStatus.textContent = "Connecting to Wi-Fi (" + picked.value + ")...";
   setStatus("Connecting to Wi-Fi (" + picked.value + ")...");
   appendConsole("\n[Connecting to Wi-Fi (" + picked.value + ")...]\n");
-  const result = waitForPackets(40000, (packet, resolve, reject) => {
-    if (packet.type === 2 && packet.data[0] > 0) {
-      const err = new Error("connect");
-      err.code = packet.data[0];
-      reject(err);
-      return;
-    }
-    if (packet.type === 4) {
-      const parsed = parseImprovResult(packet.data);
-      if (parsed.command === 1) resolve(parsed.strings[0] || "");
-    }
-  });
   try {
-    await writeBytes(buildWifiRpc(picked.value, wifiPassword.value));
+    // SECURITY (Version 43.1): the name and password go out only right after the board's session answered
+    const state = board.listening ? await waitBoardReady(3000) : null;
+    if (state === null) {
+      throw Object.assign(new Error("quiet"), { code: "quiet" });
+    }
+    const result = waitForPackets(40000, (packet, resolve, reject) => {
+      if (packet.type === 2 && packet.data[0] > 0) {
+        const err = new Error("connect");
+        err.code = packet.data[0];
+        reject(err);
+        return;
+      }
+      if (packet.type === 4) {
+        const parsed = parseImprovResult(packet.data);
+        if (parsed.command === 1) resolve(parsed.strings[0] || "");
+      }
+    });
+    await writeImprov(buildWifiRpc(picked.value, wifiPassword.value));
     const url = safeHttpUrl(await result);
     wifiPassword.value = "";
     finishWifi(url);
@@ -1236,7 +1268,9 @@ async function connectWifi() {
     setFolded(wifiWait, false);
     setBusy(false);
     setFolded(wifiError, true);
-    wifiError.textContent = err.code === 3
+    wifiError.textContent = err.code === "quiet"
+      ? "The board stopped listening for Wi-Fi setup. Click Scan Again, then try again."
+      : err.code === 3
       ? "Could not connect. Check the password and try again."
       : "Could not connect. Move the board closer to the router and try again.";
     wifiStatus.textContent = "Pick your network and enter its password.";
@@ -1281,6 +1315,8 @@ function startFlashGuard() {
 }
 function stopFlashGuard() {
   flashing = false;
+  // The board's Ready line may have come while esptool still held the port: ask now if it still listens
+  askVersion();
   syncBoardUi();
   setFolded($("flash-warn"), false);
 }
