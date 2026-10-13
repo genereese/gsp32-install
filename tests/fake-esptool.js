@@ -4,5 +4,6 @@ export class ESPLoader {
   async main() { await this.t.connect(115200); window.__log.push("esptool got reader " + !!this.t.reader); this.term.writeLine("Connecting..."); this.term.writeLine("Chip is ESP32-D0WD-V3");
     if (window.__failFlash) throw new Error("Failed to connect with the device"); return "ESP32-D0WD-V3 (revision v3.1)"; }
   async writeFlash(o) { window.__log.push("files " + o.fileArray.length + " size " + o.fileArray[0].data.length + " eraseAll " + o.eraseAll);
+    if (window.__eraseDelay) await new Promise(r => setTimeout(r, window.__eraseDelay));
     for (let p = 0; p <= 10; p++) { o.reportProgress(0, p * 10, 100); await new Promise(r => setTimeout(r, window.__flashDelay || 30)); } }
 }

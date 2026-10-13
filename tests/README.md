@@ -4,6 +4,7 @@
     python tests/test_button_row.py   # hotfix fe97719: the button row always comes back (success, failure, reboot)
     python tests/test_wifi_wait.py    # Version 37: Open GSP32 Web UI waits greyed for Wi-Fi, fades to blue, no shift
     python tests/test_version.py      # Version 39: GSP32 Found names the version even when the Ready line was missed
+    python tests/test_v42.py         # Version 42: 15 px text, console unchanged, smaller Wi-Fi rows, blue pulse while erasing
 
 `mock.js` is a fake board on Web Serial (Improv answers, boot lines on an RTS reset; `window.__ets` also prints the
 ROM's `ets ...` line like a real ESP32), `fake-esptool.js` stands in for esptool-js. Needs Playwright with Chromium.
