@@ -7,6 +7,7 @@
     python tests/test_v42_1.py       # Version 42.1: design tokens, boot loop keeps Install, Recover, leave warning, countdown
     python tests/test_v42.py         # Version 42: 15 px text, console unchanged, smaller Wi-Fi rows, blue pulse while erasing
     python tests/test_v43_1.py       # Version 43.1: Improv only while the board listens, Change Wi-Fi on a set-up board, no credentials to a quiet board, status under the buttons
+    python tests/test_v43_2.py       # Version 43.2: Wi-Fi steps under the status line, status pulses during waits, older GSP32 named on Change Wi-Fi, softer tab warning, Wi-Fi Connected! link kept
 
 `mock.js` is a fake board on Web Serial (Improv answers, boot lines on an RTS reset; `window.__ets` also prints the
 ROM's `ets ...` line like a real ESP32), `fake-esptool.js` stands in for esptool-js. Needs Playwright with Chromium.

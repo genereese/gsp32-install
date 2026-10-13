@@ -57,7 +57,8 @@ with sync_playwright() as p:
     check("prep step folds open inline", pg.is_visible("#wizard [data-step=prep]") and heights[0] < heights[-1], str(heights))
     pg.screenshot(path=shots + "/02-prep.png")
     check("gated by checkbox", pg.is_disabled("#start-install"))
-    check("V29 erase panel folds open above the buttons, under the status line", pg.evaluate("(() => { const w = document.querySelector('[data-step=prep]').getBoundingClientRect(), a = document.getElementById('board-actions').getBoundingClientRect(); return w.bottom <= a.top + 1; })()"))
+    # Version 43.2 (Gene): the steps sit under the buttons and the status line they belong to
+    check("V43.2 erase panel folds open under the buttons", pg.evaluate("(() => { const w = document.querySelector('[data-step=prep]').getBoundingClientRect(), a = document.getElementById('board-actions').getBoundingClientRect(); return w.top >= a.bottom - 1; })()"))
     check("erase checkbox inside the yellow box, on its left", pg.evaluate("(() => { const i = document.getElementById('erase-ok'), w = i.closest('.warn-box'); if (!w) return false; const t = w.querySelector('span').getBoundingClientRect(), r = i.getBoundingClientRect(); return r.right <= t.left && r.top < t.bottom && document.querySelectorAll('[data-step=prep] .check').length === 0; })()"))
     pg.check("#erase-ok"); pg.click("#start-install")
     pg.wait_for_selector("#wizard [data-step=flash]:not([hidden])", state="attached")
