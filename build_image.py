@@ -1,9 +1,9 @@
 """ Rebuilds firmware/gsp32-esp32.bin: bootloader 0x1000, partitions 0x8000, app 0x10000 from an ESP32-httpd firmware
-build (out/<commit>-heap72), and the LittleFS vfs at 0x200000 with the current web UI files (minified by
-firmware/minify_web.py, their .gz copies made here). boot.py, main.py, examples, pages and the default settings.json are kept from the previous image. No secrets:
+build (out/<commit>-heap72), and the LittleFS vfs at 0x200000 with the current web UI files (Version 43: the
+web UI's styles, scripts and examples are in the firmware and removed from the image). boot.py, main.py, pages and the default settings.json are kept from the previous image. No secrets:
 no config.json or webui_auth.json is ever added.
 Usage: build_image.py <ESP32-httpd checkout> <firmware out dir> """
-import gzip, os, subprocess, sys, tempfile, littlefs
+import os, sys, littlefs
 repo, out = sys.argv[1], sys.argv[2]
 IMG = "firmware/gsp32-esp32.bin"
 old = open(IMG, "rb").read()
@@ -12,15 +12,28 @@ fs.context.buffer = bytearray(old[0x200000:0x400000]); fs.mount()
 # Round 22 layout: the web UI's settings in gsp32-httpd/config (was ui-data)
 if "ui-data" in fs.listdir("/gsp32-httpd"):
     fs.rename("/gsp32-httpd/ui-data", "/gsp32-httpd/config")
-# The shipped system files are minified copies (firmware/minify_web.py); the repo keeps the readable sources
-web = tempfile.mkdtemp(prefix="gsp32-min-")
-subprocess.run([sys.executable, os.path.join(repo, "firmware", "minify_web.py"), repo, web], check=True)
-for name in ("app.js", "files.js", "graphs.js", "style.css", "apps/backup.js", "apps/boards.js", "apps/libraries.js",
-             "apps/logger.js", "apps/pins.js", "apps/schedule.js"):
-    data = open(os.path.join(web, name), "rb").read()
-    for path, body in (("/gsp32-httpd/" + name, data), ("/gsp32-httpd/" + name + ".gz", gzip.compress(data, 9, mtime=0))):
-        with fs.open(path, "wb") as f:
-            f.write(body)
+# Version 43: the web UI's styles, scripts and starter programs are built into the firmware (ESP32-httpd
+#  firmware/stage_webui.py, webassets), so the file system holds none of them: old copies are taken out of the image
+def removeTree(path):
+    for name in fs.listdir(path):
+        child = path + "/" + name
+        if fs.stat(child).type == 2:
+            removeTree(child)
+        else:
+            fs.remove(child)
+    fs.remove(path)
+for name in ("app.js", "files.js", "graphs.js", "style.css"):
+    for path in ("/gsp32-httpd/" + name, "/gsp32-httpd/" + name + ".gz"):
+        try:
+            fs.remove(path)
+        except Exception:
+            pass
+for folder in ("apps", "examples"):
+    if folder in fs.listdir("/gsp32-httpd"):
+        removeTree("/gsp32-httpd/" + folder)
+for name in fs.listdir("/"):
+    if name.startswith("webui") and name.endswith((".py", ".mpy")):
+        fs.remove("/" + name)
 # Version 35: the stock start page comes from the repo too (Examples link removed)
 with fs.open("/gsp32-httpd/pages/index.html", "wb") as f:
     f.write(open(os.path.join(repo, "gsp32-httpd", "pages", "index.html"), "rb").read())
