@@ -56,7 +56,9 @@
     get readable() { if (!isOpen) return null; if (!rs) rs = fresh(); return rs; },
     writable: null,
     getInfo() { return window.__usb || { usbVendorId: 0x10c4, usbProductId: 0xea60 }; },
-    async open(o) { log.push("open " + o.baudRate); isOpen = true; rs = null; this.writable = new WritableStream({ write: (c) => onWrite(c) }); },
+    async open(o) { log.push("open " + o.baudRate); isOpen = true; rs = null; this.writable = new WritableStream({ write: (c) => onWrite(c) });
+      // Version 62: a stray byte from the UART switch lands just after a reopen at a fast rate (Gene's first real install)
+      if (window.__glitch && o.baudRate !== 115200) setTimeout(() => { if (isOpen && port.readable) { ctrl.enqueue(new Uint8Array([0x80])); log.push("stray byte"); } }, 10); },
     async close() { log.push("close dtr=" + dtr + " rts=" + rts); isOpen = false; rs = null; this.writable = null; },
     async setSignals(s) {
       if ("dataTerminalReady" in s) dtr = s.dataTerminalReady;

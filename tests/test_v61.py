@@ -75,5 +75,9 @@ with sync_playwright() as p:
     # 7: the note is cleared by a successful install
     pg, log, texts, st = run(b)
     check("successful install clears the note", pg.evaluate("localStorage.getItem('gsp32.flash')") is None)
+    # 8: Version 62: a stray byte after each speed change (the real Chrome failure) is drained, 921600 is kept
+    pg, log, texts, st = run(b, "window.__glitch = true;", wait=6000)
+    check("V62: stray byte after the switch: still written at 921600", "stray byte" in log and "write at 921600" in log and "invalid head" not in log, str([l for l in log if l.startswith(("write", "stray", "invalid", "change"))]))
+    check("V62: the console says the byte was dropped", "Dropped 1 stray byte" in pg.inner_text("#console-out"))
     pg.close(); b.close()
 print("FAILS", fails); sys.exit(1 if fails else 0)

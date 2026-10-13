@@ -1078,10 +1078,9 @@ async function connectLoader(terminal) {
     this.reader = undefined;
   };
   // Version 61: esptool-js 0.5.7's flushInput awaits reader.closed, which only settles once the port closes, so
-  //  on an open port it waits forever (the Version 60 hang at "Connecting to the Board..."). Drop the buffered
-  //  bytes instead; a reply that arrives late is skipped by the packet reader anyway.
+  //  on an open port it waits forever (the Version 60 hang). Version 62: ours really drains (see drainInput)
   transport.flushInput = async function () {
-    this.buffer = new Uint8Array(0);
+    await drainInput(this);
   };
   const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
   const link = { transport, loader, chip: "" };
@@ -1099,6 +1098,47 @@ async function connectLoader(terminal) {
   }
   return link;
 }
+// Version 62: after a speed change the UART switch can leave a stray byte or two in the port's stream (Gene's first
+//  real install: "Invalid head of packet (0x80)" at every rate). Clearing esptool's buffer alone missed them, they
+//  sit in the stream. Read and discard until 100 ms pass with nothing (500 ms at most), then a fresh reader, which
+//  also drops any read left waiting by an earlier timeout. Bounded throughout, so it can never hang
+async function drainInput(transport, quietMs = 100, maxMs = 500) {
+  let dropped = transport.buffer ? transport.buffer.length : 0;
+  transport.buffer = new Uint8Array(0);
+  const reader = transport.reader;
+  if (!reader) return dropped;
+  const started = Date.now();
+  let pending = reader.read();
+  while (Date.now() - started < maxMs) {
+    const got = await Promise.race([pending.catch(() => ({ done: true })), delay(quietMs).then(() => null)]);
+    if (got === null || got.done) break;
+    dropped += got.value ? got.value.length : 0;
+    pending = reader.read();
+  }
+  await withTimeout(reader.cancel(), 300, "Releasing the port").catch(() => {});
+  try {
+    reader.releaseLock();
+  } catch (err) {
+    // Released already
+  }
+  transport.reader = port && port.readable ? port.readable.getReader() : undefined;
+  transport.buffer = new Uint8Array(0);
+  return dropped;
+}
+// The MAC read that checks a rate: drained first, and up to three tries (a stray byte costs one try, not the rate)
+async function checkedMac(link) {
+  let last;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const dropped = await drainInput(link.transport);
+    if (dropped) appendConsole("[Dropped " + dropped + " stray byte" + (dropped === 1 ? "" : "s") + " after the speed change]\n");
+    try {
+      return await link.loader.chip.readMac(link.loader);
+    } catch (err) {
+      last = err;
+    }
+  }
+  throw last;
+}
 // Version 61 (Gene): while rates are tried the status reads Calibrating Transfer Speed... and pulses, until writing
 function calibrating(note) {
   setProgress(note || "Calibrating transfer speed...", 0, "Installing " + installName() + ": Calibrating Transfer Speed..." + (note ? " " + note : ""), true);
@@ -1114,8 +1154,7 @@ async function raiseBaud(link, rates) {
         link.loader.baudrate = rate;
         await link.loader.changeBaud();
         await delay(60);
-        link.transport.buffer = new Uint8Array(0);
-        const macs = [await link.loader.chip.readMac(link.loader), await link.loader.chip.readMac(link.loader)];
+        const macs = [await checkedMac(link), await checkedMac(link)];
         if (macs[0] !== macs[1] || (board.mac && macs[0] !== board.mac)) throw new Error("check read did not match");
       })(), SPEED_STEP_MS, "Speed " + rate);
       appendConsole("[Speed " + rate + " baud checked]\n");
