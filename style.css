@@ -343,3 +343,41 @@ main .card, main .board-help, main .wizard, main .console-card, main .console-ou
 .tour-divider { max-width: 100%; }
 .flasher-version { margin-top: 24px; }
 body:has(#console:not([hidden])) .tour-divider, body:has(#console:not([hidden])) .flasher-version { display: none; }
+/* Version 50 (Gene): gallery: icons centered in their buttons, every slide the same height */
+.icon-close, .tour-nav { display: inline-flex; align-items: center; justify-content: center; }
+.icon-close svg, .tour-nav svg { display: block; flex: none; }
+.tour-stage { height: min(56vh, 520px); display: flex; align-items: center; justify-content: center; background: var(--page); border: 1px solid var(--line); border-radius: 10px; margin: 0 0 8px; overflow: hidden; }
+.tour-modal .tour-stage img { width: 100%; height: 100%; max-height: none; object-fit: contain; border: 0; border-radius: 0; margin: 0; }
+.tour-text { height: 120px; overflow: auto; }
+.tour-text p { margin: 0 0 8px; }
+/* Version 50 hero mockup (body.hero50): compact hero, slim one-line steps, gallery right below on one laptop screen */
+body.hero50 .page-head h1 { margin: 8px 0 4px; }
+body.hero50 .page-head .lede { margin: 0 auto; max-width: none; white-space: nowrap; }
+body.hero50 .lede-more { display: none; }
+body.hero50 .start { margin-top: 14px; padding: 0; }
+body.hero50 .start-go { margin-top: 18px; flex-direction: row; align-items: center; gap: 14px; }
+body.hero50 .start #connect { margin: 0; }
+body.hero50 .start-go .hint { display: none; }
+body.hero50 .steps-row { display: flex; flex-wrap: nowrap; gap: 10px; }
+body.hero50 .steps-row li { flex-direction: row; max-width: none; gap: 8px; white-space: nowrap; text-align: left; }
+body.hero50 .steps-row .arrow { margin-top: 0; display: inline; }
+body.hero50 .step-art { width: 32px; height: 24px; }
+body.hero50 .hero { min-height: 0; display: block; }
+body.hero50 .tour-divider { margin-top: 20px; }
+body.hero50 .tour h2 { margin: 0 0 12px; }
+@media (min-width: 1000px) { body.hero50 .tour-list { grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 900px; margin: 0 auto; } body.hero50 .tour-thumb img { aspect-ratio: 16 / 8; } }
+@media (max-width: 640px) {
+  body.hero50 .page-head .lede { white-space: normal; }
+  body.hero50 .steps-row { display: grid; grid-template-columns: 1fr; justify-items: center; gap: 6px; }
+  body.hero50 .steps-row .arrow { display: none; }
+  body.hero50 .start-go { flex-direction: column; }
+}
+body.hero50 .step-art { width: 40px; height: 30px; }
+body.hero50 .page-head { margin-top: 24px; }
+body.hero50 .start { margin-top: 20px; }
+body.hero50 .start-go { margin-top: 22px; }
+body.hero50 .tour-divider { margin-top: 28px; }
+body.hero50 .tour { margin-top: 20px; }
+.tour-stage { height: min(50vh, 480px); }
+.tour-text { height: 150px; }
+body.hero50 .start-go { flex-direction: column; gap: 6px; }

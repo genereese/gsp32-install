@@ -23,10 +23,10 @@ with sync_playwright() as p:
     sr = pg.locator(".steps-row").bounding_box(); cb = pg.locator("#connect").bounding_box()
     check("steps and Get Started centered", abs((sr["x"] + sr["width"] / 2) - 640) < 30 and abs((cb["x"] + cb["width"] / 2) - (sr["x"] + sr["width"] / 2)) < 4 and cb["y"] - (sr["y"] + sr["height"]) >= 20, str((sr, cb)))
     check("no dialog, one Get Started button, steps row", pg.locator("dialog[open]").count() == 0 and pg.inner_text("#connect") == "Get Started"
-          and "1. Plug In Your Board" in pg.inner_text(".steps-row") and "Works in Chrome or Edge on a computer." in pg.inner_text("#installer"))
+          and "1. Plug In Your Board" in pg.inner_text(".steps-row"))  # V50: the compact hero drops the browser line (the browser card still warns)
     check("board card hidden at first", not pg.is_visible("#console"))
     hb = pg.locator("#installer .hint").bounding_box()
-    check("Get Started as wide as the hint line, well below the steps", abs(cb["width"] - hb["width"]) <= 1 and cb["y"] - (sr["y"] + sr["height"]) >= 40, str((cb["width"], hb["width"], cb["y"] - sr["y"] - sr["height"])))
+    check("V50: Get Started just below the steps", cb["y"] - (sr["y"] + sr["height"]) >= 16, str(cb["y"] - sr["y"] - sr["height"]))
     check("Don't See Your Board? link under Get Started, checklist folded", pg.is_visible("#no-board") and not pg.is_visible("#board-help")
           and pg.locator("#no-board").bounding_box()["y"] > pg.locator("#connect").bounding_box()["y"])
     pg.click("#no-board"); pg.wait_for_timeout(400)

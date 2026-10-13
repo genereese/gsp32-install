@@ -19,13 +19,13 @@
     })();
   </script>
 </head>
-<body>
+<body class="hero50">
   <main>
     <!-- Version 46: the install part fills the first screen with its card centred (wide screens); What You Get follows -->
     <div class="hero">
     <div id="page-head" class="page-head">
       <h1>Install GSP32</h1>
-      <p class="lede">GSP32 is a MicroPython web UI for ESP32 boards. Plug your board in with a USB data cable and install it right from this page.</p>
+      <p class="lede">A MicroPython web UI for ESP32 boards<span class="lede-more">. Plug your board in with a USB data cable and install it right from this page</span>.</p>
     </div>
 
     <section id="browser-block" class="card">
@@ -39,7 +39,7 @@
         <li class="arrow" aria-hidden="true">&rarr;</li>
         <li><svg class="step-art" viewBox="0 0 64 48" aria-hidden="true"><circle cx="32" cy="24" r="20" fill="none" stroke="#dbe7fd" stroke-width="5"/><path d="M32 4a20 20 0 0 1 19 26" fill="none" stroke="#14b8a6" stroke-width="5" stroke-linecap="round"/><rect x="21" y="13" width="22" height="22" rx="3" fill="#1f6feb"/><rect x="26" y="18" width="12" height="12" rx="1.5" fill="#0b1f44"/><path d="M24 11v3M32 11v3M40 11v3M24 34v3M32 34v3M40 34v3M19 16h3M19 24h3M19 32h3M42 16h3M42 24h3M42 32h3" stroke="#9aa7b8" stroke-width="1.6"/></svg><span>2. Click Get Started</span></li>
         <li class="arrow" aria-hidden="true">&rarr;</li>
-        <li><svg class="step-art" viewBox="0 0 64 48" aria-hidden="true"><rect x="22" y="12" width="38" height="30" rx="4" fill="#fff" stroke="#1f6feb" stroke-width="2.5"/><path d="M22 20h38" stroke="#1f6feb" stroke-width="2.5"/><circle cx="27" cy="16" r="1.4" fill="#f87171"/><circle cx="31" cy="16" r="1.4" fill="#fbbf24"/><circle cx="35" cy="16" r="1.4" fill="#34d399"/><path d="M28 36l6-7 5 4 7-9 6 6" fill="none" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 18a16 16 0 0 1 20 0" fill="none" stroke="#7c5cff" stroke-width="3" stroke-linecap="round"/><path d="M8 23a10 10 0 0 1 12 0" fill="none" stroke="#7c5cff" stroke-width="3" stroke-linecap="round"/><circle cx="14" cy="28" r="2.5" fill="#7c5cff"/></svg><span>3. Install GSP32 or Set Up Wi-Fi</span></li>
+        <li><svg class="step-art" viewBox="0 0 64 48" aria-hidden="true"><rect x="22" y="12" width="38" height="30" rx="4" fill="#fff" stroke="#1f6feb" stroke-width="2.5"/><path d="M22 20h38" stroke="#1f6feb" stroke-width="2.5"/><circle cx="27" cy="16" r="1.4" fill="#f87171"/><circle cx="31" cy="16" r="1.4" fill="#fbbf24"/><circle cx="35" cy="16" r="1.4" fill="#34d399"/><path d="M28 36l6-7 5 4 7-9 6 6" fill="none" stroke="#14b8a6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 18a16 16 0 0 1 20 0" fill="none" stroke="#7c5cff" stroke-width="3" stroke-linecap="round"/><path d="M8 23a10 10 0 0 1 12 0" fill="none" stroke="#7c5cff" stroke-width="3" stroke-linecap="round"/><circle cx="14" cy="28" r="2.5" fill="#7c5cff"/></svg><span>3. Install or Set Up Wi-Fi</span></li>
       </ol>
       <div class="start-go">
         <button id="connect" class="primary big" type="button">Get Started</button>
@@ -166,16 +166,16 @@
   <dialog id="tour-modal" class="modal tour-modal" aria-labelledby="tour-modal-title">
     <div class="tour-modal-head">
       <h3 id="tour-modal-title"></h3>
-      <button id="tour-close" type="button" class="icon-close" aria-label="Close" title="Close">&times;</button>
+      <button id="tour-close" type="button" class="icon-close" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
     </div>
     <div class="tour-stage">
-      <button id="tour-prev" type="button" class="tour-nav prev" aria-label="Previous" title="Previous (Left Arrow)">&#8249;</button>
+      <button id="tour-prev" type="button" class="tour-nav prev" aria-label="Previous" title="Previous (Left Arrow)"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <img id="tour-img" alt="">
-      <button id="tour-next" type="button" class="tour-nav next" aria-label="Next" title="Next (Right Arrow)">&#8250;</button>
+      <button id="tour-next" type="button" class="tour-nav next" aria-label="Next" title="Next (Right Arrow)"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
     <p id="tour-count" class="hint tour-count"></p>
-    <p id="tour-blurb"></p>
-    <ul id="tour-points"></ul>
+    <div class="tour-text"><p id="tour-blurb"></p>
+    <ul id="tour-points"></ul></div>
   </dialog>
 
   <!-- Version 46 (Gene): the Wi-Fi password asks in a window (open networks skip it); errors show here to retype and retry -->
@@ -195,7 +195,7 @@
   </dialog>
 
   <script type="module" src="app.js"></script>
-  <p class="flasher-version hint">Flasher Version 49</p>
+  <p class="flasher-version hint">Flasher Version 50</p>
   <script src="tour.js" defer></script>
 </body>
 </html>

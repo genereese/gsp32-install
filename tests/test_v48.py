@@ -14,13 +14,13 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={"width": 1440, "height": 900})
     pg.goto("http://127.0.0.1:8771/index.html"); pg.wait_for_timeout(1200)
     check("heading Check It Out", pg.inner_text("#tour-title") == "Check It Out")
-    check("flasher shows Version 48", "Flasher Version 49" in pg.inner_text("body"))
+    check("flasher shows Version 48", "Flasher Version 50" in pg.inner_text("body"))
     check("strip visible without scrolling at 1440x900", pg.locator(".tour-thumb >> nth=0").bounding_box()["y"] < 900, str(pg.locator(".tour-thumb >> nth=0").bounding_box()))
     art = pg.locator(".step-art >> nth=0").bounding_box(); txt = pg.locator(".steps-row li span >> nth=0").bounding_box()
-    check("icon above text, 56px", art["y"] + art["height"] <= txt["y"] + 1 and round(art["width"]) == 56)
+    check("V50: slim steps, icon left of its text, 40px", art["x"] + art["width"] <= txt["x"] + 1 and round(art["width"]) == 40)
     n = pg.locator(".tour-thumb").count()
     pg.click(".tour-thumb >> nth=0"); pg.wait_for_timeout(400)
-    check("X close, no Close text button", pg.inner_text("#tour-close").strip() == "×" and pg.get_attribute("#tour-close", "aria-label") == "Close")
+    check("X close, no Close text button", pg.inner_text("#tour-close").strip() == "" and pg.locator("#tour-close svg").count() == 1 and pg.get_attribute("#tour-close", "aria-label") == "Close")
     t0 = pg.inner_text("#tour-modal-title")
     check("counter 1 of N", pg.inner_text("#tour-count") == f"1 of {n}")
     pg.click("#tour-next"); pg.wait_for_timeout(300)
@@ -36,7 +36,7 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={"width": 390, "height": 844}, has_touch=True)
     pg.goto("http://127.0.0.1:8771/index.html"); pg.wait_for_timeout(1000)
     xs = [pg.locator(".steps-row li:not(.arrow) >> nth=%d" % i).bounding_box() for i in range(3)]
-    check("steps fit on one row at 390", max(x["x"] + x["width"] for x in xs) <= 390 and len({round(x["y"]) for x in xs}) == 1, str(xs))
+    check("V50: steps stack, one per line, inside 390", max(x["x"] + x["width"] for x in xs) <= 390 and len({round(x["y"]) for x in xs}) == 3, str(xs))
     pg.click(".tour-thumb >> nth=0"); pg.wait_for_timeout(300)
     pg.evaluate("""() => { const m = document.getElementById('tour-modal');
       const t = (type, x) => { const e = new Event(type, {bubbles: true}); e.touches = e.changedTouches = [{clientX: x}]; m.dispatchEvent(e); };
