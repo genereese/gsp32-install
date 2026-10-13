@@ -24,3 +24,4 @@ Stay at 115200 (about 190-200 s per install). Reliability beats speed. There is 
 - Boards with CH9102 or FTDI chips, which may not reset on reopen. Test there first.
 - Finish the untested DTR-high/RTS-low variant (on `v64-speed-experiments`, `?lines=dtr`).
 - Direct 230400 connect, if it can be made reliable over many runs. Add the EN capacitor on our own boards.
+- V64 real install check (2026-10-13 2:38 PM MT, dev board COM4, Node + esptool-js 0.5.7): full 4 MB image at 115200, write 183.1 s, 188.7 s total, OK.
