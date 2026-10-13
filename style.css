@@ -342,3 +342,4 @@ main .card, main .board-help, main .wizard, main .console-card, main .console-ou
 .console-line button { height: 34px; }
 .tour-divider { max-width: 100%; }
 .flasher-version { margin-top: 24px; }
+body:has(#console:not([hidden])) .tour-divider, body:has(#console:not([hidden])) .flasher-version { display: none; }
