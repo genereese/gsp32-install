@@ -78,6 +78,14 @@ with sync_playwright() as p:
     # 8: Version 62: a stray byte after each speed change (the real Chrome failure) is drained, 921600 is kept
     pg, log, texts, st = run(b, "window.__glitch = true;", wait=6000)
     check("V62: stray byte after the switch: still written at 921600", "stray byte" in log and "write at 921600" in log and "invalid head" not in log, str([l for l in log if l.startswith(("write", "stray", "invalid", "change"))]))
-    check("V62: the console says the byte was dropped", "Dropped 1 stray byte" in pg.inner_text("#console-out"))
+    check("V62: the console says the byte was dropped", "Drained 1 byte" in pg.inner_text("#console-out"))
+    pg.close()
+    # 9: Version 63: the board restarts on the speed change (hundreds of bytes): straight to 115200, no more fast tries
+    pg, log, texts, st = run(b, "window.__restartOnSwitch = true;", wait=9000)
+    w = [l for l in log if l.startswith(("write", "change"))]
+    check("V63: restart on the switch: one fast try, then 115200", w == ["change baud 921600", "write at 115200"], str(w))
+    out = pg.inner_text("#console-out")
+    check("V63: drain count always logged, restart explained", "Drained" in out and "restarts on a speed change" in out)
+    check("V63: speed reopen leaves the lines alone", pg.evaluate("window.__signalsAfterFast") == 0, str(pg.evaluate("window.__signalsAfterFast")))
     pg.close(); b.close()
 print("FAILS", fails); sys.exit(1 if fails else 0)

@@ -1017,13 +1017,15 @@ try {
 } catch (err) {
   // No storage (private mode): nothing to clear
 }
-async function reopenPort(baud) {
+async function reopenPort(baud, keepSignals) {
   if (!port || portBaud === baud) return;
   await port.close();
   await port.open({ baudRate: baud });
   portBaud = baud;
-  // DTR and RTS off together straight away: the board keeps running the flasher stub
-  await setRunState().catch(() => {});
+  // Version 63: a speed change leaves the control lines exactly as the reopen left them, like esptool-js's own
+  //  changeBaud. Setting them again right after the reopen is the one step esptool-js does not take, and Gene's
+  //  board restarted there (out of the flasher stub, printing at its own rate). Other reopens set the run state
+  if (!keepSignals) await setRunState().catch(() => {});
 }
 // Version 61: every connect and speed step has a hard time limit. A step either works within a few seconds or
 //  it doesn't (Gene), so a stuck one is dropped and the next slower rate is tried.
@@ -1063,7 +1065,7 @@ async function connectLoader(terminal) {
   // The port is already open: esptool-js borrows its reader; a speed change reopens it at the new rate
   transport.connect = async function (baud) {
     this.baudrate = baud;
-    await reopenPort(baud);
+    await reopenPort(baud, baud !== FLASH_BAUD);
     this.reader = port.readable.getReader();
   };
   transport.disconnect = async function () {
@@ -1130,7 +1132,11 @@ async function checkedMac(link) {
   let last;
   for (let attempt = 0; attempt < 3; attempt++) {
     const dropped = await drainInput(link.transport);
-    if (dropped) appendConsole("[Dropped " + dropped + " stray byte" + (dropped === 1 ? "" : "s") + " after the speed change]\n");
+    // Version 63: always logged, so a log shows which flasher ran and what the line did
+    appendConsole("[Drained " + dropped + " byte" + (dropped === 1 ? "" : "s") + " after the speed change]\n");
+    // Hundreds of bytes in half a second: the board restarted and talks at its own rate, the stub is gone. Faster
+    //  rates would only do the same, so the install goes straight to 115,200
+    if (dropped > 64) throw Object.assign(new Error("the board restarted on the speed change"), { restarted: true });
     try {
       return await link.loader.chip.readMac(link.loader);
     } catch (err) {
@@ -1163,6 +1169,13 @@ async function raiseBaud(link, rates) {
     } catch (err) {
       const next = lowerRate(rates.concat([FLASH_BAUD]), rate);
       appendConsole("[Speed " + rate + " did not work (" + (err && err.message ? err.message : err) + "), stepping down to " + next + "]\n");
+      if (err && err.restarted) {
+        appendConsole("[The board restarts on a speed change with this cable or adapter. Using 115200 baud.]\n");
+        stepDownNotice(FLASH_BAUD);
+        await resetLink(link);
+        Object.assign(link, await connectLoader(link.loader.terminal));
+        break;
+      }
       stepDownNotice(next);
       await resetLink(link);
       Object.assign(link, await connectLoader(link.loader.terminal));

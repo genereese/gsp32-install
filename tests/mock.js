@@ -58,9 +58,13 @@
     getInfo() { return window.__usb || { usbVendorId: 0x10c4, usbProductId: 0xea60 }; },
     async open(o) { log.push("open " + o.baudRate); isOpen = true; rs = null; this.writable = new WritableStream({ write: (c) => onWrite(c) });
       // Version 62: a stray byte from the UART switch lands just after a reopen at a fast rate (Gene's first real install)
+      // Version 63: a board that restarts on the reopen prints its boot output at its own rate: hundreds of bytes
+      if (o.baudRate !== 115200) { window.__fastOpen = true; window.__signalsAfterFast = 0; } else window.__fastOpen = false;
+      if (window.__restartOnSwitch && o.baudRate !== 115200) setTimeout(() => { if (isOpen && port.readable) { ctrl.enqueue(new Uint8Array(400).fill(0x66)); ctrl.enqueue(new Uint8Array(600).fill(0x78)); } }, 10);
       if (window.__glitch && o.baudRate !== 115200) setTimeout(() => { if (isOpen && port.readable) { ctrl.enqueue(new Uint8Array([0x80])); log.push("stray byte"); } }, 10); },
     async close() { log.push("close dtr=" + dtr + " rts=" + rts); isOpen = false; rs = null; this.writable = null; },
     async setSignals(s) {
+      if (window.__fastOpen) window.__signalsAfterFast++;
       if ("dataTerminalReady" in s) dtr = s.dataTerminalReady;
       const was = rts; if ("requestToSend" in s) rts = s.requestToSend;
       log.push("signals dtr=" + dtr + " rts=" + rts);
