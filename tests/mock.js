@@ -13,6 +13,11 @@
   window.__pk = 0; window.__ctrlc = 0;
   function boot() {
     booted = false;
+    // A half-flashed board: the ROM finds no valid app and restarts about once a second, forever
+    if (window.__bootLoop) {
+      if (!window.__loopTimer) window.__loopTimer = setInterval(() => say("ets Jul 29 2019 12:21:46\r\n\r\nrst:0x10 (RTCWDT_RTC_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)\r\ninvalid header: 0xffffffff\r\n"), 900);
+      return;
+    }
     if (window.__other) { setTimeout(() => say("rst:0x1 (POWERON_RESET)\r\nMicroPython v1.25.0 on 2025-04-15; Generic ESP32 module with ESP32\r\n>>> "), 300); return; }
     const gap = window.__bootGap || 0;
     if (gap) setTimeout(() => say((window.__ets ? "ets Jul 29 2019 12:21:46\r\n\r\n" : "") + "rst:0x1 (POWERON_RESET)\r\n"), 300);

@@ -154,11 +154,11 @@ with sync_playwright() as p:
     pad = f.evaluate("parseFloat(getComputedStyle(document.getElementById('flash-warn')).paddingTop)")
     check("status line: Installing Version N (N%)", f.inner_text("#board-status").startswith("Installing " + LISTED), f.inner_text("#board-status"))
     pb = f.locator("#board-status").bounding_box()
-    check("V38: red warning directly under the progress bar, slim", f.is_visible("#flash-warn") and 0 <= wb["y"] - (pb["y"] + pb["height"]) <= 8
-          and abs(wb["height"] - pb["height"]) <= 2 and f.inner_text("#flash-warn") == "Do Not Change Tabs or the Install Will Fail", str((pb, wb)))
+    check("V42.1: red warning text directly under the progress bar, slim", f.is_visible("#flash-warn") and 0 <= wb["y"] - (pb["y"] + pb["height"]) <= 8
+          and wb["height"] <= 24 and f.inner_text("#flash-warn") == "Do Not Change Tabs or the Install Will Fail", str((pb, wb)))
     check("V38: page title and text folded away with the steps", not f.is_visible("#page-head"))
     check("V39: green board box folded away while installing", not f.is_visible("#board-state"))
-    check("banner: solid red fill, bold white text", f.evaluate("(() => { const c = getComputedStyle(document.getElementById('flash-warn')); return [c.backgroundColor, c.color, c.fontWeight]; })()") == ["rgb(217, 48, 37)", "rgb(255, 255, 255)", "700"])
+    check("V42.1 warning: red text, no fill or border, centered", f.evaluate("(() => { const c = getComputedStyle(document.getElementById('flash-warn')); return [c.backgroundColor, c.color, c.borderTopWidth, c.textAlign]; })()") == ["rgba(0, 0, 0, 0)", "rgb(198, 40, 40)", "0px", "center"])
     check("during install: Wi-Fi and Web UI buttons hidden (not greyed)", not f.is_visible("#wifi-setup") and not f.is_visible("#console-webui"))
     check("old inline warning gone", f.locator(".danger-note").count() == 0 and f.inner_text("body").count("Do Not Change Tabs") == 1)
     f.screenshot(path=shots + "/08-banner.png")
@@ -172,7 +172,7 @@ with sync_playwright() as p:
     mid = (k.inner_text("#board-status") if k.is_visible("#board-status") else "", k.is_visible("#install-btn"))
     k.wait_for_timeout(2500)
     end = (k.is_visible("#board-status"), k.is_visible("#install-btn"), k.is_visible("#wifi-setup"))
-    check("boot banner: 'Board Booting Up...', buttons back at the ready marker", mid == ("Board Booting Up...", False) and end == (False, True, True), str((mid, end)))
+    check("boot banner: 'Board Booting Up...', buttons stay (V42.1), status gone at the ready marker", mid == ("Board Booting Up...", True) and end == (False, True, True), str((mid, end)))
     m = b.new_page(viewport={"width": 390, "height": 800}, is_mobile=True, user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile")
     m.goto(U); check("mobile blocked", m.is_visible("#browser-block")); m.screenshot(path=shots + "/07-mobile.png")
     b.close()

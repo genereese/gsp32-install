@@ -20,7 +20,7 @@ with sync_playwright() as p:
     pg.goto("http://127.0.0.1:8771/index.html"); pg.wait_for_timeout(300)
     body, h1 = px(pg, "body"), px(pg, "h1")
     check("body text 15 px", abs(body - 15) < 0.05, body)
-    check("h1 scaled 30.4 * 15/17 = 26.8 px", abs(h1 - 26.82) < 0.1, h1)
+    check("h1 on the Version 42.1 scale (26 px)", abs(h1 - 26) < 0.1, h1)
     pg.click("#connect"); pg.wait_for_timeout(500)
     check("console font unchanged (13.6 px)", abs(px(pg, "#console-out") - 13.6) < 0.05, px(pg, "#console-out"))
     pg.click("#install-btn"); pg.wait_for_timeout(500)
