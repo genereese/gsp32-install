@@ -1059,12 +1059,38 @@ async function resetLink(link) {
   await setRunState().catch(() => {});
 }
 // A borrowed transport on the open port and a loader in the board's flasher stub at 115200
-async function connectLoader(terminal) {
-  await reopenPort(FLASH_BAUD);
+// Version 64: how DTR/RTS are set just before the speed-change reopen. Chrome raises both lines when it opens a port;
+//  a board whose reset line reacts to the change restarts (out of the flasher stub). ?lines=low|high|dtr picks one,
+//  ?lines=test tries each at the first fast rate and logs what the line did
+const PAGE_PARAMS = new URLSearchParams(location.search);
+const LINES_TEST = PAGE_PARAMS.get("lines") === "test";
+const LINE_VARIANTS = ["low", "high", "dtr"];
+let lineVariant = LINE_VARIANTS.includes(PAGE_PARAMS.get("lines")) ? PAGE_PARAMS.get("lines") : "low";
+// ?direct=230400: connect straight at that rate (the ROM picks the rate up from the sync), no speed change at all
+const DIRECT_FORCED = Number(PAGE_PARAMS.get("direct")) || 0;
+const DIRECT_FALLBACK = 230400;
+async function linesBeforeReopen() {
+  if (!port) return;
+  // One line per request, in an order that never leaves RTS up with DTR down (that combination is the reset)
+  if (lineVariant === "high") {
+    await port.setSignals({ dataTerminalReady: true });
+    await port.setSignals({ requestToSend: true });
+  } else if (lineVariant === "dtr") {
+    await port.setSignals({ requestToSend: false });
+    await port.setSignals({ dataTerminalReady: true });
+  } else {
+    await port.setSignals({ requestToSend: false });
+    await port.setSignals({ dataTerminalReady: false });
+  }
+}
+async function connectLoader(terminal, direct) {
+  const romRate = direct || FLASH_BAUD;
+  await reopenPort(romRate);
   const transport = new Transport(port, false);
   // The port is already open: esptool-js borrows its reader; a speed change reopens it at the new rate
   transport.connect = async function (baud) {
     this.baudrate = baud;
+    if (baud !== portBaud && baud !== romRate) await linesBeforeReopen().catch(() => {});
     await reopenPort(baud, baud !== FLASH_BAUD);
     this.reader = port.readable.getReader();
   };
@@ -1084,7 +1110,7 @@ async function connectLoader(terminal) {
   transport.flushInput = async function () {
     await drainInput(this);
   };
-  const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
+  const loader = new ESPLoader({ transport, baudrate: romRate, romBaudrate: romRate, terminal });
   const link = { transport, loader, chip: "" };
   try {
     link.chip = await withTimeout(loader.main("default_reset"), CONNECT_MS, "Connecting to the board");
@@ -1152,7 +1178,15 @@ function calibrating(note) {
 // Tries each faster rate: the stub switches, the port reopens, two reads must match the MAC. A failed or stuck rate
 //  (3 s limit) is cleaned up, the board is reset to a fresh 115200 link and the next lower rate is tried. Never saved.
 async function raiseBaud(link, rates) {
-  for (const rate of rates) {
+  if (DIRECT_FORCED) {
+    installRate = DIRECT_FORCED;
+    return DIRECT_FORCED;
+  }
+  let retryRate = 0;
+  for (let i = 0; i < rates.length; i++) {
+    const rate = retryRate || rates[i];
+    if (retryRate) i--;
+    retryRate = 0;
     if (rate <= FLASH_BAUD) break;
     try {
       appendConsole("[Trying " + rate + " baud]\n");
@@ -1163,17 +1197,37 @@ async function raiseBaud(link, rates) {
         const macs = [await checkedMac(link), await checkedMac(link)];
         if (macs[0] !== macs[1] || (board.mac && macs[0] !== board.mac)) throw new Error("check read did not match");
       })(), SPEED_STEP_MS, "Speed " + rate);
-      appendConsole("[Speed " + rate + " baud checked]\n");
+      appendConsole("[Speed " + rate + " baud checked" + (LINES_TEST ? ", lines " + lineVariant : "") + "]\n");
       installRate = rate;
       return rate;
     } catch (err) {
       const next = lowerRate(rates.concat([FLASH_BAUD]), rate);
       appendConsole("[Speed " + rate + " did not work (" + (err && err.message ? err.message : err) + "), stepping down to " + next + "]\n");
-      if (err && err.restarted) {
-        appendConsole("[The board restarts on a speed change with this cable or adapter. Using 115200 baud.]\n");
-        stepDownNotice(FLASH_BAUD);
+      if (err && err.restarted && LINES_TEST && LINE_VARIANTS.indexOf(lineVariant) < LINE_VARIANTS.length - 1) {
+        appendConsole("[Lines test: " + lineVariant + " restarted the board]\n");
+        lineVariant = LINE_VARIANTS[LINE_VARIANTS.indexOf(lineVariant) + 1];
         await resetLink(link);
         Object.assign(link, await connectLoader(link.loader.terminal));
+        retryRate = rate;
+        continue;
+      }
+      if (err && err.restarted) {
+        // Version 64: the board restarts on a speed change, so no speed change at all: connect straight at 230,400
+        //  (the ROM picks the rate up from the sync), else 115,200
+        appendConsole("[The board restarts on a speed change with this cable or adapter. Connecting at 230400 baud instead.]\n");
+        calibrating("Connecting at " + baudText(DIRECT_FALLBACK) + " Baud...");
+        await resetLink(link);
+        try {
+          Object.assign(link, await connectLoader(link.loader.terminal, DIRECT_FALLBACK));
+          appendConsole("[Connected at 230400 baud]\n");
+          installRate = DIRECT_FALLBACK;
+          return DIRECT_FALLBACK;
+        } catch (direct) {
+          appendConsole("[230400 did not answer (" + (direct && direct.message ? direct.message : direct) + "). Using 115200 baud.]\n");
+          stepDownNotice(FLASH_BAUD);
+          await resetLink(link).catch(() => {});
+          Object.assign(link, await connectLoader(link.loader.terminal));
+        }
         break;
       }
       stepDownNotice(next);
@@ -1220,12 +1274,12 @@ async function install() {
       if (!floor) setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
       let link;
       try {
-        link = await connectLoader(terminal);
+        link = await connectLoader(terminal, DIRECT_FORCED);
       } catch (err) {
         // Version 61: one more try from a clean port, then a clear error with Retry
         appendConsole("[Connect did not answer (" + (err && err.message ? err.message : err) + "), trying once more]\n");
         try {
-          link = await connectLoader(terminal);
+          link = await connectLoader(terminal, DIRECT_FORCED);
         } catch (again) {
           throw new Error("The board did not answer. Unplug it, plug it back in and click Try Again. If it still does not answer, hold the BOOT button while you click Try Again.");
         }
