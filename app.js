@@ -108,17 +108,18 @@ function foldShut(element, done) {
   setTimeout(finish, FOLD_MS + 150);
 }
 
-// A boot banner (the board restarted, e.g. Windows resets it when the port opens): "Board Booting Up..." and the
-//  action buttons wait until GSP32 says it is ready (or 20 s pass: other firmware). Not while esptool works
+// A boot banner (the board restarted, e.g. Windows resets it when the port opens): "Board Booting Up..." until GSP32
+//  says it is ready (or 20 s pass: other firmware). Not while esptool works
+//  Version 42.1 (Gene): the button row stays put while booting, so a board stuck restarting can always be reinstalled
 let bootingNote = null;
 function startBooting() {
   if (busy || flashing) return;
   if (bootingNote === null) bootingNote = boardStatus.hidden ? "" : boardStatus.textContent + "|" + boardStatus.className;
   setStatus("Board Booting Up...");
-  const actions = $("board-actions");
-  if (!actions.hidden) foldShut(actions);
+  startCheckWait();
 }
 function endBooting() {
+  stopCheckWait();
   if (bootingNote === null) return;
   const before = bootingNote;
   bootingNote = null;
@@ -133,6 +134,75 @@ function endBooting() {
 }
 
 const WIFI_WAIT_MS = 20000;
+
+// Version 42.1 (Gene): while the page waits to decide whether the board runs GSP32 (up to 20 s after a boot), a
+//  countdown with a slim bar shows it is still working instead of looking frozen
+const CHECK_WAIT_MS = 20000;
+let checkWaitTimer = null;
+function startCheckWait() {
+  const box = $("check-wait");
+  const started = Date.now();
+  clearInterval(checkWaitTimer);
+  function tick() {
+    const left = Math.max(0, CHECK_WAIT_MS - (Date.now() - started));
+    $("check-wait-text").textContent = "Checking for GSP32\u2026 " + Math.ceil(left / 1000) + " s";
+    $("check-wait-bar").style.width = Math.min(100, 100 * (CHECK_WAIT_MS - left) / CHECK_WAIT_MS) + "%";
+    if (left <= 0) clearInterval(checkWaitTimer);
+  }
+  tick();
+  checkWaitTimer = setInterval(tick, 250);
+  setFolded(box, true);
+}
+function stopCheckWait() {
+  clearInterval(checkWaitTimer);
+  checkWaitTimer = null;
+  setFolded($("check-wait"), false);
+}
+
+// Version 42.1 (Gene): an install cut short (page refreshed, cable pulled) leaves the board restarting over and over.
+//  Three boots within 10 s, or the ROM's own complaints, mean "Incomplete Install Detected" with Recover GSP32
+const BOOT_LOOP_COUNT = 3;
+const BOOT_LOOP_MS = 10000;
+let bootTimes = [];
+function noteBoot() {
+  const now = Date.now();
+  bootTimes = bootTimes.filter((at) => now - at < BOOT_LOOP_MS);
+  bootTimes.push(now);
+  return bootTimes.length >= BOOT_LOOP_COUNT;
+}
+function markBroken() {
+  if (board.kind === "broken" || busy || flashing) return;
+  board.kind = "broken";
+  clearTimeout(otherTimer);
+  stopCheckWait();
+  bootingNote = null;
+  setStatus("Incomplete Install Detected. Click Recover GSP32 to erase the board and install again.", "error");
+  syncBoardUi();
+}
+
+// Version 42.1: a note of the install under way, kept until it finishes, so a page refreshed mid-install offers
+//  Recover GSP32 next time (and for the same board, by its MAC)
+const FLASH_NOTE_KEY = "gsp32.flash";
+function flashNoteGet() {
+  try {
+    return JSON.parse(localStorage.getItem(FLASH_NOTE_KEY) || "null");
+  } catch (err) {
+    return null;
+  }
+}
+function flashNoteSet(note) {
+  try {
+    if (note) localStorage.setItem(FLASH_NOTE_KEY, JSON.stringify(note));
+    else localStorage.removeItem(FLASH_NOTE_KEY);
+  } catch (err) {
+    // Storage blocked: recovery still works from the boot loop
+  }
+}
+function flashNoteMatches() {
+  const note = flashNoteGet();
+  if (!note) return false;
+  return !note.mac || !board.mac || note.mac === board.mac;
+}
 let wifiTimer = null;
 
 // Asks the board for its Improv device info (version, chip); once every 3 s at most, and once more 3 s later if the
@@ -149,6 +219,15 @@ function askVersion(always) {
 function trackBoard(line) {
   if (/GSP32 Improv Ready|Server listening on port|Web UI starts without Wi-Fi|Web UI running/.test(line)) {
     board.kind = "gsp32";
+    bootTimes = [];
+    // A board running GSP32 finished its install: the note of an unfinished one no longer applies
+    if (flashNoteGet() && !busy && !flashing) {
+      flashNoteSet(null);
+      if (/^Incomplete Install/.test(boardStatus.textContent)) {
+        bootingNote = null;
+        setStatus("");
+      }
+    }
     board.readyAt = Date.now();
     clearTimeout(otherTimer);
     endBooting();
@@ -157,6 +236,15 @@ function trackBoard(line) {
     // Version 39: a board found already running (no boot lines seen, or the Ready line came before the page listened)
     //  never got asked, so "GSP32 Found" had no version: ask whenever GSP32 is confirmed without one
     else if (!board.version) askVersion();
+  }
+  if (/invalid header|ota data partition invalid|checksum (error|failure)|image checksum|flash read err/i.test(line)) {
+    markBroken();
+    return;
+  }
+  if (board.kind === "broken" && /^rst:0x|^ets [A-Z][a-z]{2} /.test(line)) return;
+  if (/^rst:0x/.test(line) && noteBoot()) {
+    markBroken();
+    return;
   }
   if (/^rst:0x|^ets [A-Z][a-z]{2} /.test(line)) {
     board.bootAt = Date.now();
@@ -253,8 +341,10 @@ function syncBoardUi() {
   const setup = $("wifi-setup"), web = $("console-webui"), install = $("install-btn");
   const on = portOpen();
   const gsp32 = board.kind === "gsp32";
+  // Version 42.1: a half-finished install (boot loop, or the saved note of an install that never ended) offers Recover
+  const broken = board.kind === "broken" || (!gsp32 && flashNoteMatches());
   install.disabled = !on || busy;
-  install.textContent = gsp32 ? "Reinstall GSP32" : "Install GSP32";
+  install.textContent = broken ? "Recover GSP32" : gsp32 ? "Reinstall GSP32" : "Install GSP32";
   // While installing, Wi-Fi and the web UI button are gone (not greyed); they come back after
   setShown(setup, gsp32 && !flashing);
   setup.disabled = !on || busy;
@@ -287,6 +377,7 @@ function syncBoardUi() {
   const state = $("board-state");
   state.textContent = !on ? "Not Connected"
     : board.note ? board.note
+    : broken ? "Incomplete Install Detected"
     : gsp32 ? (board.version ? "GSP32 Version " + board.version + " Found" : "GSP32 Found")
     : board.installed ? "Installed, Restarting..."
     : board.kind === "other" ? "No GSP32 Found" : "Checking the Board...";
@@ -763,7 +854,7 @@ function installName() {
 let actionsWanted = true;
 function syncActions() {
   const actions = $("board-actions");
-  if (!actionsWanted || busy || flashing || bootingNote !== null || !portOpen()) return;
+  if (!actionsWanted || busy || flashing || !portOpen()) return;
   if (actions.hidden || actions.shutting) foldOpen(actions);
 }
 setInterval(() => { if (typeof consoleCard !== "undefined" && !consoleCard.hidden) syncActions(); }, 1000);
@@ -773,7 +864,7 @@ function showActions(on) {
   const actions = $("board-actions");
   if (on) actionsWanted = true;
   if (!on) actionsWanted = false;
-  if (on && (actions.hidden || actions.shutting) && bootingNote === null) foldOpen(actions);
+  if (on && (actions.hidden || actions.shutting)) foldOpen(actions);
   if (!on && !actions.hidden && !actions.shutting) foldShut(actions);
 }
 
@@ -867,11 +958,14 @@ async function install() {
       write(text) { appendConsole(text); },
     };
     const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
+    const pickedStart = versionSelect.textContent.match(/Version (\d+(?:\.\d+)?)/);
+    flashNoteSet({ mac: board.mac || "", version: pickedStart ? pickedStart[1] : "", startedAt: Date.now() });
     setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
     const chip = await loader.main("default_reset");
     try {
       board.chip = (await loader.chip.getChipDescription(loader)) || chip;
       board.mac = (await loader.chip.readMac(loader)) || "";
+      flashNoteSet(Object.assign(flashNoteGet() || {}, { mac: board.mac }));
     } catch (err) {
       board.chip = chip;
     }
@@ -903,6 +997,8 @@ async function install() {
     const picked = versionSelect.textContent.match(/Version (\d+(?:\.\d+)?)/);
     board.version = picked ? picked[1] : "";
     board.installed = true;
+    flashNoteSet(null);
+    bootTimes = [];
     appendConsole("[Installed. Restarting the board.]\n");
     await resetBoard();
     setStatus(installName() + " Installed", "ok");
@@ -1179,6 +1275,7 @@ function finishWifi(url) {
 let flashing = false;
 function startFlashGuard() {
   flashing = true;
+  stopCheckWait();
   syncBoardUi();
   setFolded($("flash-warn"), true);
 }
@@ -1206,6 +1303,7 @@ function showConsole() {
 }
 
 function hideConsole() {
+  stopCheckWait();
   if (!busy) closeWizard();
   foldShut(consoleBox);
   foldShut(consoleCard, () => {
@@ -1311,8 +1409,11 @@ connectBtn.addEventListener("click", guard(async () => {
   }
   showBoardHelp(false);
   Object.assign(board, { installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0 });
+  bootTimes = [];
   syncBoardUi();
   showConsole();
+  // Version 42.1: an install that never finished (page refreshed mid-install) offers Recover GSP32 right away
+  if (flashNoteGet()) setStatus("Incomplete Install Detected. Click Recover GSP32 to erase the board and install again.", "error");
 }));
 function showBoardHelp(open) {
   const help = $("board-help"), link = $("no-board");
@@ -1351,6 +1452,12 @@ if ("serial" in navigator) {
 }
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) requestWakeLock();
+});
+// Version 42.1 (Gene): leaving or refreshing the page while installing asks first ("Leave page?")
+window.addEventListener("beforeunload", (event) => {
+  if (!flashing) return;
+  event.preventDefault();
+  event.returnValue = "";
 });
 // Leaving the page: lines to run first, so closing the tab never holds the board in reset
 window.addEventListener("pagehide", () => {
