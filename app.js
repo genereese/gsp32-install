@@ -569,7 +569,7 @@ function consumeSerial(chunk) {
       if (parsed.command === 3 && parsed.strings.length >= 3) {
         if (!board.chip && parsed.strings[2]) board.chip = parsed.strings[2];
         const v = parsed.strings[1] || "";
-        const n = v.match(/^(?:Version\s*)?(\d{2,})$/i);
+        const n = v.match(/^(?:Version\s*)?(\d{2,}(?:\.\d+)?)$/i);
         if (n) board.version = n[1];
       }
     }
@@ -721,7 +721,7 @@ async function loadVersions() {
     const list = await response.json();
     // Only the latest build is offered (older images stay in the repo for a rollback, unlisted)
     latest = list[0] || null;
-    const number = latest ? String(latest.label || latest.version).match(/Version (\d+)/) : null;
+    const number = latest ? String(latest.label || latest.version).match(/Version (\d+(?:\.\d+)?)/) : null;
     versionSelect.textContent = number ? "Version " + number[1] : latest ? String(latest.label || latest.version) : "No Version Found";
     versionsReady = !!latest;
   } catch (err) {
@@ -754,7 +754,7 @@ async function loadFirmware() {
 
 // "Version 30" for the status line (the picked build), "GSP32" when it has no number
 function installName() {
-  const picked = versionSelect.textContent.match(/Version \d+/);
+  const picked = versionSelect.textContent.match(/Version \d+(?:\.\d+)?/);
   return picked ? picked[0] : "GSP32";
 }
 
@@ -898,7 +898,7 @@ async function install() {
     board.kind = "unknown";
     board.ip = "";
     board.readyAt = 0;
-    const picked = versionSelect.textContent.match(/Version (\d+)/);
+    const picked = versionSelect.textContent.match(/Version (\d+(?:\.\d+)?)/);
     board.version = picked ? picked[1] : "";
     board.installed = true;
     appendConsole("[Installed. Restarting the board.]\n");

@@ -2,7 +2,7 @@ import sys, http.server, threading, functools, os
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import json as _j, re as _r, os as _o
-LISTED = _r.match(r"Version \d+", _j.load(open(_o.path.join(site, "manifest.json")))["version"]).group(0)  # the listed build, e.g. "Version 32"
+LISTED = _r.match(r"Version \d+(?:\.\d+)?", _j.load(open(_o.path.join(site, "manifest.json")))["version"]).group(0)  # the listed build, e.g. "Version 32"
 handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=site)
 handler.log_message = lambda *a: None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8766), handler); threading.Thread(target=srv.serve_forever, daemon=True).start()
