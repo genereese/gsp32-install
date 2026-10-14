@@ -85,6 +85,11 @@
         <div class="step" data-step="prep" hidden>
           <h3>Install GSP32</h3>
           <p class="version-line">Installs <b id="version">Loading...</b></p>
+          <!-- Version 72 Prototype (Gene): an opt-in choice; the latest stable version stays the default -->
+          <label class="proto-choice" for="prototype-ok" id="prototype-row" hidden>
+            <input id="prototype-ok" type="checkbox">
+            <span>Try the <b id="prototype-name">Prototype</b> Instead<br><small class="hint" id="prototype-note"></small></span>
+          </label>
           <label class="warn-box warn-check" for="erase-ok">
             <input id="erase-ok" type="checkbox">
             <span>Installing <b>erases everything</b> on the board: your programs, files, and Wi-Fi settings.<br><b>I Understand This Erases the Board.</b></span>

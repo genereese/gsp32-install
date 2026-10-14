@@ -388,3 +388,7 @@ body.hero50 .start-go { flex-direction: column; gap: 6px; }
 /* Version 52: one-line release note above the version line */
 .release-note { text-align: center; max-width: 760px; margin: 20px auto 0; font-size: 0.85rem; }
 body:has(#console:not([hidden])) .release-note { display: none; }
+
+/* Version 72: the opt-in Prototype choice under the version line */
+.proto-choice { font-weight: var(--weight-normal); display: flex; gap: 12px; align-items: flex-start; margin: 0 0 0.9rem; cursor: pointer; }
+.proto-choice input { flex: none; width: 20px; height: 20px; margin: 3px 0 0; }

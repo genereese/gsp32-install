@@ -3,5 +3,12 @@
     "version": "c0d4cb6",
     "manifest": "manifest.json",
     "label": "Version 71 (c0d4cb6, latest)"
+  },
+  {
+    "version": "0413a31",
+    "manifest": "manifest-v72-prototype.json",
+    "label": "Version 72 Prototype (0413a31)",
+    "prototype": true,
+    "note": "main.py restarts in a moment on Save, without a reboot. A preview: it may change."
   }
 ]
