@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=64-fw71">
+  <link rel="stylesheet" href="style.css?v=64-fw72p">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -85,6 +85,11 @@
         <div class="step" data-step="prep" hidden>
           <h3>Install GSP32</h3>
           <p class="version-line">Installs <b id="version">Loading...</b></p>
+          <!-- Version 72 Prototype (Gene): an opt-in choice; the latest stable version stays the default -->
+          <label class="proto-choice" for="prototype-ok" id="prototype-row" hidden>
+            <input id="prototype-ok" type="checkbox">
+            <span>Try the <b id="prototype-name">Prototype</b> Instead<br><small class="hint" id="prototype-note"></small></span>
+          </label>
           <label class="warn-box warn-check" for="erase-ok">
             <input id="erase-ok" type="checkbox">
             <span>Installing <b>erases everything</b> on the board: your programs, files, and Wi-Fi settings.<br><b>I Understand This Erases the Board.</b></span>
@@ -193,7 +198,7 @@
     </form>
   </dialog>
 
-  <script type="module" src="app.js?v=64-fw71"></script>
+  <script type="module" src="app.js?v=64-fw72p"></script>
   <p class="release-note hint"><b>New in Version 52:</b> Peer Manager is now pairing, check-ins and main.py messages (send / on_message). Shared values (Share / Watch) and Remote Pins were removed.</p>
   <p class="flasher-version hint">Flasher Version 64</p>
   <script src="tour.js" defer></script>
