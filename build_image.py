@@ -1,8 +1,8 @@
-""" Rebuilds firmware/gsp32-esp32.bin: bootloader 0x1000, partitions 0x8000, app 0x10000 from an ESP32-httpd firmware
+""" Rebuilds firmware/gsp32-esp32.bin: bootloader 0x1000, partitions 0x8000, app 0x10000 from a GSP32 (github.com/genereese/GSP32, formerly ESP32-httpd) firmware
 build (out/<commit>-heap72), and the LittleFS vfs at 0x200000 with the current web UI files (Version 43: the
 web UI's styles, scripts and examples are in the firmware and removed from the image). boot.py, your other pages and the default settings.json are kept from the previous image; main.py, index.html and menu.html come from the repo (Version 65). No secrets:
 no config.json or webui_auth.json is ever added.
-Usage: build_image.py <ESP32-httpd checkout> <firmware out dir> """
+Usage: build_image.py <GSP32 checkout> <firmware out dir> """
 import os, sys, littlefs
 repo, out = sys.argv[1], sys.argv[2]
 IMG = "firmware/gsp32-esp32.bin"
@@ -12,7 +12,7 @@ fs.context.buffer = bytearray(old[0x200000:0x400000]); fs.mount()
 # Round 22 layout: the web UI's settings in gsp32-httpd/config (was ui-data)
 if "ui-data" in fs.listdir("/gsp32-httpd"):
     fs.rename("/gsp32-httpd/ui-data", "/gsp32-httpd/config")
-# Version 43: the web UI's styles, scripts and starter programs are built into the firmware (ESP32-httpd
+# Version 43: the web UI's styles, scripts and starter programs are built into the firmware (GSP32
 #  firmware/stage_webui.py, webassets), so the file system holds none of them: old copies are taken out of the image
 def removeTree(path):
     for name in fs.listdir(path):

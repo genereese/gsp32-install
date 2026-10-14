@@ -22,7 +22,7 @@ thin 10 s" prompt to set up Wi-Fi there.
 - `index.html`, `style.css`, `app.js` - the page
 - `versions.json` - versions the dropdown offers; `manifest.json` - the parts to write for each version
 - `vendor/esptool-js-0.5.7.js` - esptool-js bundle (Apache-2.0, `vendor/esptool-js-LICENSE`)
-- `firmware/gsp32-esp32.bin` - merged 4 MB image from ESP32-httpd 62600ef (no Wi-Fi settings, no passwords, no
+- `firmware/gsp32-esp32.bin` - merged 4 MB image from GSP32 (formerly ESP32-httpd) 62600ef (no Wi-Fi settings, no passwords, no
   personal files: the file system holds only boot.py, main.py and the shipped web pages)
 
 ## Release screenshots (Version 46)
