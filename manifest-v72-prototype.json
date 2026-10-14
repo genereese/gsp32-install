@@ -1,6 +1,6 @@
 {
   "name": "GSP32",
-  "version": "Version 72.1 Prototype (fa0bd06)",
+  "version": "Version 72.2 Prototype (be136e8)",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 15,
   "builds": [

@@ -5,10 +5,10 @@
     "label": "Version 71 (c0d4cb6, latest)"
   },
   {
-    "version": "fa0bd06",
+    "version": "be136e8",
     "manifest": "manifest-v72-prototype.json",
-    "label": "Version 72.1 Prototype (fa0bd06)",
+    "label": "Version 72.2 Prototype (be136e8)",
     "prototype": true,
-    "note": "main.py restarts in a moment on Save (Ctrl-S), without a reboot; steadier RAM across restarts. A preview: it may change."
+    "note": "main.py restarts in a moment on Save (Ctrl-S), without a reboot; steadier RAM across restarts; a notice if main.py takes Timer 3. A preview: it may change."
   }
 ]
