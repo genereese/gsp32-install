@@ -5,10 +5,10 @@
     "label": "Version 71 (c0d4cb6, latest)"
   },
   {
-    "version": "be136e8",
+    "version": "b75e30b",
     "manifest": "manifest-v72-prototype.json",
-    "label": "Version 72.2 Prototype (be136e8)",
+    "label": "Version 73 Prototype (b75e30b)",
     "prototype": true,
-    "note": "main.py restarts in a moment on Save (Ctrl-S), without a reboot; steadier RAM across restarts; a notice if main.py takes Timer 3. A preview: it may change."
+    "note": "Peer Manager removed; Discoverable setting (off by default); gspnow built in for main.py; Insert Device in the editor's right-click menu. A preview: it may change."
   }
 ]
