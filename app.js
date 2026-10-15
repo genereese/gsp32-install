@@ -1565,8 +1565,15 @@ function sizeConsole() {
   const main = consoleOut.closest("main") || consoleBox;
   const below = main.getBoundingClientRect().bottom - consoleOut.getBoundingClientRect().bottom;
   consoleOut.style.height = Math.max(CONSOLE_MIN, Math.floor(window.innerHeight - top - below)) + "px";
+  pinConsole();
+}
+// Version 75 (Gene): the console stays pinned to its newest line while it grows or shrinks (the button row folding
+//  away at Install made it grow and left the erase line just out of view), unless the user scrolled up
+function pinConsole() {
+  if (followConsole && consoleOut.clientHeight) consoleOut.scrollTop = consoleOut.scrollHeight;
 }
 window.addEventListener("resize", sizeConsole);
+if (window.ResizeObserver) new ResizeObserver(() => pinConsole()).observe(consoleOut);
 // The board card above it grows and shrinks too (status line, folds): the console follows so the page never scrolls
 if (window.ResizeObserver) {
   const watch = new ResizeObserver(() => sizeConsole());
