@@ -390,5 +390,3 @@ body.hero50 .start-go { flex-direction: column; gap: 6px; }
 body:has(#console:not([hidden])) .release-note { display: none; }
 
 /* Version 72: the opt-in Prototype choice under the version line */
-.proto-choice { font-weight: var(--weight-normal); display: flex; gap: 12px; align-items: flex-start; margin: 0 0 0.9rem; cursor: pointer; }
-.proto-choice input { flex: none; width: 20px; height: 20px; margin: 3px 0 0; }

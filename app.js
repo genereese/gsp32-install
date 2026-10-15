@@ -14,12 +14,7 @@ const $ = (id) => document.getElementById(id);
 const wizard = $("wizard");
 const versionSelect = $("version");
 const eraseOk = $("erase-ok");
-const prototypeOk = $("prototype-ok");
-const prototypeRow = $("prototype-row");
-const prototypeName = $("prototype-name");
-const prototypeNote = $("prototype-note");
 let stable = null;
-let prototype = null;
 const startInstall = $("start-install");
 const flashStatus = $("flash-status");
 const flashBar = $("flash-bar");
@@ -877,19 +872,12 @@ async function loadVersions() {
   try {
     const response = await fetch("versions.json", { cache: "no-store" });
     const list = await response.json();
-    // Only the latest build is offered (older images stay in the repo for a rollback, unlisted); Version 72: an entry
-    //  marked "prototype" is an opt-in choice next to it, never the default
+    // Only the latest build is offered (older images stay in the repo for a rollback, unlisted); Version 73: no
+    //  prototype choice any more
     stable = list.find((item) => !item.prototype) || null;
-    prototype = list.find((item) => item.prototype) || null;
-    latest = prototypeOk.checked && prototype ? prototype : stable;
-    prototypeRow.hidden = !prototype;
-    if (prototype) {
-      prototypeName.textContent = String(prototype.label || prototype.version).replace(/\s*\(.*$/, "");
-      prototypeNote.textContent = prototype.note || "";
-    }
+    latest = stable;
     const number = latest ? String(latest.label || latest.version).match(/Version (\d+(?:\.\d+)?)/) : null;
-    versionSelect.textContent = (number ? "Version " + number[1] : latest ? String(latest.label || latest.version) : "No Version Found")
-      + (latest && latest.prototype ? " Prototype" : "");
+    versionSelect.textContent = number ? "Version " + number[1] : latest ? String(latest.label || latest.version) : "No Version Found";
     versionsReady = !!latest;
   } catch (err) {
     versionSelect.textContent = "Could Not Load the Version";
@@ -1619,8 +1607,6 @@ $("install-btn").addEventListener("click", () => {
   showStep("prep");
 });
 eraseOk.addEventListener("change", syncStart);
-// Version 72: the Prototype choice swaps the build to install; the stable one comes back when it is unticked
-prototypeOk.addEventListener("change", loadVersions);
 startInstall.addEventListener("click", () => install());
 $("copy-log").addEventListener("click", copyLog);
 $("error-retry").addEventListener("click", () => {
