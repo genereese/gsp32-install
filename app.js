@@ -423,6 +423,8 @@ function syncBoardUi() {
     details.textContent = line;
     setShown(details, !!line);
   }
+  const privacy = $("board-privacy");
+  if (privacy) setShown(privacy, !!(details && details.textContent));
   setup.textContent = address || waiting ? "Change Wi-Fi" : "Set Up Wi-Fi";
   const state = $("board-state");
   state.textContent = !on ? "Not Connected"
@@ -823,8 +825,8 @@ async function openPort(selected) {
   portBaud = FLASH_BAUD;
   port = selected;
   board.info = Object.assign({}, board.info || {});
-  const bridge = usbBridgeName();
-  if (bridge) board.info.usb = bridge;
+  const bridge = usbBridgeInfo();
+  if (bridge) { board.info.usb = bridge.name; board.info.usbLabel = bridge.label; }
   syncBoardUi();
   await setRunState();
   pending = new Uint8Array(0);
@@ -957,17 +959,23 @@ const USB_BRIDGES = {
   "1a86:7523": "CH340", "1a86:55d3": "CH343", "1a86:55d4": "CH9102",
   "0403:6001": "FT232", "303a:1001": "Native USB",
 };
-function usbBridgeName() {
+function usbBridgeInfo() {
   try {
-    if (!port || typeof port.getInfo !== "function") return "";
+    if (!port || typeof port.getInfo !== "function") return null;
     const info = port.getInfo();
     const vid = info.usbVendorId, pid = info.usbProductId;
-    if (vid == null || pid == null) return "";
+    if (vid == null || pid == null) return null;
     const key = vid.toString(16).padStart(4, "0") + ":" + pid.toString(16).padStart(4, "0");
-    return USB_BRIDGES[key] || "";
+    const name = USB_BRIDGES[key] || "";
+    if (!name) return null; // unknown VID/PID: omit — never guess
+    return { key, name, label: key + " " + name };
   } catch (err) {
-    return "";
+    return null;
   }
+}
+function usbBridgeName() {
+  const u = usbBridgeInfo();
+  return u ? u.name : "";
 }
 function formatBoardDetails() {
   const parts = [];
@@ -985,8 +993,8 @@ function formatBoardDetails() {
 async function readBoardExtras(link) {
   // Only what esptool-js and the serial port actually return — skip on failure
   const info = Object.assign({}, board.info || {});
-  const usb = usbBridgeName();
-  if (usb) info.usb = usb;
+  const usb = usbBridgeInfo();
+  if (usb) { info.usb = usb.name; info.usbLabel = usb.label; }
   if (link && link.loader) {
     try {
       const kb = await withTimeout(link.loader.getFlashSize(), READ_MS, "Reading the flash size");
@@ -1008,6 +1016,52 @@ async function readBoardExtras(link) {
   }
   board.info = info;
   return info;
+}
+
+
+// Board-model telemetry (no MAC): once per Get Started connect, after a successful chip read. Fire-and-forget.
+const TELEMETRY_URL = "https://gsp32-telemetry.genereese.workers.dev/log";
+function browserKind() {
+  const ua = navigator.userAgent || "";
+  if (/Brave/i.test(ua) || navigator.brave) return "brave";
+  if (/Edg\//i.test(ua)) return "edge";
+  if (/OPR\/|Opera/i.test(ua)) return "opera";
+  if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) return "chrome";
+  return "other";
+}
+function reportBoardTelemetry(compatible) {
+  if (board.telemetrySent) return;
+  const chip = chipShort(board.chip || "");
+  if (!chip || chip === "Unknown Chip") return;
+  board.telemetrySent = true;
+  const body = { chip, compatible: !!compatible };
+  const raw = String(board.chip || "");
+  const rev = raw.match(/\(revision\s*([^)]+)\)/i);
+  if (rev) body.revision = rev[1].trim();
+  const info = board.info || {};
+  if (info.cores === "Dual Core") body.cores = 2;
+  else if (info.cores === "Single Core") body.cores = 1;
+  if (info.flashKb != null && info.flashKb > 0) {
+    body.flash_mb = info.flashKb >= 1024 && info.flashKb % 1024 === 0
+      ? info.flashKb / 1024 : Math.round((info.flashKb / 1024) * 100) / 100;
+  }
+  if (info.psram) body.psram = true;
+  if (info.crystalMhz) body.crystal_mhz = info.crystalMhz;
+  if (info.usbLabel) body.usb_bridge = info.usbLabel;
+  const verEl = document.querySelector(".flasher-version");
+  const ver = verEl && (verEl.textContent || "").match(/Flasher Version\s+(\d+(?:\.\d+)?)/i);
+  if (ver) body.flasher_version = ver[1];
+  body.browser = browserKind();
+  try {
+    // Never await: install must not wait on telemetry. Never include MAC.
+    fetch(TELEMETRY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      mode: "cors",
+      keepalive: true,
+    }).catch(() => {});
+  } catch (err) {}
 }
 
 async function loadFirmware(family) {
@@ -1297,6 +1351,7 @@ async function install() {
       const flashKb = (board.info && board.info.flashKb) || null;
       board.chip = chip;
       const issue = compatIssue(chip, flashKb);
+      reportBoardTelemetry(!issue);
       if (issue) {
         await link.transport.disconnect();
         await reopenPort(FLASH_BAUD).catch(() => {});
@@ -1858,10 +1913,11 @@ connectBtn.addEventListener("click", guard(async () => {
     throw err;
   }
   showBoardHelp(false);
-  Object.assign(board, { installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {} });
+  Object.assign(board, { installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {}, telemetrySent: false });
   // USB bridge is known from the open port (no guess); keep it after the board-state reset
-  const bridge = usbBridgeName();
-  if (bridge) board.info.usb = bridge;
+  const bridge = usbBridgeInfo();
+  if (bridge) { board.info.usb = bridge.name; board.info.usbLabel = bridge.label; }
+  board.telemetrySent = false;
   hideCompatNotice();
   bootTimes = [];
   syncBoardUi();
