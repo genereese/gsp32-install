@@ -872,7 +872,7 @@ async function loadVersions() {
   try {
     const response = await fetch("versions.json", { cache: "no-store" });
     const list = await response.json();
-    // Only the latest build is offered (older images stay in the repo for a rollback, unlisted); Version 73: no
+    // Only the latest build is offered (older images were removed from the repo; they stay in git history); Version 73: no
     //  prototype choice any more
     stable = list.find((item) => !item.prototype) || null;
     latest = stable;
