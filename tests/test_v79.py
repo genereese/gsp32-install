@@ -22,7 +22,7 @@ check("versions.json: Version 79 only", len(v) == 1 and v[0]["label"].startswith
 js = open(os.path.join(site, "app.js")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
 html = open(os.path.join(site, "index.html")).read()
-check("cache-bust 75-fw79 everywhere", html.count("?v=75-fw79") == 3 and "fw78" not in html)
+check("cache-bust 76-fw79 everywhere", html.count("?v=76-fw79") == 3 and "fw78" not in html)
 def run(b, chip):
     pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js")
     pg.add_init_script("window.__ver = '47';" + ("window.__chip = %s;" % json.dumps(chip) if chip else ""))
