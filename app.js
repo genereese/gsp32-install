@@ -1215,6 +1215,12 @@ async function install() {
     appendConsole("[Installed. Restarting the board.]\n");
     await resetBoard();
     setStatus(installName() + " Installed", "ok");
+    // Version 75 (Gene): what to do next, so a newcomer knows the Set Up Wi-Fi button is the way to the Web UI
+    const next = document.createElement("span");
+    next.className = "status-more next-step";
+    next.append("Next: click ", Object.assign(document.createElement("b"), { textContent: "Set Up Wi-Fi" }),
+      " above to connect the board to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
+    boardStatus.append(" ", next);
     startReading();
     setBusy(false);
     stopFlashGuard();
