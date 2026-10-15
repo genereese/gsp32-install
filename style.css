@@ -161,6 +161,7 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .board-id { display: flex; flex-direction: column; gap: 2px; }
 .board-id h2 { margin: 0; }
 .board-mac { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); opacity: 0.85; }
+.board-details { letter-spacing: 0.04em; text-transform: none; } /* same muted size as MAC; not shouted */
 .step-icon { font-size: 1rem; }
 .hint.small { font-size: 0.88rem; margin: 0; }
 /* Version 38: the red warning sits right under the progress bar (the status line), the same height */
@@ -388,3 +389,9 @@ body.hero50 .start-go { flex-direction: column; gap: 6px; }
 /* Version 52: one-line release note above the version line */
 
 /* Version 72: the opt-in Prototype choice under the version line */
+
+/* Version 79: unsupported chip or flash size — folds open under the board actions (warn-box style) */
+.compat-notice { margin: 10px 0 0; overflow: hidden; }
+.compat-notice[hidden] { display: none; }
+.compat-notice b { display: block; margin-bottom: 4px; }
+.compat-notice p { margin: 0; font-weight: 400; color: var(--ink, #1a1a1a); }

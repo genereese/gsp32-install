@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=76-fw79">
+  <link rel="stylesheet" href="style.css?v=79-fw79">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -65,6 +65,7 @@
         <div class="board-id">
           <h2 id="board-chip">ESP32 Board</h2>
           <span id="board-mac" class="board-mac" hidden></span>
+          <span id="board-details" class="board-mac board-details" hidden></span>
         </div>
         <span id="board-state" class="board-state">Checking the Board...</span>
       </div>
@@ -80,6 +81,10 @@
         <div class="progress"><div id="check-wait-bar" class="progress-bar"></div></div>
       </div>
       <div id="flash-warn" class="flash-warn" role="alert" hidden>Changing Tabs Could Cause the Install to Fail</div>
+      <div id="compat-notice" class="warn-box compat-notice" role="status" hidden>
+        <b id="compat-notice-title">This Board Is Not Supported</b>
+        <p id="compat-notice-text"></p>
+      </div>
       <!-- Version 43.2 (Gene): the steps (Wi-Fi networks, password, buttons) sit under the status line they belong to -->
       <div id="wizard" class="wizard" hidden>
         <div class="step" data-step="prep" hidden>
@@ -155,10 +160,6 @@
     </div>
 
 
-    <section id="compatible" class="card">
-      <h2>Compatible Boards</h2>
-      <p>GSP32 works with <b>ESP32</b> boards (classic ESP32 chip with at least 4&nbsp;MB flash, such as ESP32-WROOM-32 and ESP32-WROVER modules, DevKitC, and the common &ldquo;ESP32-32D&rdquo;, &ldquo;32E&rdquo;, &ldquo;32U&rdquo; and &ldquo;NodeMCU-32S&rdquo; style boards) and <b>ESP32-S3</b> boards (at least 16&nbsp;MB flash; PSRAM recommended, e.g. DevKitC-1 N16R8). The installer picks the matching image when it sees the chip. Not supported: ESP32-C3, C6, S2, H2, and Raspberry Pi Pico.</p>
-    </section>
 
     <!-- Version 46 (Gene): What You Get: screenshots from the dev board (release_shots.py), each opens full size with a short tour -->
     <hr class="tour-divider">
@@ -199,8 +200,8 @@
     </form>
   </dialog>
 
-  <script type="module" src="app.js?v=76-fw79"></script>
+  <script type="module" src="app.js?v=79-fw79"></script>
   <p class="flasher-version hint">Flasher Version 79</p>
-  <script src="tour.js?v=76-fw79" defer></script>
+  <script src="tour.js?v=79-fw79" defer></script>
 </body>
 </html>
