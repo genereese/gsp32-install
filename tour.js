@@ -5,20 +5,16 @@ var TOUR = {
     ["Live graphs for Web UI Load, RAM, Flash and Wi-Fi", "A status bar on every page with uptime and the board's IP", "Your own pages with live values from main.py"]],
   files: ["Files Without Cables", "Manage everything on the board from the browser: upload by dragging files in, move them by dragging, rename, download and delete. No USB cable, no extra tools.",
     ["Drag and drop upload and moving", "Box selection and bulk Download or Delete", "Folders tree, locks and safe system files"]],
-  editor: ["Edit Code Right on the Board", "Open main.py or any file and edit it in a real code editor with line numbers, highlighting and autocomplete. Save & Restart runs your change at once, without rebooting the board, and an error takes you straight to its line.",
-    ["Python highlighting and autocomplete", "Save & Restart (Ctrl-S) without a reboot", "Errors shown with the line they came from"]],
-  wizards: ["Insert Code With a Few Clicks", "Right-click in the editor and pick Insert. Insert Device lists the GSP32 devices nearby, even with Discoverable off on yours, and adds the GSPNOW code to message them. Secure pairing asks the other device to accept, then encrypts every message.",
-    ["Insert Device: Open, or Secure with pairing and encryption", "Insert Pin, Insert PWM and Insert ADC", "Imports added at the top of the file"]],
-  pwm: ["Wizards That Know the Pins", "The Pin, PWM and ADC wizards ask a few questions and insert ready-to-run code. They warn about boot and USB console pins and refuse pins that can't do the job.",
-    ["PWM presets for an LED, a servo or a buzzer", "ADC offers only the pins that work with Wi-Fi on, with the voltage each range reads", "Input-only pins refused for outputs"]],
+  editor: ["Edit Code Right on the Board", "Edit main.py or any file in a real code editor, then Save & Restart to run the change at once, without a reboot. Right-click and pick Insert for shortcuts for frequently used tasks and talking to other devices.",
+    ["Save & Restart (Ctrl-S), with errors shown on their line", "Shortcuts for Frequently Used Tasks: Insert Pin, Insert PWM and Insert ADC", "Talking to Other Devices: Insert Device, with secure pairing and encryption"]],
   pins: ["See and Drive Every Pin", "The Pin Panel shows every GPIO as a card: its level, whether it's safe to use, and what main.py calls it. Drive a pin high or low with a click to test your wiring.",
     ["Live levels and ADC readings", "Safe, careful and taken pins color-coded", "Pins named after your main.py"]],
   console: ["A Console in Your Browser", "Watch print() output and errors from main.py as they happen, and type Python straight into the board. It's the serial console, without the serial cable.",
     ["Live output from main.py", "Run Python lines on the board", "The last error kept across reboots"]],
   libraries: ["Add Libraries in Seconds", "Search the MicroPython package index and install packages into /lib with one click. Your browser fetches them, so the board stays fast."],
   backup: ["Back Up and Restore", "Download your whole board as one file, and put it back on this board or a new one whenever you need to."],
-  settings: ["Make It Yours", "The Network card keeps the device name, Wi-Fi, password and Discoverable together. Set the clock and time zone, and switch apps like Scheduler, Data Logger, Libraries and Backup on or off.",
-    ["Network card: device name and .local address, Wi-Fi, password, mDNS, Discoverable", "Clock with NTP and time zone", "Apps you can switch on and off"]]
+  settings: ["Make It Yours", "The Network card keeps the device name, Wi-Fi, password and Discoverable together. Set the clock and time zone, and switch optional apps like Libraries and Backup on or off.",
+    ["Network card: device name and .local address, Wi-Fi, password, mDNS, Discoverable", "Clock with NTP and time zone", "Optional apps you can switch on and off"]]
 };
 
 (function () {
