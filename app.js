@@ -943,6 +943,46 @@ function setProgress(text, percent, status, erasing) {
   if (percent != null) boardStatus.style.setProperty("--fill", Math.max(0, Math.min(100, percent)) + "%");
 }
 
+// Version 75 (Gene): "About 3 Minutes Left" from the write speed. Nothing is shown until the estimate settles: at
+//  least 5 s and 3% into writing, and three estimates in a row within 20% of each other. The words then only change
+//  when the rounded time does, and the time never jumps back up by a little
+function makeTimeLeft() {
+  let first = null, smooth = null, recent = [], shown = "", shownSeconds = Infinity;
+  function words(seconds) {
+    if (seconds >= 90) {
+      const minutes = Math.round(seconds / 60);
+      return "About " + minutes + " Minutes Left";
+    }
+    if (seconds >= 50) return "About 1 Minute Left";
+    if (seconds >= 15) return "About " + Math.round(seconds / 10) * 10 + " Seconds Left";
+    return "Almost Done";
+  }
+  return {
+    add(fraction) {
+      const now = Date.now();
+      if (!first) {
+        first = { at: now, fraction };
+        return "";
+      }
+      const spent = (now - first.at) / 1000, done = fraction - first.fraction;
+      if (spent < 5 || done < 0.03 || fraction >= 1) return fraction >= 1 ? "" : shown;
+      const estimate = spent * (1 - fraction) / done;
+      smooth = smooth === null ? estimate : smooth * 0.7 + estimate * 0.3;
+      recent.push(smooth);
+      if (recent.length > 3) recent.shift();
+      if (!shown) {
+        const low = Math.min(...recent), high = Math.max(...recent);
+        if (recent.length < 3 || high > low * 1.2) return "";
+      }
+      // Small bumps up are ignored so the countdown does not flicker back
+      if (smooth > shownSeconds && smooth < shownSeconds * 1.15) return shown;
+      shownSeconds = smooth;
+      shown = words(smooth);
+      return shown;
+    },
+  };
+}
+
 // The wizard's own status texts (Wi-Fi steps, errors) are shown only in the status line, never twice
 function mirrorStatus() {
   new MutationObserver(function () {
@@ -1130,6 +1170,7 @@ async function install() {
       setProgress("Erasing the board (about 15 seconds)...", 0, "Installing " + installName() + ": Erasing the Board...", true);
       let lastPercent = -1;
       const started = Date.now();
+      const timeLeft = makeTimeLeft();
       try {
         await link.loader.writeFlash({
           fileArray: files,
@@ -1142,7 +1183,9 @@ async function install() {
             const percent = Math.floor((written / total) * 100);
             if (percent !== lastPercent) {
               lastPercent = percent;
-              setProgress("Writing the firmware... " + percent + "%", percent);
+              const left = timeLeft.add(written / total);
+              setProgress("Writing the firmware... " + percent + "%", percent,
+                "Installing " + installName() + " (" + percent + "%" + (left ? ", " + left : "") + ")");
               if (percent % 10 === 0) appendConsole("[esptool] Written " + percent + "%\n");
             }
           },
@@ -1172,6 +1215,12 @@ async function install() {
     appendConsole("[Installed. Restarting the board.]\n");
     await resetBoard();
     setStatus(installName() + " Installed", "ok");
+    // Version 75 (Gene): what to do next, so a newcomer knows the Set Up Wi-Fi button is the way to the Web UI
+    const next = document.createElement("span");
+    next.className = "status-more next-step";
+    next.append("Next: click ", Object.assign(document.createElement("b"), { textContent: "Set Up Wi-Fi" }),
+      " above to connect the board to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
+    boardStatus.append(" ", next);
     startReading();
     setBusy(false);
     stopFlashGuard();
@@ -1565,8 +1614,15 @@ function sizeConsole() {
   const main = consoleOut.closest("main") || consoleBox;
   const below = main.getBoundingClientRect().bottom - consoleOut.getBoundingClientRect().bottom;
   consoleOut.style.height = Math.max(CONSOLE_MIN, Math.floor(window.innerHeight - top - below)) + "px";
+  pinConsole();
+}
+// Version 75 (Gene): the console stays pinned to its newest line while it grows or shrinks (the button row folding
+//  away at Install made it grow and left the erase line just out of view), unless the user scrolled up
+function pinConsole() {
+  if (followConsole && consoleOut.clientHeight) consoleOut.scrollTop = consoleOut.scrollHeight;
 }
 window.addEventListener("resize", sizeConsole);
+if (window.ResizeObserver) new ResizeObserver(() => pinConsole()).observe(consoleOut);
 // The board card above it grows and shrinks too (status line, folds): the console follows so the page never scrolls
 if (window.ResizeObserver) {
   const watch = new ResizeObserver(() => sizeConsole());
@@ -1635,6 +1691,8 @@ for (const button of wizard.querySelectorAll("[data-action]")) {
 }
 
 connectBtn.addEventListener("click", guard(async () => {
+  // Version 75 (Gene): the version list is fetched again on every Get Started, so a page left open picks up a release
+  loadVersions();
   try {
     await pickPort();
   } catch (err) {

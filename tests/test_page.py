@@ -72,7 +72,7 @@ with sync_playwright() as p:
           and pg.evaluate("getComputedStyle(document.getElementById('wizard')).borderTopWidth") == "0px"
           and not pg.is_visible("#flash-status"), str(fills))
     pg.wait_for_function("document.getElementById('wizard').hidden", timeout=20000)
-    check("V30 status line: 'Version 30 Installed'", pg.inner_text("#board-status") == LISTED + " Installed", pg.inner_text("#board-status"))
+    check("V30 status line: 'Version 30 Installed'", pg.inner_text("#board-status").split("\n")[0].split(" Next:")[0].strip() == LISTED + " Installed" and "Next: click Set Up Wi-Fi" in pg.inner_text("#board-status"), pg.inner_text("#board-status"))
     pg.wait_for_timeout(400)
     check("V30 install button row back after the install", pg.is_visible("#board-actions") and pg.is_visible("#install-btn"))
     out = pg.inner_text("#console-out")
