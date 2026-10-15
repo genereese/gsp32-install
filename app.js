@@ -890,10 +890,25 @@ function syncStart() {
   startInstall.disabled = !versionsReady || !eraseOk.checked;
 }
 
-async function loadFirmware() {
+// Version 79: one manifest, one build per chip family ("ESP32", "ESP32-S3"), as esp-web-tools picks them. The
+//  manifest is read before connecting; the build's image is downloaded once the board has said which chip it is
+let manifestCache = null;
+async function loadManifest() {
   const manifestUrl = new URL(latest.manifest, location.href);
   const manifest = await (await fetch(manifestUrl, { cache: "no-store" })).json();
-  const build = manifest.builds.find((item) => item.chipFamily === "ESP32") || manifest.builds[0];
+  manifestCache = { manifest, manifestUrl };
+  return manifestCache;
+}
+// The chip family for esptool-js's chip name: "ESP32-S3" for an S3, "ESP32" for a classic ESP32, "" otherwise
+function chipFamily(chip) {
+  if (/ESP32-S3/.test(chip)) return "ESP32-S3";
+  if (/ESP32/.test(chip) && !/ESP32-(S|C|H|P)/.test(chip)) return "ESP32";
+  return "";
+}
+async function loadFirmware(family) {
+  const { manifest, manifestUrl } = manifestCache || await loadManifest();
+  const build = manifest.builds.find((item) => item.chipFamily === family);
+  if (!build) throw new Error("This firmware has no build for " + family + ".");
   const files = [];
   for (const part of build.parts) {
     const response = await fetch(new URL(part.path, manifestUrl), { cache: "no-store" });
@@ -1140,7 +1155,9 @@ async function install() {
   appendConsole("\n[Installing " + versionSelect.textContent + "]\n");
   try {
     setProgress("Downloading the firmware...", 0, "Installing " + installName() + ": Downloading the Firmware...");
-    const files = await loadFirmware();
+    await loadManifest();
+    // Version 79: the image follows the chip, so it is fetched once per family after the first connect
+    const imageFor = {};
     await stopReading();
     const terminal = {
       clean() {},
@@ -1166,8 +1183,20 @@ async function install() {
         }
       }
       const chip = link.chip;
-      if (!/ESP32/.test(chip) || /ESP32-(S|C|H|P)/.test(chip)) throw new Error("This board is " + chip + ". GSP32 needs a classic ESP32.");
-      setProgress("Erasing the board (about 15 seconds)...", 0, "Installing " + installName() + ": Erasing the Board...", true);
+      const family = chipFamily(chip);
+      if (!family) {
+        await link.transport.disconnect();
+        throw new Error("This board is " + chip + ". GSP32 runs on ESP32 and ESP32-S3 boards.");
+      }
+      if (!imageFor[family]) {
+        setProgress("Downloading the firmware for " + family + "...", 0, "Installing " + installName() + ": Downloading the Firmware...");
+        appendConsole("[" + family + " detected: installing its build]\n");
+        imageFor[family] = await loadFirmware(family);
+      }
+      const files = imageFor[family];
+      // The whole chip is erased first: about 15 s for 4 MB, longer for an S3's 16 MB
+      const eraseWords = family === "ESP32-S3" ? "about a minute" : "about 15 seconds";
+      setProgress("Erasing the board (" + eraseWords + ")...", 0, "Installing " + installName() + ": Erasing the Board...", true);
       let lastPercent = -1;
       const started = Date.now();
       const timeLeft = makeTimeLeft();

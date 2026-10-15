@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=73-fw78">
+  <link rel="stylesheet" href="style.css?v=76-fw79">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -25,7 +25,7 @@
     <div class="hero">
     <div id="page-head" class="page-head">
       <h1>Install GSP32</h1>
-      <p class="lede">A MicroPython web UI for ESP32 boards<span class="lede-more">. Plug your board in with a USB data cable and install it right from this page</span>.</p>
+      <p class="lede">A MicroPython web UI for ESP32 and ESP32-S3 boards<span class="lede-more">. Plug your board in with a USB data cable and install it right from this page; it picks the right firmware for your chip</span>.</p>
     </div>
 
     <section id="browser-block" class="card">
@@ -154,6 +154,12 @@
     </section>
     </div>
 
+
+    <section id="compatible" class="card">
+      <h2>Compatible Boards</h2>
+      <p>GSP32 works with <b>ESP32</b> boards (classic ESP32 chip with at least 4&nbsp;MB flash, such as ESP32-WROOM-32 and ESP32-WROVER modules, DevKitC, and the common &ldquo;ESP32-32D&rdquo;, &ldquo;32E&rdquo;, &ldquo;32U&rdquo; and &ldquo;NodeMCU-32S&rdquo; style boards) and <b>ESP32-S3</b> boards (at least 16&nbsp;MB flash; PSRAM recommended, e.g. DevKitC-1 N16R8). The installer picks the matching image when it sees the chip. Not supported: ESP32-C3, C6, S2, H2, and Raspberry Pi Pico.</p>
+    </section>
+
     <!-- Version 46 (Gene): What You Get: screenshots from the dev board (release_shots.py), each opens full size with a short tour -->
     <hr class="tour-divider">
     <section id="tour" class="tour" aria-labelledby="tour-title">
@@ -193,8 +199,8 @@
     </form>
   </dialog>
 
-  <script type="module" src="app.js?v=73-fw78"></script>
-  <p class="flasher-version hint">Flasher Version 78</p>
-  <script src="tour.js?v=73-fw78" defer></script>
+  <script type="module" src="app.js?v=76-fw79"></script>
+  <p class="flasher-version hint">Flasher Version 79</p>
+  <script src="tour.js?v=76-fw79" defer></script>
 </body>
 </html>
