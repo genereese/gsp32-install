@@ -417,6 +417,12 @@ function syncBoardUi() {
   const mac = $("board-mac");
   mac.textContent = board.mac ? "MAC " + board.mac.toUpperCase() : "";
   setShown(mac, !!board.mac);
+  const details = $("board-details");
+  if (details) {
+    const line = formatBoardDetails();
+    details.textContent = line;
+    setShown(details, !!line);
+  }
   setup.textContent = address || waiting ? "Change Wi-Fi" : "Set Up Wi-Fi";
   const state = $("board-state");
   state.textContent = !on ? "Not Connected"
@@ -816,6 +822,10 @@ async function openPort(selected) {
   await selected.open({ baudRate: FLASH_BAUD });
   portBaud = FLASH_BAUD;
   port = selected;
+  board.info = Object.assign({}, board.info || {});
+  const bridge = usbBridgeName();
+  if (bridge) board.info.usb = bridge;
+  syncBoardUi();
   await setRunState();
   pending = new Uint8Array(0);
   textDecoder = new TextDecoder("utf-8");
@@ -905,6 +915,101 @@ function chipFamily(chip) {
   if (/ESP32/.test(chip) && !/ESP32-(S|C|H|P)/.test(chip)) return "ESP32";
   return "";
 }
+// Flash sizes from esptool-js getFlashSize() are in KB (4 MB = 4096, 16 MB = 16384)
+const MIN_FLASH_KB = { "ESP32": 4096, "ESP32-S3": 16384 };
+function flashLabel(kb) {
+  if (kb == null || kb <= 0) return "an unknown flash size";
+  if (kb >= 1024 && kb % 1024 === 0) return (kb / 1024) + " MB flash";
+  return kb + " KB flash";
+}
+function chipShort(chip) {
+  return String(chip || "Unknown Chip").replace(/\s*\(revision[^)]*\)/i, "").trim() || "Unknown Chip";
+}
+// null = ok to install; otherwise { chip, flashKb, family } for the notice
+function compatIssue(chip, flashKb) {
+  const family = chipFamily(chip);
+  if (!family) return { chip, flashKb, family: "" };
+  const need = MIN_FLASH_KB[family];
+  if (flashKb != null && flashKb > 0 && flashKb < need) return { chip, flashKb, family };
+  return null;
+}
+function hideCompatNotice() {
+  const box = $("compat-notice");
+  if (box && !box.hidden) foldShut(box);
+}
+function showCompatNotice(issue) {
+  const box = $("compat-notice");
+  const title = $("compat-notice-title");
+  const text = $("compat-notice-text");
+  if (!box || !title || !text) return;
+  const chip = chipShort(issue.chip);
+  const flash = (issue.flashKb != null && issue.flashKb > 0) ? flashLabel(issue.flashKb) : "";
+  title.textContent = "This Board Is Not Supported";
+  text.textContent = flash
+    ? ("This board is " + chip + " with " + flash + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 16 MB flash (PSRAM recommended). Nothing was installed.")
+    : ("This board is " + chip + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 16 MB flash (PSRAM recommended). Nothing was installed.");
+  if (box.hidden || box.shutting) foldOpen(box);
+  appendConsole("[Not supported: " + chip + (flash ? ", " + flash : "") + "]\n");
+}
+// Known USB-serial bridges only (VID:PID from SerialPort.getInfo). Unknown IDs are omitted — never guessed.
+const USB_BRIDGES = {
+  "10c4:ea60": "CP2102", "10c4:ea63": "CP2102", "10c4:ea70": "CP2102",
+  "1a86:7523": "CH340", "1a86:55d3": "CH343", "1a86:55d4": "CH9102",
+  "0403:6001": "FT232", "303a:1001": "Native USB",
+};
+function usbBridgeName() {
+  try {
+    if (!port || typeof port.getInfo !== "function") return "";
+    const info = port.getInfo();
+    const vid = info.usbVendorId, pid = info.usbProductId;
+    if (vid == null || pid == null) return "";
+    const key = vid.toString(16).padStart(4, "0") + ":" + pid.toString(16).padStart(4, "0");
+    return USB_BRIDGES[key] || "";
+  } catch (err) {
+    return "";
+  }
+}
+function formatBoardDetails() {
+  const parts = [];
+  const info = board.info || {};
+  if (info.cores) parts.push(info.cores);
+  if (info.flashKb != null && info.flashKb > 0) {
+    parts.push(info.flashKb >= 1024 && info.flashKb % 1024 === 0
+      ? (info.flashKb / 1024) + " MB flash" : info.flashKb + " KB flash");
+  }
+  if (info.psram) parts.push(info.psram);
+  if (info.crystalMhz) parts.push(info.crystalMhz + " MHz");
+  if (info.usb) parts.push(info.usb);
+  return parts.join(" · ");
+}
+async function readBoardExtras(link) {
+  // Only what esptool-js and the serial port actually return — skip on failure
+  const info = Object.assign({}, board.info || {});
+  const usb = usbBridgeName();
+  if (usb) info.usb = usb;
+  if (link && link.loader) {
+    try {
+      const kb = await withTimeout(link.loader.getFlashSize(), READ_MS, "Reading the flash size");
+      if (kb != null && kb > 0) info.flashKb = kb;
+    } catch (err) {}
+    try {
+      const features = await withTimeout(link.loader.chip.getChipFeatures(link.loader), READ_MS, "Reading chip features");
+      if (Array.isArray(features)) {
+        const joined = features.join(" ");
+        if (/Dual Core/i.test(joined)) info.cores = "Dual Core";
+        else if (/Single Core/i.test(joined)) info.cores = "Single Core";
+        if (/Embedded PSRAM/i.test(joined)) info.psram = "Embedded PSRAM";
+      }
+    } catch (err) {}
+    try {
+      const mhz = await withTimeout(link.loader.chip.getCrystalFreq(link.loader), READ_MS, "Reading the crystal");
+      if (mhz != null && mhz > 0) info.crystalMhz = mhz;
+    } catch (err) {}
+  }
+  board.info = info;
+  return info;
+}
+
 async function loadFirmware(family) {
   const { manifest, manifestUrl } = manifestCache || await loadManifest();
   const build = manifest.builds.find((item) => item.chipFamily === family);
@@ -1105,12 +1210,16 @@ async function connectLoader(terminal) {
     board.chip = (await withTimeout(loader.chip.getChipDescription(loader), READ_MS, "Reading the chip")) || link.chip;
     board.mac = (await withTimeout(loader.chip.readMac(loader), READ_MS, "Reading the MAC")) || "";
     flashNoteSet(Object.assign(flashNoteGet() || {}, { mac: board.mac }));
+    await readBoardExtras(link);
+    syncBoardUi();
   } catch (err) {
     if (!link.chip) {
       await resetLink(link).catch(() => {});
       throw err;
     }
     board.chip = link.chip;
+    await readBoardExtras(link).catch(() => {});
+    syncBoardUi();
   }
   return link;
 }
@@ -1182,12 +1291,28 @@ async function install() {
           throw new Error("The board did not answer. Unplug it, plug it back in and click Try Again. If it still does not answer, hold the BOOT button while you click Try Again.");
         }
       }
-      const chip = link.chip;
-      const family = chipFamily(chip);
-      if (!family) {
+      const chip = link.chip || board.chip || "";
+      await readBoardExtras(link);
+      syncBoardUi();
+      const flashKb = (board.info && board.info.flashKb) || null;
+      board.chip = chip;
+      const issue = compatIssue(chip, flashKb);
+      if (issue) {
         await link.transport.disconnect();
-        throw new Error("This board is " + chip + ". GSP32 runs on ESP32 and ESP32-S3 boards.");
+        await reopenPort(FLASH_BAUD).catch(() => {});
+        await setRunState().catch(() => {});
+        startReading();
+        setBusy(false);
+        stopFlashGuard();
+        closeWizard();
+        setStatus(""); // fold away the Installing... progress bar
+        showActions(true);
+        showCompatNotice(issue);
+        syncBoardUi();
+        syncConsoleButtons();
+        return;
       }
+      const family = chipFamily(chip);
       if (!imageFor[family]) {
         setProgress("Downloading the firmware for " + family + "...", 0, "Installing " + installName() + ": Downloading the Firmware...");
         appendConsole("[" + family + " detected: installing its build]\n");
@@ -1733,7 +1858,11 @@ connectBtn.addEventListener("click", guard(async () => {
     throw err;
   }
   showBoardHelp(false);
-  Object.assign(board, { installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0 });
+  Object.assign(board, { installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {} });
+  // USB bridge is known from the open port (no guess); keep it after the board-state reset
+  const bridge = usbBridgeName();
+  if (bridge) board.info.usb = bridge;
+  hideCompatNotice();
   bootTimes = [];
   syncBoardUi();
   showConsole();
