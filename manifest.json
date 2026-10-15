@@ -1,6 +1,6 @@
 {
   "name": "GSP32",
-  "version": "Version 78 (821e004)",
+  "version": "Version 79 (fe6f14b)",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 15,
   "builds": [
@@ -10,6 +10,16 @@
       "parts": [
         {
           "path": "firmware/gsp32-esp32.bin",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "chipFamily": "ESP32-S3",
+      "improv": true,
+      "parts": [
+        {
+          "path": "firmware/gsp32-esp32s3.bin",
           "offset": 0
         }
       ]
