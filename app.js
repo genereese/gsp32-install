@@ -1691,6 +1691,8 @@ for (const button of wizard.querySelectorAll("[data-action]")) {
 }
 
 connectBtn.addEventListener("click", guard(async () => {
+  // Version 75 (Gene): the version list is fetched again on every Get Started, so a page left open picks up a release
+  loadVersions();
   try {
     await pickPort();
   } catch (err) {
