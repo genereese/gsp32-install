@@ -1,0 +1,11 @@
+name = "gsp32-telemetry"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+account_id = "3d102f222e99f035a8c29073fe6e6300"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "gsp32-telemetry"
+database_id = "cc160c95-a86e-4e56-a5d9-cb212d8e6432"
+
