@@ -12,6 +12,14 @@
   "title": "Code Editor"
  },
  {
+  "key": "wizards",
+  "title": "Insert Wizards"
+ },
+ {
+  "key": "pwm",
+  "title": "Pin, PWM and ADC Wizards"
+ },
+ {
   "key": "pins",
   "title": "Pin Panel"
  },
