@@ -162,7 +162,6 @@ h3 { font-size: 1.05rem; margin: 0 0 0.5rem; }
 .board-id h2 { margin: 0; }
 .board-mac { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); opacity: 0.85; }
 .board-details { letter-spacing: 0.04em; text-transform: none; } /* same muted size as MAC; not shouted */
-.board-privacy { letter-spacing: 0; text-transform: none; opacity: 0.65; font-size: 0.68rem; max-width: 28rem; }
 .step-icon { font-size: 1rem; }
 .hint.small { font-size: 0.88rem; margin: 0; }
 /* Version 38: the red warning sits right under the progress bar (the status line), the same height */

@@ -423,8 +423,6 @@ function syncBoardUi() {
     details.textContent = line;
     setShown(details, !!line);
   }
-  const privacy = $("board-privacy");
-  if (privacy) setShown(privacy, !!(details && details.textContent));
   setup.textContent = address || waiting ? "Change Wi-Fi" : "Set Up Wi-Fi";
   const state = $("board-state");
   state.textContent = !on ? "Not Connected"

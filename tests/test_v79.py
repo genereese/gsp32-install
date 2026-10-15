@@ -1,5 +1,5 @@
 # Version 79: multi-chip install; unsupported chip/flash shows Title-Case warn-box (no write);
-#  subtle board-details + privacy note; board-model telemetry (no MAC) once per connect
+#  subtle board-details; board-model telemetry (no MAC) once per connect
 import sys, os, json, http.server, threading, functools
 from playwright.sync_api import sync_playwright
 here = os.path.dirname(os.path.abspath(__file__)); site = os.path.dirname(here)
@@ -23,11 +23,11 @@ js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 78-fw79 everywhere", html.count("?v=78-fw79") == 3 and "fw77" not in html, str(html.count("?v=78-fw79")))
+check("cache-bust 79-fw79 everywhere", html.count("?v=79-fw79") == 3 and "fw78" not in html, str(html.count("?v=79-fw79")))
 check("no Compatible Boards card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
-check("privacy note near stats", 'id="board-privacy"' in html and "no MAC or personal data" in html and "board-privacy" in css)
+check("no privacy note", 'board-privacy' not in html and 'board-privacy' not in css and "no MAC or personal data" not in html)
 check("compatIssue + showCompatNotice", "compatIssue" in js and "showCompatNotice" in js and "This Board Is Not Supported" in js)
 check("telemetry hook", "reportBoardTelemetry" in js and "gsp32-telemetry.genereese.workers.dev/log" in js)
 
@@ -75,9 +75,8 @@ def run(b, chip, flash_kb=None, usb=None):
     }""")
     details = pg.evaluate("(() => { const el = document.getElementById('board-details'); return el && !el.hidden ? el.textContent : ''; })()")
     mac = pg.evaluate("(() => { const el = document.getElementById('board-mac'); return el && !el.hidden ? el.textContent : ''; })()")
-    privacy = pg.evaluate("(() => { const el = document.getElementById('board-privacy'); return el && !el.hidden ? el.textContent : ''; })()")
     tel = pg.evaluate("window.__telemetry")
-    return pg, log, pg.evaluate("window.__status"), notice, details, mac, details_early, privacy, tel
+    return pg, log, pg.evaluate("window.__status"), notice, details, mac, details_early, tel
 
 ALLOWED = {"chip", "compatible", "revision", "cores", "flash_mb", "psram", "crystal_mhz", "usb_bridge", "flasher_version", "browser"}
 
@@ -106,7 +105,7 @@ with sync_playwright() as p:
     check("footer Flasher Version 79", "Flasher Version 79" in pg.text_content(".flasher-version"))
     check("no Compatible Boards on page", "Compatible Boards" not in body); pg.close()
 
-    pg, log, st, notice, details, mac, early, privacy, tel = run(b, None)
+    pg, log, st, notice, details, mac, early, tel = run(b, None)
     w = [l for l in log if l.startswith("files")]
     check("classic ESP32 gets the 4 MB image at 0", w == ["files 1 size 4194304 at 0 eraseAll true"], str(w))
     check("ESP32 installed", "Installed" in pg.inner_text("body"))
@@ -115,7 +114,7 @@ with sync_playwright() as p:
     check("board details subtle (dual + flash + crystal + CP2102)",
           "Dual Core" in details and "4 MB flash" in details and "40 MHz" in details and "CP2102" in details, details)
     check("USB shown early from getInfo", "CP2102" in early, early)
-    check("privacy note shown with stats", "no MAC or personal data" in privacy, privacy)
+    check("no privacy element on page", pg.evaluate("!document.getElementById('board-privacy')"))
     check_tel("ESP32 telemetry", tel, True, "ESP32")
     if tel:
         body = tel[0]["body"]
@@ -130,7 +129,7 @@ with sync_playwright() as p:
     check("telemetry once per connect", len(tel2) == 1, str(tel2))
     pg.close()
 
-    pg, log, st, notice, details, mac, early, privacy, tel = run(b, "ESP32-S3 (QFN56) (revision v0.2)")
+    pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-S3 (QFN56) (revision v0.2)")
     w = [l for l in log if l.startswith("files")]
     check("ESP32-S3 gets the 16 MB image at 0", w == ["files 1 size 16777216 at 0 eraseAll true"], str(w))
     check("S3 detected in the console", "[ESP32-S3 detected: installing its build]" in pg.inner_text("#console-out"))
@@ -143,19 +142,18 @@ with sync_playwright() as p:
         check("S3 telemetry flash_mb=16", tel[0]["body"].get("flash_mb") == 16, str(tel[0]["body"].get("flash_mb")))
     pg.close()
 
-    pg, log, st, notice, details, mac, early, privacy, tel = run(b, "ESP32-C3 (QFN32) (revision v0.4)")
+    pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-C3 (QFN32) (revision v0.4)")
     check("ESP32-C3: nothing written", not [l for l in log if l.startswith("files")], str(log))
     check("ESP32-C3: compat notice shown", notice and notice["title"] == "This Board Is Not Supported", str(notice))
     check("ESP32-C3: Title Case + chip in text", notice and "This board is ESP32-C3" in notice["text"] and "Nothing was installed" in notice["text"], str(notice))
     check("ESP32-C3: no old clear-error string", "GSP32 runs on ESP32 and ESP32-S3 boards" not in pg.inner_text("body"))
     check("ESP32-C3: Single Core in details", "Single Core" in details, details)
-    check("ESP32-C3: privacy note", "no MAC or personal data" in privacy, privacy)
     check_tel("C3 telemetry", tel, False, "ESP32-C3")
     if tel:
         check("C3 telemetry cores=1", tel[0]["body"].get("cores") == 1, str(tel[0]["body"].get("cores")))
     pg.close()
 
-    pg, log, st, notice, details, mac, early, privacy, tel = run(b, "ESP32-D0WD-V3 (revision v3.1)", flash_kb=2048)
+    pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-D0WD-V3 (revision v3.1)", flash_kb=2048)
     check("small flash ESP32: nothing written", not [l for l in log if l.startswith("files")])
     check("small flash: notice names 2 MB", notice and "2 MB flash" in notice["text"] and "This Board Is Not Supported" == notice["title"], str(notice))
     check("small flash: details show 2 MB", "2 MB flash" in details, details)
@@ -164,13 +162,13 @@ with sync_playwright() as p:
         check("small-flash flash_mb=2", tel[0]["body"].get("flash_mb") == 2, str(tel[0]["body"].get("flash_mb")))
     pg.close()
 
-    pg, log, st, notice, details, mac, early, privacy, tel = run(b, "ESP32-S3 (QFN56) (revision v0.2)", flash_kb=8192)
+    pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-S3 (QFN56) (revision v0.2)", flash_kb=8192)
     check("S3 8 MB: nothing written", not [l for l in log if l.startswith("files")])
     check("S3 8 MB: notice", notice and "8 MB flash" in notice["text"], str(notice))
     check_tel("S3-8MB telemetry", tel, False, "ESP32-S3")
     pg.close()
 
-    pg, log, st, notice, details, mac, early, privacy, tel = run(b, None, usb={"usbVendorId": 0x1a86, "usbProductId": 0x55d3})
+    pg, log, st, notice, details, mac, early, tel = run(b, None, usb={"usbVendorId": 0x1a86, "usbProductId": 0x55d3})
     check("CH343 named from VID/PID", "CH343" in details, details)
     check("CH343 early", "CH343" in early, early)
     if tel:
