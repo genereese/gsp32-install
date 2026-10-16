@@ -10,7 +10,10 @@ fails = 0
 def check(name, ok, extra=""):
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, extra)
 m = json.load(open(os.path.join(site, "manifest.json")))
-fam = {b["chipFamily"]: b["parts"] for b in m["builds"]}
+fam = {}
+for b in m["builds"]: fam.setdefault(b["chipFamily"], b["parts"])  # Version 83: first S3 build is the 16 MB one
+s3_8 = {b["psramMb"]: os.path.getsize(os.path.join(site, b["parts"][0]["path"])) for b in m["builds"] if b.get("flashMb") == 8}
+check("V83: 8 MB S3 builds N8R8 + N8R2, 8 MB each", s3_8 == {8: 0x800000, 2: 0x800000}, str(s3_8))
 check("manifest: ESP32 and ESP32-S3 builds", sorted(fam) == ["ESP32", "ESP32-S3"], str(sorted(fam)))
 check("both at offset 0", all(len(p) == 1 and p[0]["offset"] == 0 for p in fam.values()))
 sz = {f: os.path.getsize(os.path.join(site, p[0]["path"])) for f, p in fam.items()}
@@ -18,16 +21,16 @@ check("ESP32 image 4 MB, S3 image 16 MB", sz == {"ESP32": 0x400000, "ESP32-S3": 
 s3img = open(os.path.join(site, fam["ESP32-S3"][0]["path"]), "rb").read(4)
 check("S3 image starts with a bootloader header at 0", s3img[0] == 0xE9)
 v = json.load(open(os.path.join(site, "versions.json")))
-check("versions.json: Version 82 only", len(v) == 1 and v[0]["label"].startswith("Version 82") and v[0]["manifest"] == "manifest.json")
-# Version 82: Version 81 stays as an unlisted rollback (manifest-v81.json, firmware/v81/), not in versions.json
-rb = json.load(open(os.path.join(site, "manifest-v81.json")))
-check("rollback manifest-v81.json points at firmware/v81 images that exist", all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v81/") for b in rb["builds"] for p in b["parts"]))
-check("rollback not listed in versions.json", all(x["manifest"] != "manifest-v81.json" for x in v))
+check("versions.json: Version 83 only", len(v) == 1 and v[0]["label"].startswith("Version 83") and v[0]["manifest"] == "manifest.json")
+# Version 83: Version 82 stays as an unlisted rollback (manifest-v82.json, firmware/v82/), not in versions.json
+rb = json.load(open(os.path.join(site, "manifest-v82.json")))
+check("rollback manifest-v82.json points at firmware/v82 images that exist", all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v82/") for b in rb["builds"] for p in b["parts"]))
+check("rollback not listed in versions.json", all(x["manifest"] != "manifest-v82.json" for x in v))
 js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 82-fw82 everywhere", html.count("?v=82-fw82") == 3, str(html.count("?v=82-fw82")))
+check("cache-bust 83-fw83 everywhere", html.count("?v=83-fw83") == 3, str(html.count("?v=83-fw83")))
 check("no Compatible Boards card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
@@ -122,13 +125,13 @@ def check_tel(name, tel, expect_compatible, expect_chip_substr=None):
     if "browser" in body:
         check(name + ": browser enum", body["browser"] in ("chrome", "edge", "opera", "brave", "other"), body["browser"])
     if "flasher_version" in body:
-        check(name + ": flasher_version", body["flasher_version"] == "82", body["flasher_version"])
+        check(name + ": flasher_version", body["flasher_version"] == "83", body["flasher_version"])
 
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(); pg.goto("http://127.0.0.1:8789/index.html"); body = pg.inner_text("body")
     check("text names ESP32 and ESP32-S3", "ESP32 and ESP32-S3" in body)
-    check("footer Flasher Version 82", "Flasher Version 82" in pg.text_content(".flasher-version"))
+    check("footer Flasher Version 83", "Flasher Version 83" in pg.text_content(".flasher-version"))
     check("no Compatible Boards on page", "Compatible Boards" not in body); pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None)
@@ -188,10 +191,10 @@ with sync_playwright() as p:
         check("small-flash flash_mb=2", tel[0]["body"].get("flash_mb") == 2, str(tel[0]["body"].get("flash_mb")))
     pg.close()
 
-    pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-S3 (QFN56) (revision v0.2)", flash_kb=8192)
-    check("S3 8 MB: nothing written", not [l for l in log if l.startswith("files")])
-    check("S3 8 MB: notice", notice and "8 MB flash" in notice["text"], str(notice))
-    check_tel("S3-8MB telemetry", tel, False, "ESP32-S3")
+    pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-S3 (QFN56) (revision v0.2)", flash_kb=4096)
+    check("S3 4 MB: nothing written", not [l for l in log if l.startswith("files")])
+    check("S3 4 MB: notice", notice and "4 MB flash" in notice["text"], str(notice))
+    check_tel("S3-4MB telemetry", tel, False, "ESP32-S3")
     pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None, usb={"usbVendorId": 0x1a86, "usbProductId": 0x55d3})

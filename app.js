@@ -928,7 +928,8 @@ function chipFamily(chip) {
   return "";
 }
 // Flash sizes from esptool-js getFlashSize() are in KB (4 MB = 4096, 16 MB = 16384)
-const MIN_FLASH_KB = { "ESP32": 4096, "ESP32-S3": 16384 };
+// Version 83: S3 boards with 8 MB flash have their own images (N8R8 octal PSRAM, N8R2 quad PSRAM)
+const MIN_FLASH_KB = { "ESP32": 4096, "ESP32-S3": 8192 };
 function flashLabel(kb) {
   if (kb == null || kb <= 0) return "an unknown flash size";
   if (kb >= 1024 && kb % 1024 === 0) return (kb / 1024) + " MB flash";
@@ -958,8 +959,8 @@ function showCompatNotice(issue) {
   const flash = (issue.flashKb != null && issue.flashKb > 0) ? flashLabel(issue.flashKb) : "";
   title.textContent = "This Board Is Not Supported";
   text.textContent = flash
-    ? ("This board is " + chip + " with " + flash + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 16 MB flash (PSRAM recommended). Nothing was installed.")
-    : ("This board is " + chip + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 16 MB flash (PSRAM recommended). Nothing was installed.");
+    ? ("This board is " + chip + " with " + flash + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 8 MB flash (PSRAM recommended). Nothing was installed.")
+    : ("This board is " + chip + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 8 MB flash (PSRAM recommended). Nothing was installed.");
   if (box.hidden || box.shutting) foldOpen(box);
   appendConsole("[Not supported: " + chip + (flash ? ", " + flash : "") + "]\n");
 }
@@ -1029,7 +1030,9 @@ async function readBoardExtras(link) {
         const joined = features.join(" ");
         if (/Dual Core/i.test(joined)) info.cores = "Dual Core";
         else if (/Single Core/i.test(joined)) info.cores = "Single Core";
-        if (/Embedded PSRAM/i.test(joined)) info.psram = "Embedded PSRAM";
+        const ps = joined.match(/Embedded PSRAM (\d+)MB/i);
+        if (ps) { info.psram = ps[1] + " MB PSRAM"; info.psramMb = +ps[1]; }
+        else if (/Embedded PSRAM/i.test(joined)) info.psram = "Embedded PSRAM";
       }
     } catch (err) {}
     // CPU MHz is derived from the chip type (not the crystal). Crystal is not shown or sent.
@@ -1135,10 +1138,44 @@ async function probeBoardOnConnect() {
   }
 }
 
+// Version 83: among a family's builds, the one for this board's flash size and PSRAM. Builds may carry "flashMb"
+//  (16 when absent) and "psramMb" (8 = octal, 2 = quad). An S3's in-package PSRAM size (efuse) tells octal (8 MB)
+//  from quad (2 MB); when it can't be read, an in-page ask (askPsram).
+// Version 83: in-page ask for the PSRAM size (8 or 2); closing it (Escape) means 8, the tested N8R8 image
+function askPsram() {
+  const box = $("psram-modal");
+  if (!box || typeof box.showModal !== "function") return Promise.resolve(8);
+  return new Promise((resolve) => {
+    let picked = 8;
+    const pick = (mb) => () => { picked = mb; box.close(); };
+    $("psram-8").onclick = pick(8);
+    $("psram-2").onclick = pick(2);
+    box.addEventListener("close", () => resolve(picked), { once: true });
+    box.showModal();
+  });
+}
+async function pickBuild(builds, family) {
+  const list = builds.filter((item) => item.chipFamily === family);
+  if (family !== "ESP32-S3") return list[0] || null;  // builds without flashMb are 16 MB (older manifests)
+  const info = board.info || {};
+  const flashMb = info.flashKb ? Math.floor(info.flashKb / 1024) : 16;
+  const sized = list.filter((item) => (item.flashMb || 16) <= flashMb)
+    .sort((a, b) => (b.flashMb || 16) - (a.flashMb || 16));
+  if (!sized.length) return null;
+  const best = sized.filter((item) => (item.flashMb || 16) === (sized[0].flashMb || 16));
+  if (best.length === 1) return best[0];
+  let want = info.psramMb;
+  if (want !== 2 && want !== 8) {
+    want = await askPsram();
+    appendConsole("[PSRAM size not readable: " + (want === 2 ? "N8R2" : "N8R8") + " chosen]\n");
+  }
+  return best.find((item) => (item.psramMb || 8) === want) || best[0];
+}
 async function loadFirmware(family) {
   const { manifest, manifestUrl } = manifestCache || await loadManifest();
-  const build = manifest.builds.find((item) => item.chipFamily === family);
-  if (!build) throw new Error("This firmware has no build for " + family + ".");
+  const build = await pickBuild(manifest.builds, family);
+  if (!build) throw new Error("This firmware has no build for " + family + " with this flash size.");
+  if (build.label) appendConsole("[Image: " + build.label + (build.untested ? " (untested)" : "") + "]\n");
   const files = [];
   for (const part of build.parts) {
     const response = await fetch(new URL(part.path, manifestUrl), { cache: "no-store" });

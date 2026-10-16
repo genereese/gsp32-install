@@ -11,10 +11,10 @@ def check(name, ok, extra=""):
 
 js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
-check("cache-bust 82-fw82", html.count("?v=82-fw82") == 3)
+check("cache-bust 83-fw83", html.count("?v=83-fw83") == 3)
 check("probeBoardOnConnect present", "probeBoardOnConnect" in js and "Reading board info" in js)
 check("Install disabled when compatIssue", "board.compatIssue" in js and "install.disabled" in js)
-check("footer Flasher Version 82", "Flasher Version 82" in html)
+check("footer Flasher Version 83", "Flasher Version 83" in html)
 
 def connect_only(b, chip=None, flash_kb=None, usb=None):
     pg = b.new_page(viewport={"width": 1100, "height": 900})
@@ -119,11 +119,11 @@ with sync_playwright() as p:
     check("C3: still one telemetry after Install click", len(tel3) == 1, str(tel3))
     pg.close()
 
-    # S3 8 MB: notice on connect
-    pg, details, mac, notice, disabled, tel, log = connect_only(b, "ESP32-S3 (QFN56) (revision v0.2)", flash_kb=8192)
-    check("S3-8MB connect: notice", notice and "8 MB flash" in notice["text"], str(notice))
-    check("S3-8MB connect: Install disabled", disabled is True)
-    check("S3-8MB connect: telemetry", len(tel) == 1 and tel[0]["body"].get("compatible") is False)
+    # S3 4 MB: notice on connect (Version 83: 8 MB S3 boards are supported)
+    pg, details, mac, notice, disabled, tel, log = connect_only(b, "ESP32-S3 (QFN56) (revision v0.2)", flash_kb=4096)
+    check("S3-4MB connect: notice", notice and "4 MB flash" in notice["text"], str(notice))
+    check("S3-4MB connect: Install disabled", disabled is True)
+    check("S3-4MB connect: telemetry", len(tel) == 1 and tel[0]["body"].get("compatible") is False)
     pg.close()
 
     # Good S3: PSRAM in stats on connect

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=82-fw82">
+  <link rel="stylesheet" href="style.css?v=83-fw83">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -202,8 +202,18 @@
     </form>
   </dialog>
 
-  <script type="module" src="app.js?v=82-fw82"></script>
-  <p class="flasher-version hint">Flasher Version 82</p>
-  <script src="tour.js?v=82-fw82" defer></script>
+  <!-- Version 83 (Gene): only when an 8 MB ESP32-S3's PSRAM size can't be read; never shown when detection works -->
+  <dialog id="psram-modal" class="modal" aria-labelledby="psram-modal-title">
+    <h3 id="psram-modal-title">Which Memory Does Your Board Have?</h3>
+    <p>We couldn't read it from the board. It's usually printed on the module, for example N8R8 or N8R2.</p>
+    <div class="actions stack">
+      <button id="psram-8" class="primary" type="button">8 MB PSRAM (N8R8)</button>
+      <button id="psram-2" type="button">2 MB PSRAM (N8R2)</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.js?v=83-fw83"></script>
+  <p class="flasher-version hint">Flasher Version 83</p>
+  <script src="tour.js?v=83-fw83" defer></script>
 </body>
 </html>
