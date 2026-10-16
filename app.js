@@ -1128,7 +1128,7 @@ async function probeBoardOnConnect() {
 
 // Version 83: among a family's builds, the one for this board's flash size and PSRAM. Builds may carry "flashMb"
 //  (16 when absent) and "psramMb" (8 = octal, 2 = quad). An S3's in-package PSRAM size (efuse) tells octal (8 MB)
-//  from quad (2 MB); when it can't be read, an 8 MB board gets the N8R8 (octal) image, the common module.
+//  from quad (2 MB); only when it can't be read is the user asked (Gene, V83).
 function pickBuild(builds, family) {
   const list = builds.filter((item) => item.chipFamily === family);
   if (family !== "ESP32-S3" || list.length <= 1 && !(list[0] && list[0].flashMb)) return list[0] || null;
@@ -1139,8 +1139,12 @@ function pickBuild(builds, family) {
   if (!sized.length) return null;
   const best = sized.filter((item) => (item.flashMb || 16) === (sized[0].flashMb || 16));
   if (best.length === 1) return best[0];
-  const want = info.psramMb === 2 ? 2 : 8;
-  if (!info.psramMb) appendConsole("[PSRAM type not readable: using the octal PSRAM (N8R8) image]\n");
+  let want = info.psramMb;
+  if (want !== 2 && want !== 8) {
+    // Only when the probe could not read the PSRAM size: ask (OK = 8 MB octal, the common module)
+    want = window.confirm("GSP32 could not read this board's PSRAM size.\n\nOK: 8 MB PSRAM (N8R8, most 8 MB boards)\nCancel: 2 MB PSRAM (N8R2, untested)") ? 8 : 2;
+    appendConsole("[PSRAM not readable: chosen " + (want === 8 ? "N8R8" : "N8R2") + "]\n");
+  }
   return best.find((item) => (item.psramMb || 8) === want) || best[0];
 }
 async function loadFirmware(family) {
