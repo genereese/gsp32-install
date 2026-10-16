@@ -1,6 +1,6 @@
 {
   "name": "GSP32",
-  "version": "Version 83 (fb027fe), rollback",
+  "version": "Version 84 (80da752)",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 15,
   "builds": [
@@ -9,7 +9,7 @@
       "improv": true,
       "parts": [
         {
-          "path": "firmware/v83/gsp32-esp32.bin",
+          "path": "firmware/v84/gsp32-esp32.bin",
           "offset": 0
         }
       ]
@@ -19,7 +19,7 @@
       "improv": true,
       "parts": [
         {
-          "path": "firmware/v83/gsp32-esp32s3.bin",
+          "path": "firmware/v84/gsp32-esp32s3.bin",
           "offset": 0
         }
       ],
@@ -35,7 +35,7 @@
       "label": "ESP32-S3 8 MB (N8R8)",
       "parts": [
         {
-          "path": "firmware/v83/gsp32-esp32s3-n8r8.bin",
+          "path": "firmware/v84/gsp32-esp32s3-n8r8.bin",
           "offset": 0
         }
       ]
@@ -49,7 +49,7 @@
       "untested": true,
       "parts": [
         {
-          "path": "firmware/v83/gsp32-esp32s3-n8r2.bin",
+          "path": "firmware/v84/gsp32-esp32s3-n8r2.bin",
           "offset": 0
         }
       ]

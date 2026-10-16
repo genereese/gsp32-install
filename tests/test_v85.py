@@ -11,7 +11,7 @@ fails = 0
 def check(name, ok, extra=""):
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, extra)
 stable = [e for e in json.load(open(os.path.join(site, "versions.json"))) if e.get("channel", "stable") == "stable"]
-with_beta = stable + [{"version": "beta123", "manifest": "manifest.json", "label": "Version 85 (beta123), beta", "channel": "beta"}]
+with_beta = stable + [{"version": "beta123", "manifest": "manifest.json", "label": "Version 86 (beta123), beta", "channel": "beta"}]
 def show(pg):
     pg.click("#connect"); pg.wait_for_timeout(100)
     pg.evaluate("window.__port.setSignals({requestToSend: true}).then(() => window.__port.setSignals({requestToSend: false}))")
@@ -23,7 +23,7 @@ with sync_playwright() as p:
         pg.route("**/vendor/esptool-js-0.5.7.js", lambda r, _q=None: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
         pg.route("**/versions.json", lambda r, _req=None, v=versions: r.fulfill(body=json.dumps(v), content_type="application/json"))
         pg.goto("http://127.0.0.1:8785/index.html"); pg.wait_for_timeout(500)
-        check(label + ": Stable is the default", pg.input_value("#release-channel") == "stable" and pg.text_content("#version").strip() == "Version 84", pg.text_content("#version"))
+        check(label + ": Stable is the default", pg.input_value("#release-channel") == "stable" and pg.text_content("#version").strip() == "Version 85", pg.text_content("#version"))
         first = pg.evaluate("document.querySelector('[data-step=prep] h3').nextElementSibling.querySelector('select')?.id")
         check(label + ": dropdown first in the install step", first == "release-channel")
         disabled = pg.evaluate("document.querySelector('#release-channel option[value=beta]').disabled")
@@ -32,11 +32,11 @@ with sync_playwright() as p:
         else:
             check("beta: Beta enabled", not disabled)
             show(pg); pg.select_option("#release-channel", "beta"); pg.wait_for_timeout(300)
-            check("beta: plain Version 85, no note", pg.text_content("#version").strip() == "Version 85" and pg.locator("#beta-note").count() == 0, pg.text_content("#version"))
+            check("beta: plain Version 86, no note", pg.text_content("#version").strip() == "Version 86" and pg.locator("#beta-note").count() == 0, pg.text_content("#version"))
             if SHOTS:
                 pg.locator("#wizard").screenshot(path=SHOTS + "/flasher-release-beta.png")
             pg.select_option("#release-channel", "stable"); pg.wait_for_timeout(300)
-            check("beta: back to Stable", pg.text_content("#version").strip() == "Version 84")
+            check("beta: back to Stable", pg.text_content("#version").strip() == "Version 85")
             if SHOTS:
                 pg.locator("#wizard").screenshot(path=SHOTS + "/flasher-release-stable.png")
         pg.close()
