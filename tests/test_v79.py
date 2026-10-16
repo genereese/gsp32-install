@@ -10,7 +10,10 @@ fails = 0
 def check(name, ok, extra=""):
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, extra)
 m = json.load(open(os.path.join(site, "manifest.json")))
-fam = {b["chipFamily"]: b["parts"] for b in m["builds"]}
+fam = {}
+for b in m["builds"]: fam.setdefault(b["chipFamily"], b["parts"])  # Version 83: first S3 build is the 16 MB one
+s3_8 = {b["psramMb"]: os.path.getsize(os.path.join(site, b["parts"][0]["path"])) for b in m["builds"] if b.get("flashMb") == 8}
+check("V83: 8 MB S3 builds N8R8 + N8R2, 8 MB each", s3_8 == {8: 0x800000, 2: 0x800000}, str(s3_8))
 check("manifest: ESP32 and ESP32-S3 builds", sorted(fam) == ["ESP32", "ESP32-S3"], str(sorted(fam)))
 check("both at offset 0", all(len(p) == 1 and p[0]["offset"] == 0 for p in fam.values()))
 sz = {f: os.path.getsize(os.path.join(site, p[0]["path"])) for f, p in fam.items()}
@@ -188,10 +191,10 @@ with sync_playwright() as p:
         check("small-flash flash_mb=2", tel[0]["body"].get("flash_mb") == 2, str(tel[0]["body"].get("flash_mb")))
     pg.close()
 
-    pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-S3 (QFN56) (revision v0.2)", flash_kb=8192)
-    check("S3 8 MB: nothing written", not [l for l in log if l.startswith("files")])
-    check("S3 8 MB: notice", notice and "8 MB flash" in notice["text"], str(notice))
-    check_tel("S3-8MB telemetry", tel, False, "ESP32-S3")
+    pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-S3 (QFN56) (revision v0.2)", flash_kb=4096)
+    check("S3 4 MB: nothing written", not [l for l in log if l.startswith("files")])
+    check("S3 4 MB: notice", notice and "4 MB flash" in notice["text"], str(notice))
+    check_tel("S3-4MB telemetry", tel, False, "ESP32-S3")
     pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None, usb={"usbVendorId": 0x1a86, "usbProductId": 0x55d3})
