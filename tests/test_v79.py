@@ -18,12 +18,16 @@ check("ESP32 image 4 MB, S3 image 16 MB", sz == {"ESP32": 0x400000, "ESP32-S3": 
 s3img = open(os.path.join(site, fam["ESP32-S3"][0]["path"]), "rb").read(4)
 check("S3 image starts with a bootloader header at 0", s3img[0] == 0xE9)
 v = json.load(open(os.path.join(site, "versions.json")))
-check("versions.json: Version 80 only", len(v) == 1 and v[0]["label"].startswith("Version 80") and v[0]["manifest"] == "manifest.json")
+check("versions.json: Version 81 only", len(v) == 1 and v[0]["label"].startswith("Version 81") and v[0]["manifest"] == "manifest.json")
+# Version 81: Version 80 stays as an unlisted rollback (manifest-v80.json, firmware/v80/), not in versions.json
+rb = json.load(open(os.path.join(site, "manifest-v80.json")))
+check("rollback manifest-v80.json points at firmware/v80 images that exist", all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v80/") for b in rb["builds"] for p in b["parts"]))
+check("rollback not listed in versions.json", all(x["manifest"] != "manifest-v80.json" for x in v))
 js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 81-fw80 everywhere", html.count("?v=81-fw80") == 3, str(html.count("?v=81-fw80")))
+check("cache-bust 81-fw81 everywhere", html.count("?v=81-fw81") == 3, str(html.count("?v=81-fw81")))
 check("no Compatible Boards card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
@@ -118,13 +122,13 @@ def check_tel(name, tel, expect_compatible, expect_chip_substr=None):
     if "browser" in body:
         check(name + ": browser enum", body["browser"] in ("chrome", "edge", "opera", "brave", "other"), body["browser"])
     if "flasher_version" in body:
-        check(name + ": flasher_version", body["flasher_version"] == "80", body["flasher_version"])
+        check(name + ": flasher_version", body["flasher_version"] == "81", body["flasher_version"])
 
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(); pg.goto("http://127.0.0.1:8789/index.html"); body = pg.inner_text("body")
     check("text names ESP32 and ESP32-S3", "ESP32 and ESP32-S3" in body)
-    check("footer Flasher Version 80", "Flasher Version 80" in pg.text_content(".flasher-version"))
+    check("footer Flasher Version 81", "Flasher Version 81" in pg.text_content(".flasher-version"))
     check("no Compatible Boards on page", "Compatible Boards" not in body); pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None)

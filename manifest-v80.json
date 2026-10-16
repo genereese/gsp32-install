@@ -1,0 +1,28 @@
+{
+  "name": "GSP32",
+  "version": "Version 80 (f953985), rollback",
+  "new_install_prompt_erase": true,
+  "new_install_improv_wait_time": 15,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "improv": true,
+      "parts": [
+        {
+          "path": "firmware/v80/gsp32-esp32.bin",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "chipFamily": "ESP32-S3",
+      "improv": true,
+      "parts": [
+        {
+          "path": "firmware/v80/gsp32-esp32s3.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
