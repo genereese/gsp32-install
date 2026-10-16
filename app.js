@@ -1156,7 +1156,7 @@ function askPsram() {
 }
 async function pickBuild(builds, family) {
   const list = builds.filter((item) => item.chipFamily === family);
-  if (family !== "ESP32-S3" || list.length <= 1 && !(list[0] && list[0].flashMb)) return list[0] || null;
+  if (family !== "ESP32-S3") return list[0] || null;  // builds without flashMb are 16 MB (older manifests)
   const info = board.info || {};
   const flashMb = info.flashKb ? Math.floor(info.flashKb / 1024) : 16;
   const sized = list.filter((item) => (item.flashMb || 16) <= flashMb)
