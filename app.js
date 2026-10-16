@@ -916,7 +916,8 @@ function chipFamily(chip) {
   return "";
 }
 // Flash sizes from esptool-js getFlashSize() are in KB (4 MB = 4096, 16 MB = 16384)
-const MIN_FLASH_KB = { "ESP32": 4096, "ESP32-S3": 16384 };
+// Version 83: S3 boards with 8 MB flash have their own images (N8R8 octal PSRAM, N8R2 quad PSRAM)
+const MIN_FLASH_KB = { "ESP32": 4096, "ESP32-S3": 8192 };
 function flashLabel(kb) {
   if (kb == null || kb <= 0) return "an unknown flash size";
   if (kb >= 1024 && kb % 1024 === 0) return (kb / 1024) + " MB flash";
@@ -946,8 +947,8 @@ function showCompatNotice(issue) {
   const flash = (issue.flashKb != null && issue.flashKb > 0) ? flashLabel(issue.flashKb) : "";
   title.textContent = "This Board Is Not Supported";
   text.textContent = flash
-    ? ("This board is " + chip + " with " + flash + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 16 MB flash (PSRAM recommended). Nothing was installed.")
-    : ("This board is " + chip + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 16 MB flash (PSRAM recommended). Nothing was installed.");
+    ? ("This board is " + chip + " with " + flash + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 8 MB flash (PSRAM recommended). Nothing was installed.")
+    : ("This board is " + chip + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 8 MB flash (PSRAM recommended). Nothing was installed.");
   if (box.hidden || box.shutting) foldOpen(box);
   appendConsole("[Not supported: " + chip + (flash ? ", " + flash : "") + "]\n");
 }
@@ -1017,7 +1018,9 @@ async function readBoardExtras(link) {
         const joined = features.join(" ");
         if (/Dual Core/i.test(joined)) info.cores = "Dual Core";
         else if (/Single Core/i.test(joined)) info.cores = "Single Core";
-        if (/Embedded PSRAM/i.test(joined)) info.psram = "Embedded PSRAM";
+        const ps = joined.match(/Embedded PSRAM (\d+)MB/i);
+        if (ps) { info.psram = ps[1] + " MB PSRAM"; info.psramMb = +ps[1]; }
+        else if (/Embedded PSRAM/i.test(joined)) info.psram = "Embedded PSRAM";
       }
     } catch (err) {}
     // CPU MHz is derived from the chip type (not the crystal). Crystal is not shown or sent.
@@ -1123,10 +1126,28 @@ async function probeBoardOnConnect() {
   }
 }
 
+// Version 83: among a family's builds, the one for this board's flash size and PSRAM. Builds may carry "flashMb"
+//  (16 when absent) and "psramMb" (8 = octal, 2 = quad). An S3's in-package PSRAM size (efuse) tells octal (8 MB)
+//  from quad (2 MB); when it can't be read, an 8 MB board gets the N8R8 (octal) image, the common module.
+function pickBuild(builds, family) {
+  const list = builds.filter((item) => item.chipFamily === family);
+  if (family !== "ESP32-S3" || list.length <= 1 && !(list[0] && list[0].flashMb)) return list[0] || null;
+  const info = board.info || {};
+  const flashMb = info.flashKb ? Math.floor(info.flashKb / 1024) : 16;
+  const sized = list.filter((item) => (item.flashMb || 16) <= flashMb)
+    .sort((a, b) => (b.flashMb || 16) - (a.flashMb || 16));
+  if (!sized.length) return null;
+  const best = sized.filter((item) => (item.flashMb || 16) === (sized[0].flashMb || 16));
+  if (best.length === 1) return best[0];
+  const want = info.psramMb === 2 ? 2 : 8;
+  if (!info.psramMb) appendConsole("[PSRAM type not readable: using the octal PSRAM (N8R8) image]\n");
+  return best.find((item) => (item.psramMb || 8) === want) || best[0];
+}
 async function loadFirmware(family) {
   const { manifest, manifestUrl } = manifestCache || await loadManifest();
-  const build = manifest.builds.find((item) => item.chipFamily === family);
-  if (!build) throw new Error("This firmware has no build for " + family + ".");
+  const build = pickBuild(manifest.builds, family);
+  if (!build) throw new Error("This firmware has no build for " + family + " with this flash size.");
+  if (build.label) appendConsole("[Image: " + build.label + (build.untested ? " (untested)" : "") + "]\n");
   const files = [];
   for (const part of build.parts) {
     const response = await fetch(new URL(part.path, manifestUrl), { cache: "no-store" });
