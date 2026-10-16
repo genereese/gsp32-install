@@ -9,3 +9,10 @@ binding = "DB"
 database_name = "gsp32-telemetry"
 database_id = "cc160c95-a86e-4e56-a5d9-cb212d8e6432"
 
+
+# V84: burst limit per hashed client IP (Cloudflare rate-limit binding; the Worker falls back to its hourly limit without it)
+[[unsafe.bindings]]
+name = "RL"
+type = "ratelimit"
+namespace_id = "8401"
+simple = { limit = 10, period = 60 }

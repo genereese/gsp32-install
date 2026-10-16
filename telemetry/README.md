@@ -31,7 +31,7 @@ Unknown keys or missing required fields -> 400; bad origin -> 403; too big -> 41
 
 `GET /summary` with `Authorization: Bearer <READ_KEY>` -> totals, counts by chip/flash/psram/compatible, top USB bridges, top countries.
 
-`POST /visit` (same Origin rule, 10/min per IP) body optional `{"path":"/gsp32-install/"}` -> increments the UTC-hour bucket for that path. Stores only hour + path + count.
+`POST /visit` (same Origin rule) body optional `{"path":"/gsp32-install/"}` -> increments the UTC-hour bucket for that path. Stores only hour + path + count.
 
 `POST /install` (same Origin rule, body empty or `{}`) -> increments the completed-install count for the UTC hour. Count only.
 
@@ -44,3 +44,9 @@ npx wrangler@3 d1 execute gsp32-telemetry --remote --file schema.sql
 npx wrangler@3 d1 migrations apply gsp32-telemetry --remote
 npx wrangler@3 deploy
 ```
+
+## Rate limits (V84)
+Per client per hour: /log 30, /visit 30, /install 10, plus a burst limit of 10 per minute across them (Cloudflare
+rate-limit binding `RL`). The client is a SHA-256 of its IP with a random per-isolate salt; the hourly counts live
+only in the isolate's memory and are cleared every hour. Nothing about the client is stored in D1 (migration 0003
+drops the old `rl` table). Over the limit -> 429 with Retry-After.

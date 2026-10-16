@@ -1,6 +1,5 @@
 // GSP32 flasher board telemetry. Stores no IP, MAC or user agent.
 const ORIGIN = "https://genereese.github.io";
-const RATE = 10, WINDOW_MS = 60_000;
 
 const cors = { "Access-Control-Allow-Origin": ORIGIN, "Access-Control-Allow-Methods": "POST", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Max-Age": "86400", "Vary": "Origin" };
 const json = (o, s = 200, h = {}) => new Response(JSON.stringify(o), { status: s, headers: { "Content-Type": "application/json", ...h } });
@@ -24,18 +23,32 @@ function clean(b) {
   };
 }
 
-// Rate limit: 10/min per IP. The IP is never stored, only a salted, truncated hash
-// bucketed by minute, kept in D1 for at most ~2 minutes.
-async function limited(req, env) {
+// Rate limits (V84): per client per hour and per endpoint, plus a burst limit. The client is a SHA-256 of its IP with
+// a random salt made when this isolate starts (never written anywhere, so the hashes can't be matched later). The
+// hourly counts live only in this isolate's memory and drop when the hour ends; the burst limit is Cloudflare's
+// rate-limit binding (RL, 10 per minute) when it is bound. Nothing about the client is stored in D1.
+const HOURLY = { log: 30, visit: 30, install: 10 };
+let SALT = null;  // made on the first request (random values are not allowed at global scope)
+const counts = new Map();
+let countsHour = -1;
+async function clientKey(req) {
+  if (SALT === null) SALT = crypto.getRandomValues(new Uint8Array(16)).join(".");
   const ip = req.headers.get("cf-connecting-ip") || "";
-  const minute = Math.floor(Date.now() / WINDOW_MS);
-  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode((env.RL_SALT || "gsp32") + ip + ":" + minute));
-  const k = btoa(String.fromCharCode(...new Uint8Array(d).slice(0, 12)));
-  const row = await env.DB.prepare("INSERT INTO rl (k,n,t) VALUES (?,1,?) ON CONFLICT(k) DO UPDATE SET n=n+1 RETURNING n")
-    .bind(k, minute).first();
-  if (Math.random() < 0.05) await env.DB.prepare("DELETE FROM rl WHERE t < ?").bind(minute - 1).run();
-  return row.n > RATE;
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(SALT + "|" + ip));
+  return btoa(String.fromCharCode(...new Uint8Array(d).slice(0, 12)));
 }
+async function limited(req, env, kind) {
+  const key = await clientKey(req);
+  if (env.RL) {
+    try { const { success } = await env.RL.limit({ key }); if (!success) return true; } catch { /* binding unavailable: hourly limit only */ }
+  }
+  const hour = Math.floor(Date.now() / 3_600_000);
+  if (hour !== countsHour) { counts.clear(); countsHour = hour; }
+  const k = kind + ":" + key, n = (counts.get(k) || 0) + 1;
+  counts.set(k, n);
+  return n > HOURLY[kind];
+}
+const tooMany = () => json({ error: "rate" }, 429, { ...cors, "Retry-After": String(3600 - Math.floor(Date.now() / 1000) % 3600) });
 
 function eq(a, b) { if (a.length !== b.length) return false; let r = 0; for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i); return r === 0; }
 
@@ -46,7 +59,7 @@ export default {
       if (req.headers.get("Origin") !== ORIGIN) return json({ error: "origin" }, 403);
       if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
       if (req.method !== "POST") return json({ error: "method" }, 405, cors);
-      if (await limited(req, env)) return json({ error: "rate" }, 429, cors);
+      if (await limited(req, env, "log")) return tooMany();
       const text = await req.text();
       if (text.length > 1024) return json({ error: "size" }, 413, cors);
       let r; try { r = clean(JSON.parse(text)); } catch { r = null; }
@@ -60,7 +73,7 @@ export default {
       if (req.headers.get("Origin") !== ORIGIN) return json({ error: "origin" }, 403);
       if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
       if (req.method !== "POST") return json({ error: "method" }, 405, cors);
-      if (await limited(req, env)) return json({ error: "rate" }, 429, cors);
+      if (await limited(req, env, "visit")) return tooMany();
       const text = await req.text();
       if (text.length > 256) return json({ error: "size" }, 413, cors);
       let path = "/";
@@ -81,7 +94,7 @@ export default {
       if (req.headers.get("Origin") !== ORIGIN) return json({ error: "origin" }, 403);
       if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
       if (req.method !== "POST") return json({ error: "method" }, 405, cors);
-      if (await limited(req, env)) return json({ error: "rate" }, 429, cors);
+      if (await limited(req, env, "install")) return tooMany();
       const text = await req.text();
       if (text.length > 64 || (text && text.trim() !== "{}")) return json({ error: "invalid" }, 400, cors);
       const hour = Math.floor(Date.now() / 3_600_000);
