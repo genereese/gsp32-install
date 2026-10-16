@@ -11,15 +11,15 @@ def check(name, ok, extra=""):
 
 js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
-check("cache-bust 81-fw81", html.count("?v=81-fw81") == 3)
+check("cache-bust 82-fw82", html.count("?v=82-fw82") == 3)
 check("probeBoardOnConnect present", "probeBoardOnConnect" in js and "Reading board info" in js)
 check("Install disabled when compatIssue", "board.compatIssue" in js and "install.disabled" in js)
-check("footer Flasher Version 81", "Flasher Version 81" in html)
+check("footer Flasher Version 82", "Flasher Version 82" in html)
 
 def connect_only(b, chip=None, flash_kb=None, usb=None):
     pg = b.new_page(viewport={"width": 1100, "height": 900})
     pg.add_init_script(path=here + "/mock.js")
-    init = "window.__ver='47'; window.__log=[]; window.__telemetry=[];"
+    init = "window.__ver='47'; window.__log=[]; window.__telemetry=[]; window.__installs=0;"
     if chip: init += "window.__chip=%s;" % json.dumps(chip)
     if flash_kb is not None: init += "window.__flashKb=%s;" % json.dumps(flash_kb)
     if usb is not None: init += "window.__usb=%s;" % json.dumps(usb)
@@ -27,7 +27,8 @@ def connect_only(b, chip=None, flash_kb=None, usb=None):
     (() => { const real = window.fetch.bind(window);
       window.fetch = (input, init) => {
         const url = typeof input === 'string' ? input : (input && input.url) || '';
-        if (url.indexOf('gsp32-telemetry') >= 0) {
+        if (url.indexOf('/install') >= 0 && url.indexOf('gsp32-telemetry') >= 0) { window.__installs++; return Promise.resolve(new Response('{}')); }
+        if (url.indexOf('gsp32-telemetry') >= 0 && url.indexOf('/log') >= 0) {
           let body = null;
           try { body = JSON.parse(init && init.body || '{}'); } catch (e) { body = init && init.body; }
           window.__telemetry.push({ url, method: (init && init.method) || 'GET', body });
@@ -98,6 +99,8 @@ with sync_playwright() as p:
     pg.click("#install-btn"); pg.check("#erase-ok"); pg.click("#start-install"); pg.wait_for_timeout(6000)
     tel2 = pg.evaluate("window.__telemetry")
     check("ESP32 install: still one telemetry", len(tel2) == 1, str(tel2))
+    inst = pg.evaluate("window.__installs || 0")
+    check("ESP32 install: one /install beacon", inst == 1, str(inst))
     check("ESP32 install: wrote image", any(l.startswith("files") for l in pg.evaluate("window.__log") if isinstance(l, str)))
     pg.close()
 

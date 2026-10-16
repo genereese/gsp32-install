@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=81-fw81">
+  <link rel="stylesheet" href="style.css?v=82-fw82">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -191,6 +191,8 @@
       <label class="field" for="wifi-password">Password
         <input id="wifi-password" type="password" autocomplete="off" spellcheck="false">
       </label>
+      <!-- Version 82 (Gene): the browser's eye icon goes away once the field loses focus -->
+      <label class="check show-password" for="wifi-show"><input id="wifi-show" type="checkbox"> Show Password</label>
       <p id="wifi-modal-status" class="board-status" hidden></p>
       <p id="wifi-error" class="error-line" hidden></p>
       <div class="actions end">
@@ -210,8 +212,8 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=81-fw81"></script>
-  <p class="flasher-version hint">Flasher Version 81</p>
-  <script src="tour.js?v=81-fw81" defer></script>
+  <script type="module" src="app.js?v=82-fw82"></script>
+  <p class="flasher-version hint">Flasher Version 82</p>
+  <script src="tour.js?v=82-fw82" defer></script>
 </body>
 </html>

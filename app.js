@@ -26,6 +26,18 @@ const wifiModalStatus = $("wifi-modal-status");
 const wifiModalConnect = $("wifi-modal-connect");
 const wifiModalCancel = $("wifi-modal-cancel");
 const wifiPassword = $("wifi-password");
+// Version 82: Show Password toggles the field (each Wi-Fi window starts hidden)
+const wifiShow = $("wifi-show");
+function setShowPassword(on) {
+  wifiShow.checked = on;
+  wifiPassword.type = on ? "text" : "password";
+}
+wifiShow.addEventListener("change", () => {
+  const at = wifiPassword.selectionStart;
+  setShowPassword(wifiShow.checked);
+  wifiPassword.focus();
+  if (at !== null) wifiPassword.setSelectionRange(at, at);
+});
 const wifiError = $("wifi-error");
 const wifiRescan = $("wifi-rescan");
 const wifiConnect = $("wifi-connect");
@@ -1527,6 +1539,10 @@ async function install() {
     flashNoteSet(null);
     bootTimes = [];
     appendConsole("[Installed. Restarting the board.]\n");
+    // Completed-install counter: count only (no MAC/IP), fire-and-forget, never delays anything
+    try {
+      fetch("https://gsp32-telemetry.genereese.workers.dev/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", mode: "cors", keepalive: true }).catch(() => {});
+    } catch (err) {}
     await resetBoard();
     setStatus(installName() + " Installed", "ok");
     // Version 75 (Gene): what to do next, so a newcomer knows the Set Up Wi-Fi button is the way to the Web UI
@@ -1695,6 +1711,7 @@ function syncWifiConnect() {
   wifiModalConnect.disabled = busy;
   wifiModalCancel.disabled = busy;
   wifiPassword.disabled = busy;
+  wifiShow.disabled = busy;
 }
 
 async function startWifi(fresh) {
@@ -1838,6 +1855,7 @@ function openWifiModal() {
   }
   $("wifi-modal-title").textContent = "Wi-Fi Password for " + picked.value;
   wifiPassword.value = "";
+  setShowPassword(false);
   setFolded(wifiError, false);
   modalWait("");
   wifiModal.showModal();
@@ -2083,6 +2101,13 @@ window.addEventListener("pagehide", () => {
 });
 
 loadVersions();
+// Hourly visit counter: one fire-and-forget POST per page load (stores only UTC hour + path). Never blocks the page.
+try {
+  fetch("https://gsp32-telemetry.genereese.workers.dev/visit", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: location.pathname }), mode: "cors", keepalive: true,
+  }).catch(() => {});
+} catch (err) {}
 syncConsoleButtons();
 
 // For the page tests (Playwright): the slide helper and the console writer
