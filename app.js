@@ -14,7 +14,6 @@ const $ = (id) => document.getElementById(id);
 const wizard = $("wizard");
 const versionSelect = $("version");
 const release_channel = $("release-channel");
-const beta_note = $("beta-note");
 // Version 85: the versions.json entries of each channel (an entry without "channel" is Stable)
 let release_versions = { stable: null, beta: null };
 const eraseOk = $("erase-ok");
@@ -913,19 +912,17 @@ async function loadVersions() {
   syncStart();
 }
 
-// The Beta option says when there is no beta right now; the pick sets the version (and manifest) to install
+// The Beta option is disabled when there is no beta; the pick sets the version (and manifest) to install
 function releaseChannelUpdate() {
   const beta_option = release_channel.querySelector('option[value="beta"]');
   beta_option.disabled = !release_versions.beta;
-  beta_option.textContent = release_versions.beta ? "Beta (Newest, Less Tested)" : "Beta (None Right Now)";
   if ((release_channel.value === "beta") && !(release_versions.beta)) release_channel.value = "stable";
   const channel = release_channel.value;
   const picked = release_versions[channel];
   if (picked !== latest) manifestCache = null;
   latest = picked;
-  beta_note.hidden = (channel !== "beta");
   const number = latest ? String(latest.label || latest.version).match(/Version (\d+(?:\.\d+)?)/) : null;
-  versionSelect.textContent = number ? "Version " + number[1] + ((channel === "beta") ? " Beta" : "") : latest ? String(latest.label || latest.version) : "No Version Found";
+  versionSelect.textContent = number ? "Version " + number[1] : latest ? String(latest.label || latest.version) : "No Version Found";
   versionsReady = !!latest;
   syncStart();
 }

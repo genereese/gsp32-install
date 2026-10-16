@@ -28,15 +28,15 @@ with sync_playwright() as p:
         check(label + ": dropdown first in the install step", first == "release-channel")
         disabled = pg.evaluate("document.querySelector('#release-channel option[value=beta]').disabled")
         if label == "no beta":
-            check("no beta: Beta disabled, None Right Now", disabled and "None Right Now" in pg.text_content("#release-channel"))
+            check("no beta: plain Beta, disabled", disabled and pg.text_content("#release-channel option[value=beta]").strip() == "Beta")
         else:
             check("beta: Beta enabled", not disabled)
             show(pg); pg.select_option("#release-channel", "beta"); pg.wait_for_timeout(300)
-            check("beta: Version 85 Beta and the note", pg.text_content("#version").strip() == "Version 85 Beta" and pg.is_hidden("#beta-note") is False, pg.text_content("#version"))
+            check("beta: plain Version 85, no note", pg.text_content("#version").strip() == "Version 85" and pg.locator("#beta-note").count() == 0, pg.text_content("#version"))
             if SHOTS:
                 pg.locator("#wizard").screenshot(path=SHOTS + "/flasher-release-beta.png")
             pg.select_option("#release-channel", "stable"); pg.wait_for_timeout(300)
-            check("beta: back to Stable", pg.text_content("#version").strip() == "Version 84" and pg.is_hidden("#beta-note"))
+            check("beta: back to Stable", pg.text_content("#version").strip() == "Version 84")
             if SHOTS:
                 pg.locator("#wizard").screenshot(path=SHOTS + "/flasher-release-stable.png")
         pg.close()
