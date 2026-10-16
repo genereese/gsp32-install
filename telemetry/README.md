@@ -31,9 +31,14 @@ Unknown keys or missing required fields -> 400; bad origin -> 403; too big -> 41
 
 `GET /summary` with `Authorization: Bearer <READ_KEY>` -> totals, counts by chip/flash/psram/compatible, top USB bridges, top countries.
 
+`POST /visit` (same Origin rule, 10/min per IP) body optional `{"path":"/gsp32-install/"}` -> increments the UTC-hour bucket for that path. Stores only hour + path + count.
+
+`GET /visits?hours=N` (bearer READ_KEY; N 1-2160, default 24) -> `{hours,total:{visits,installs},hourly:[{hour,visits,installs}],paths}`. Installs = board telemetry rows (one per connect probe) in that hour.
+
 ## Deploy
 ```
 export CLOUDFLARE_ACCOUNT_ID=3d102f222e99f035a8c29073fe6e6300 CLOUDFLARE_API_TOKEN=...
 npx wrangler@3 d1 execute gsp32-telemetry --remote --file schema.sql
+npx wrangler@3 d1 migrations apply gsp32-telemetry --remote
 npx wrangler@3 deploy
 ```

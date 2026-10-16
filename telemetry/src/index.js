@@ -56,6 +56,44 @@ export default {
         .bind(Date.now(), r.chip, r.revision, r.cores, r.flash_mb, r.psram, r.crystal_mhz, r.usb_bridge, r.compatible, r.flasher_version, r.browser, country).run();
       return json({ ok: true }, 200, cors);
     }
+    if (url.pathname === "/visit") {
+      if (req.headers.get("Origin") !== ORIGIN) return json({ error: "origin" }, 403);
+      if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+      if (req.method !== "POST") return json({ error: "method" }, 405, cors);
+      if (await limited(req, env)) return json({ error: "rate" }, 429, cors);
+      const text = await req.text();
+      if (text.length > 256) return json({ error: "size" }, 413, cors);
+      let path = "/";
+      if (text) {
+        let b; try { b = JSON.parse(text); } catch { return json({ error: "invalid" }, 400, cors); }
+        if (!b || typeof b !== "object" || Array.isArray(b) || Object.keys(b).some(k => k !== "path")) return json({ error: "invalid" }, 400, cors);
+        if (b.path !== undefined) {
+          if (typeof b.path !== "string") return json({ error: "invalid" }, 400, cors);
+          path = b.path.replace(/[^\w.\/-]/g, "").slice(0, 64) || "/";
+          if (!path.startsWith("/")) path = "/" + path;
+        }
+      }
+      const hour = Math.floor(Date.now() / 3_600_000);
+      await env.DB.prepare("INSERT INTO visits (hour,path,n) VALUES (?,?,1) ON CONFLICT(hour,path) DO UPDATE SET n=n+1").bind(hour, path).run();
+      return json({ ok: true }, 200, cors);
+    }
+    if (url.pathname === "/visits" && req.method === "GET") {
+      const auth = req.headers.get("Authorization") || "";
+      if (!env.READ_KEY || !eq(auth, "Bearer " + env.READ_KEY)) return json({ error: "unauthorized" }, 401);
+      const hours = Math.min(Math.max(parseInt(url.searchParams.get("hours") || "24", 10) || 24, 1), 24 * 90);
+      const now = Math.floor(Date.now() / 3_600_000), from = now - hours + 1;
+      const [v, i] = await Promise.all([
+        env.DB.prepare("SELECT hour, SUM(n) visits FROM visits WHERE hour >= ? GROUP BY hour").bind(from).all(),
+        env.DB.prepare("SELECT ts / 3600000 hour, COUNT(*) installs FROM boards WHERE ts >= ? GROUP BY 1").bind(from * 3_600_000).all(),
+      ]);
+      const map = new Map();
+      for (let h = from; h <= now; h++) map.set(h, { hour: new Date(h * 3_600_000).toISOString(), visits: 0, installs: 0 });
+      for (const r of v.results) if (map.has(r.hour)) map.get(r.hour).visits = r.visits;
+      for (const r of i.results) if (map.has(r.hour)) map.get(r.hour).installs = r.installs;
+      const rows = [...map.values()];
+      const paths = await env.DB.prepare("SELECT path, SUM(n) visits FROM visits WHERE hour >= ? GROUP BY 1 ORDER BY 2 DESC LIMIT 20").bind(from).all();
+      return json({ hours, total: { visits: rows.reduce((a, r) => a + r.visits, 0), installs: rows.reduce((a, r) => a + r.installs, 0) }, hourly: rows, paths: paths.results });
+    }
     if (url.pathname === "/summary" && req.method === "GET") {
       const auth = req.headers.get("Authorization") || "";
       if (!env.READ_KEY || !eq(auth, "Bearer " + env.READ_KEY)) return json({ error: "unauthorized" }, 401);
