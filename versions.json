@@ -3,5 +3,11 @@
     "version": "80da752",
     "manifest": "manifest.json",
     "label": "Version 84 (80da752), latest"
+  },
+  {
+    "version": "af151ff",
+    "manifest": "manifest-beta.json",
+    "label": "Version 85 (af151ff), beta",
+    "channel": "beta"
   }
 ]

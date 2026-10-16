@@ -10,7 +10,7 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 fails = 0
 def check(name, ok, extra=""):
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, extra)
-stable = json.load(open(os.path.join(site, "versions.json")))
+stable = [e for e in json.load(open(os.path.join(site, "versions.json"))) if e.get("channel", "stable") == "stable"]
 with_beta = stable + [{"version": "beta123", "manifest": "manifest.json", "label": "Version 85 (beta123), beta", "channel": "beta"}]
 def show(pg):
     pg.click("#connect"); pg.wait_for_timeout(100)

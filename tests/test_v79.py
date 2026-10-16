@@ -21,7 +21,8 @@ check("ESP32 image 4 MB, S3 image 16 MB", sz == {"ESP32": 0x400000, "ESP32-S3": 
 s3img = open(os.path.join(site, fam["ESP32-S3"][0]["path"]), "rb").read(4)
 check("S3 image starts with a bootloader header at 0", s3img[0] == 0xE9)
 v = json.load(open(os.path.join(site, "versions.json")))
-check("versions.json: Version 84 only", len(v) == 1 and v[0]["label"].startswith("Version 84") and v[0]["manifest"] == "manifest.json")
+st = [e for e in v if e.get("channel", "stable") == "stable"]; bt = [e for e in v if e.get("channel") == "beta"]
+check("versions.json: Stable Version 84 only (+ at most one Beta)", len(st) == 1 and st[0]["label"].startswith("Version 84") and st[0]["manifest"] == "manifest.json" and len(bt) <= 1)
 # Version 84: Version 83 stays as the single unlisted rollback (manifest-v83.json, firmware/v83/, all four images), not in versions.json
 rb = json.load(open(os.path.join(site, "manifest-v83.json")))
 check("rollback manifest-v83.json points at firmware/v83 images that exist", all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v83/") for b in rb["builds"] for p in b["parts"]))

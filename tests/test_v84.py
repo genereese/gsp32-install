@@ -11,5 +11,5 @@ check("plain HTTP" in html and "home network" in html, "plain-HTTP home-network 
 rb = json.load(open(os.path.join(site, "manifest-v83.json")))
 paths = [p["path"] for b in rb["builds"] for p in b["parts"]]
 check(len(paths) == 4 and all(p.startswith("firmware/v83/") and os.path.exists(os.path.join(site, p)) for p in paths), "V83 rollback: 4 images %r" % paths)
-check(sorted(n for n in os.listdir(site) if n.startswith("manifest")) == ["manifest-v83.json", "manifest.json"] and os.listdir(os.path.join(site, "firmware")).count("v82") == 0, "single rollback")
+check(sorted(n for n in os.listdir(site) if n.startswith("manifest")) == ["manifest-beta.json", "manifest-v83.json", "manifest.json"] and os.listdir(os.path.join(site, "firmware")).count("v82") == 0, "single rollback")
 print("FAILS", fails); sys.exit(1 if fails else 0)
