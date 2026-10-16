@@ -16,3 +16,12 @@ name = "RL"
 type = "ratelimit"
 namespace_id = "8401"
 simple = { limit = 10, period = 60 }
+
+# V84: per-client hourly counts in memory (one Durable Object per hashed IP; it never uses storage)
+[[durable_objects.bindings]]
+name = "LIMITER"
+class_name = "Limiter"
+
+[[migrations]]
+tag = "v84-limiter"
+new_sqlite_classes = ["Limiter"]

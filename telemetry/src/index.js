@@ -24,29 +24,48 @@ function clean(b) {
 }
 
 // Rate limits (V84): per client per hour and per endpoint, plus a burst limit. The client is a SHA-256 of its IP with
-// a random salt made when this isolate starts (never written anywhere, so the hashes can't be matched later). The
+// a salt (secret RL_SALT, else a fixed one) and the UTC day, so a key changes every day and is never written. The
 // hourly counts live only in this isolate's memory and drop when the hour ends; the burst limit is Cloudflare's
 // rate-limit binding (RL, 10 per minute) when it is bound. Nothing about the client is stored in D1.
 const HOURLY = { log: 30, visit: 30, install: 10 };
-let SALT = null;  // made on the first request (random values are not allowed at global scope)
 const counts = new Map();
 let countsHour = -1;
-async function clientKey(req) {
-  if (SALT === null) SALT = crypto.getRandomValues(new Uint8Array(16)).join(".");
+async function clientKey(req, env) {
   const ip = req.headers.get("cf-connecting-ip") || "";
-  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(SALT + "|" + ip));
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode((env.RL_SALT || "gsp32-rl") + "|" + Math.floor(Date.now() / 86_400_000) + "|" + ip));
   return btoa(String.fromCharCode(...new Uint8Array(d).slice(0, 12)));
 }
 async function limited(req, env, kind) {
-  const key = await clientKey(req);
+  const key = await clientKey(req, env);
   if (env.RL) {
-    try { const { success } = await env.RL.limit({ key }); if (!success) return true; } catch { /* binding unavailable: hourly limit only */ }
+    try { const { success } = await env.RL.limit({ key }); if (!success) return true; } catch { /* binding unavailable */ }
   }
   const hour = Math.floor(Date.now() / 3_600_000);
+  if (env.LIMITER) {
+    // One Durable Object per hashed client: its counts are in memory only (no storage calls) and every request from
+    // that client reaches the same one, wherever it lands
+    try {
+      const stub = env.LIMITER.get(env.LIMITER.idFromName(key));
+      const r = await stub.fetch("https://limiter/hit?kind=" + kind + "&hour=" + hour);
+      const { n } = await r.json();
+      return n > HOURLY[kind];
+    } catch { /* fall back to this isolate's memory */ }
+  }
   if (hour !== countsHour) { counts.clear(); countsHour = hour; }
   const k = kind + ":" + key, n = (counts.get(k) || 0) + 1;
   counts.set(k, n);
   return n > HOURLY[kind];
+}
+// Hourly counts for one hashed client, in memory only (never written to storage); gone when the hour changes or the
+// object is evicted
+export class Limiter {
+  constructor() { this.hour = -1; this.counts = {}; }
+  async fetch(req) {
+    const u = new URL(req.url), hour = Number(u.searchParams.get("hour")), kind = u.searchParams.get("kind") || "";
+    if (hour !== this.hour) { this.hour = hour; this.counts = {}; }
+    this.counts[kind] = (this.counts[kind] || 0) + 1;
+    return new Response(JSON.stringify({ n: this.counts[kind] }), { headers: { "Content-Type": "application/json" } });
+  }
 }
 const tooMany = () => json({ error: "rate" }, 429, { ...cors, "Retry-After": String(3600 - Math.floor(Date.now() / 1000) % 3600) });
 
