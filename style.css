@@ -336,6 +336,7 @@ main .card, main .board-help, main .wizard, main .console-card, main .console-ou
 .console-line button:hover:not(:disabled) { transform: translateY(calc(-50% - 1px)); }
 .console-line input:disabled { background: #eef0f3; color: #8a94a3; }
 .flasher-version { text-align: center; margin: 8px 0 24px; font-size: 0.85rem; }
+.security-note { text-align: center; max-width: 560px; margin: 24px auto 0; font-size: 0.85rem; }
 @keyframes tour-fade { from { opacity: 0.2; } to { opacity: 1; } }
 .console-line input { font: inherit; padding: 8px 84px 8px 10px; min-height: 42px; border: 1px solid var(--line); border-radius: 8px; background: #fff; box-sizing: border-box; transition: background 0.2s, color 0.2s; }
 .console-line input:disabled { background: #eef0f3; color: #8a94a3; cursor: not-allowed; }
@@ -347,7 +348,7 @@ main .card, main .board-help, main .wizard, main .console-card, main .console-ou
 .console-line input::placeholder { transition: opacity 0.2s; }
 .tour-divider { max-width: 100%; }
 .flasher-version { margin-top: 24px; }
-body:has(#console:not([hidden])) .tour-divider, body:has(#console:not([hidden])) .flasher-version { display: none; }
+body:has(#console:not([hidden])) .tour-divider, body:has(#console:not([hidden])) .flasher-version, body:has(#console:not([hidden])) .security-note { display: none; }
 /* Version 50 (Gene): gallery: icons centered in their buttons, every slide the same height */
 .icon-close, .tour-nav { display: inline-flex; align-items: center; justify-content: center; }
 .icon-close svg, .tour-nav svg { display: block; flex: none; }

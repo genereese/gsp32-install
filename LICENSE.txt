@@ -1,0 +1,24 @@
+GSP32 Firmware License
+
+Copyright (c) 2026 Gene Reese. All rights reserved.
+
+1. Permission. You may use the GSP32 firmware (the firmware images published by the GSP32 flasher, including the web
+   interface built into them) free of charge, for any purpose, personal or commercial, and you may copy and
+   redistribute it, provided that it is unmodified and this license is included with it.
+
+2. No source code. The firmware is distributed in binary form only. Its source code is closed and is not licensed
+   under these terms. You may not modify, decompile, disassemble or reverse engineer the firmware, except to the
+   extent that applicable law expressly permits it despite this limitation.
+
+3. Third-party components. The firmware contains open-source components (among them MicroPython, MIT License, and
+   ESP-IDF, Apache License 2.0). Those components remain under their own licenses, and nothing here limits your
+   rights under them.
+
+4. No warranty. THE FIRMWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+   LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+   SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE FIRMWARE OR THE USE OF OR OTHER DEALINGS IN THE FIRMWARE,
+   INCLUDING DAMAGE TO HARDWARE OR LOSS OF DATA.
+
+5. Network use. The firmware's web interface uses plain HTTP and is meant for a trusted home network. Do not expose it
+   to the internet.
