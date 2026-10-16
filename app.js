@@ -387,7 +387,7 @@ function syncBoardUi() {
   const gsp32 = board.kind === "gsp32";
   // Version 42.1: a half-finished install (boot loop, or the saved note of an install that never ended) offers Recover
   const broken = board.kind === "broken" || (!gsp32 && flashNoteMatches());
-  install.disabled = !on || busy;
+  install.disabled = !on || busy || !!board.compatIssue;
   install.textContent = broken ? "Recover GSP32" : gsp32 ? "Reinstall GSP32" : "Install GSP32";
   // While installing, Wi-Fi and the web UI button are gone (not greyed); they come back after
   setShown(setup, gsp32 && !flashing);
@@ -975,6 +975,18 @@ function usbBridgeName() {
   const u = usbBridgeInfo();
   return u ? u.name : "";
 }
+// Max rated CPU MHz from the chip name only. Unknown families are omitted — never guessed.
+function cpuMhzFromChip(chip) {
+  const name = String(chip || "");
+  if (/ESP32-S3/i.test(name)) return 240;
+  if (/ESP32-S2/i.test(name)) return 240;
+  if (/ESP32-C3/i.test(name)) return 160;
+  if (/ESP32-C6/i.test(name)) return 160;
+  if (/ESP32-H2/i.test(name)) return 96;
+  // Classic ESP32 (D0WD, WROOM, etc.): not S/C/H/P variants
+  if (/ESP32/i.test(name) && !/ESP32-(S|C|H|P)/i.test(name)) return 240;
+  return 0;
+}
 function formatBoardDetails() {
   const parts = [];
   const info = board.info || {};
@@ -984,7 +996,8 @@ function formatBoardDetails() {
       ? (info.flashKb / 1024) + " MB flash" : info.flashKb + " KB flash");
   }
   if (info.psram) parts.push(info.psram);
-  if (info.crystalMhz) parts.push(info.crystalMhz + " MHz");
+  const cpu = info.cpuMhz || cpuMhzFromChip(board.chip);
+  if (cpu) parts.push(cpu + " MHz");
   if (info.usb) parts.push(info.usb);
   return parts.join(" · ");
 }
@@ -1007,11 +1020,10 @@ async function readBoardExtras(link) {
         if (/Embedded PSRAM/i.test(joined)) info.psram = "Embedded PSRAM";
       }
     } catch (err) {}
-    try {
-      const mhz = await withTimeout(link.loader.chip.getCrystalFreq(link.loader), READ_MS, "Reading the crystal");
-      if (mhz != null && mhz > 0) info.crystalMhz = mhz;
-    } catch (err) {}
+    // CPU MHz is derived from the chip type (not the crystal). Crystal is not shown or sent.
   }
+  const cpu = cpuMhzFromChip(board.chip || (link && link.chip) || "");
+  if (cpu) info.cpuMhz = cpu;
   board.info = info;
   return info;
 }
@@ -1044,7 +1056,6 @@ function reportBoardTelemetry(compatible) {
       ? info.flashKb / 1024 : Math.round((info.flashKb / 1024) * 100) / 100;
   }
   if (info.psram) body.psram = true;
-  if (info.crystalMhz) body.crystal_mhz = info.crystalMhz;
   if (info.usbLabel) body.usb_bridge = info.usbLabel;
   const verEl = document.querySelector(".flasher-version");
   const ver = verEl && (verEl.textContent || "").match(/Flasher Version\s+(\d+(?:\.\d+)?)/i);
@@ -1060,6 +1071,56 @@ function reportBoardTelemetry(compatible) {
       keepalive: true,
     }).catch(() => {});
   } catch (err) {}
+}
+
+
+// Version 80: read chip/flash/features as soon as the port is picked (before Install). Leaves the board
+//  running again so the console works; Install reconnects cleanly (bootloader session is not kept).
+async function releaseLoader(link) {
+  if (link && link.transport) await link.transport.disconnect().catch(() => {});
+  await reopenPort(FLASH_BAUD).catch(() => {});
+  await resetBoard().catch(() => setRunState().catch(() => {}));
+}
+async function probeBoardOnConnect() {
+  if (!portOpen()) return;
+  board.compatIssue = null;
+  hideCompatNotice();
+  setBusy(true);
+  syncConsoleButtons();
+  appendConsole("\n[Reading board info...]\n");
+  const terminal = { clean() {}, writeLine() {}, write() {} };
+  let link = null;
+  try {
+    await stopReading();
+    try {
+      link = await connectLoader(terminal);
+    } catch (err) {
+      appendConsole("[Could not read the board yet (" + (err && err.message ? err.message : err) + "). Install can try again.]\n");
+      await resetLink(link).catch(() => {});
+      await setRunState().catch(() => {});
+      return;
+    }
+    const chip = link.chip || board.chip || "";
+    board.chip = chip;
+    await readBoardExtras(link);
+    const flashKb = (board.info && board.info.flashKb) || null;
+    const issue = compatIssue(chip, flashKb);
+    board.compatIssue = issue;
+    reportBoardTelemetry(!issue);
+    syncBoardUi();
+    if (issue) {
+      showCompatNotice(issue);
+      appendConsole("[This board is not supported for GSP32. Install is disabled.]\n");
+    } else if (chip) {
+      appendConsole("[Board: " + chipShort(chip) + (flashKb ? ", " + flashLabel(flashKb) : "") + "]\n");
+    }
+  } finally {
+    await releaseLoader(link).catch(() => {});
+    startReading();
+    setBusy(false);
+    syncBoardUi();
+    syncConsoleButtons();
+  }
 }
 
 async function loadFirmware(family) {
@@ -1261,7 +1322,9 @@ async function connectLoader(terminal) {
     link.chip = await withTimeout(loader.main("default_reset"), CONNECT_MS, "Connecting to the board");
     board.chip = (await withTimeout(loader.chip.getChipDescription(loader), READ_MS, "Reading the chip")) || link.chip;
     board.mac = (await withTimeout(loader.chip.readMac(loader), READ_MS, "Reading the MAC")) || "";
-    flashNoteSet(Object.assign(flashNoteGet() || {}, { mac: board.mac }));
+    // Only refresh MAC on an in-progress install note — never create one during a connect probe
+    const note = flashNoteGet();
+    if (note) flashNoteSet(Object.assign(note, { mac: board.mac }));
     await readBoardExtras(link);
     syncBoardUi();
   } catch (err) {
@@ -1302,6 +1365,11 @@ async function drainInput(transport, quietMs = 100, maxMs = 500) {
 }
 // Step 2: port, then flash with esptool-js on the same open port
 async function install() {
+  if (board.compatIssue) {
+    showCompatNotice(board.compatIssue);
+    syncBoardUi();
+    return;
+  }
   showActions(false);
   showStep("flash");
   startFlashGuard();
@@ -1349,8 +1417,10 @@ async function install() {
       const flashKb = (board.info && board.info.flashKb) || null;
       board.chip = chip;
       const issue = compatIssue(chip, flashKb);
+      // Telemetry already fired on connect probe; only send here if probe never ran
       reportBoardTelemetry(!issue);
       if (issue) {
+        board.compatIssue = issue;
         await link.transport.disconnect();
         await reopenPort(FLASH_BAUD).catch(() => {});
         await setRunState().catch(() => {});
@@ -1864,7 +1934,7 @@ $("console-webui").addEventListener("click", (event) => {
   if (event.currentTarget.classList.contains("waiting")) event.preventDefault();
 });
 $("install-btn").addEventListener("click", () => {
-  if (busy) return;
+  if (busy || board.compatIssue) return;
   eraseOk.checked = false;
   syncStart();
   showStep("prep");
@@ -1911,7 +1981,7 @@ connectBtn.addEventListener("click", guard(async () => {
     throw err;
   }
   showBoardHelp(false);
-  Object.assign(board, { installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {}, telemetrySent: false });
+  Object.assign(board, { installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {}, telemetrySent: false, compatIssue: null });
   // USB bridge is known from the open port (no guess); keep it after the board-state reset
   const bridge = usbBridgeInfo();
   if (bridge) { board.info.usb = bridge.name; board.info.usbLabel = bridge.label; }
@@ -1922,6 +1992,8 @@ connectBtn.addEventListener("click", guard(async () => {
   showConsole();
   // Version 42.1: an install that never finished (page refreshed mid-install) offers Recover GSP32 right away
   if (flashNoteGet()) setStatus("Incomplete Install Detected. Click Recover GSP32 to erase the board and install again.", "error");
+  // Version 80: probe chip/flash now so stats and an incompatible notice appear before Install
+  await probeBoardOnConnect();
 }));
 function showBoardHelp(open) {
   const help = $("board-help"), link = $("no-board");

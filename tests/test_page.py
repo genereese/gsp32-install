@@ -38,18 +38,27 @@ with sync_playwright() as p:
     pg.click("#connect"); pg.wait_for_timeout(400)
     check("cancelled picker opens the checklist", pg.is_visible("#board-help") and pg.is_visible("#connect"))
     pg.evaluate("(() => { navigator.serial.requestPort = window.__realReq; })()")
-    pg.click("#connect"); pg.wait_for_timeout(400)
+    pg.click("#connect")
+    # Version 80: connect probes the chip; wait for stats (or notice) before asserting
+    pg.wait_for_function("""() => {
+      const d = document.getElementById('board-details');
+      return d && !d.hidden && /MHz/.test(d.textContent || '');
+    }""", timeout=15000)
+    pg.wait_for_timeout(200)
     check("steps fold away, card open with console", not pg.is_visible("#installer") and pg.is_visible("#console") and pg.is_visible("#console-out"))
-    pg.wait_for_timeout(400)
     check("board card and console are two separate cards", pg.evaluate("(() => { const a = document.getElementById('console'), c = document.getElementById('console-card'); return a.classList.contains('card') && c.classList.contains('card') && !a.contains(c) && c.contains(document.getElementById('console-out')) && !a.contains(document.getElementById('console-out')); })()"))
     def fill():
         return pg.evaluate("[Math.round(innerHeight - document.getElementById('console-card').getBoundingClientRect().bottom - scrollY), document.getElementById('console-out').offsetHeight]")
     f1 = fill(); pg.set_viewport_size({"width": 1280, "height": 700}); pg.wait_for_timeout(200); f2 = fill(); pg.set_viewport_size({"width": 1280, "height": 380}); pg.wait_for_timeout(200); f3 = fill()
     pg.set_viewport_size({"width": 1280, "height": 900}); pg.wait_for_timeout(200)
     check("console fills the window height, resizes, at least 200px", 8 <= f1[0] <= 24 and 8 <= f2[0] <= 24 and f2[1] < f1[1] and f3[1] == 200, str((f1, f2, f3)))
-    check("non-GSP32 board: Install GSP32 is the primary button", "primary" in pg.get_attribute("#install-btn", "class"))
-    check("unknown board: title ESP32 Board, only Install shown", pg.inner_text("#board-chip") == "ESP32 Board" and not pg.is_visible("#board-mac")
-          and pg.inner_text("#install-btn") == "Install GSP32" and not pg.is_visible("#wifi-setup") and not pg.is_visible("#console-webui"), pg.inner_text("#board-state"))
+    check("V80 connect probe: chip, MAC, CPU MHz stats",
+          pg.inner_text("#board-chip").startswith("ESP32-D0WD-V3") and "F8:B3:B7:22:05:E8" in pg.inner_text("#board-mac")
+          and "240 MHz" in pg.inner_text("#board-details") and "Dual Core" in pg.inner_text("#board-details"),
+          pg.inner_text("#board-chip") + " | " + pg.inner_text("#board-details"))
+    # After probe the board is reset to run; mock GSP32 firmware boots — Install stays available
+    pg.wait_for_timeout(800)
+    check("after connect boot: Install button present", pg.is_visible("#install-btn") and "GSP32" in pg.inner_text("#install-btn"), pg.inner_text("#install-btn"))
     y0 = pg.evaluate("document.getElementById('console-out').getBoundingClientRect().top")
     heights = []
     pg.click("#install-btn")
@@ -132,7 +141,7 @@ with sync_playwright() as p:
     log = pg.evaluate("window.__log")
     check("Disconnect: run state, card gone, steps and Get Started back", log[-1] == "close dtr=false rts=false" and not pg.is_visible("#console") and pg.is_visible("#installer") and pg.is_visible("#connect"))
     # error path
-    pg.click("#connect"); pg.wait_for_timeout(300)
+    pg.click("#connect"); pg.wait_for_timeout(2500)
     pg.evaluate("window.__failFlash = true")
     pg.click("#install-btn"); pg.check("#erase-ok"); pg.click("#start-install")
     pg.wait_for_timeout(1500)
@@ -144,14 +153,24 @@ with sync_playwright() as p:
     check("latest build only, as plain text (no dropdown)", pg.inner_text("#version") == LISTED and pg.locator("select").count() == 0, pg.inner_text("#version"))
     check("no page errors", not errors, str(errors))
     o = b.new_page(viewport={"width": 1280, "height": 900}); o.add_init_script(path=here + "/mock.js"); o.add_init_script("window.__other = true")
-    o.goto(U); o.wait_for_timeout(300); o.click("#connect"); o.wait_for_timeout(400); o.click("#reset"); o.wait_for_timeout(21500)
+    o.add_init_script("try { localStorage.clear(); } catch (e) {}")
+    o.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
+    o.goto(U); o.evaluate("localStorage.clear()"); o.wait_for_timeout(300); o.click("#connect")
+    o.wait_for_function("""() => {
+      const d = document.getElementById('board-details');
+      const out = document.getElementById('console-out');
+      return (d && !d.hidden && d.textContent) || (out && /Reading board info|Could not read|Board:/.test(out.textContent||''));
+    }""", timeout=15000)
+    o.wait_for_timeout(400)
+    o.click("#reset"); o.wait_for_timeout(21500)
     check("other firmware: No GSP32 Found, only Install, no Improv sent", not o.is_visible("#wifi-setup") and not o.is_visible("#console-webui") and o.inner_text("#board-state") == "No GSP32 Found"
-          and o.inner_text("#install-btn") == "Install GSP32" and not o.evaluate("window.__info") and o.inner_text("#board-chip") == "ESP32 Board", o.inner_text("#board-state"))
+          and o.inner_text("#install-btn") == "Install GSP32" and not o.evaluate("window.__info")
+          and "ESP32" in o.inner_text("#board-chip"), o.inner_text("#board-state") + " | " + o.inner_text("#board-chip"))
     o.screenshot(path=shots + "/06-other.png")
     f = b.new_page(viewport={"width": 1280, "height": 900}); f.add_init_script(path=here + "/mock.js")
     f.add_init_script("window.__flashDelay = 300; ")
     f.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
-    f.goto(U); f.wait_for_timeout(300); f.click("#connect"); f.wait_for_timeout(400)
+    f.goto(U); f.wait_for_timeout(300); f.click("#connect"); f.wait_for_timeout(2500)
     check("no warning before flashing", not f.is_visible("#flash-warn"))
     f.click("#install-btn"); f.check("#erase-ok"); f.click("#start-install"); f.wait_for_timeout(600)
     wb = f.locator("#flash-warn").bounding_box()
@@ -171,7 +190,13 @@ with sync_playwright() as p:
     f.wait_for_timeout(800); check("V39: green board box back after the install", f.is_visible("#board-state"))
     f.wait_for_timeout(1000); check("Set Up Wi-Fi back after the install", f.is_visible("#wifi-setup"))
     k = b.new_page(viewport={"width": 1280, "height": 900}); k.add_init_script(path=here + "/mock.js")
-    k.goto(U); k.wait_for_timeout(300); k.click("#connect"); k.wait_for_timeout(1500)
+    k.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
+    k.goto(U); k.wait_for_timeout(300); k.click("#connect")
+    k.wait_for_function("""() => {
+      const d = document.getElementById('board-details');
+      return d && !d.hidden && d.textContent;
+    }""", timeout=15000)
+    k.wait_for_timeout(500)
     k.evaluate("window.__bootGap = 2000"); k.click("#reset"); k.wait_for_timeout(900)
     mid = (k.inner_text("#board-status") if k.is_visible("#board-status") else "", k.is_visible("#install-btn"))
     k.wait_for_timeout(2500)
