@@ -1,29 +1,23 @@
-# GSP32 installer
+# GSP32 Installer
 
-A static page that installs GSP32 (a MicroPython web UI for classic ESP32 boards) from the browser with
-its own install window and [esptool-js](https://github.com/espressif/esptool-js) 0.5.7 (in vendor/): Chrome or ## Getting Started
+Install [GSP32](https://genereese.github.io/gsp32-install/), a MicroPython web UI for ESP32 and ESP32-S3 boards, straight from your browser. No tools to install.
 
-1. Open the page in Chrome or Edge on a desktop computer. Plug the board in with a USB data cable.
-2. Click **Install GSP32**. In the window, pick a version, read the warning, tick **I Understand This Erases the Board**,
-   and click **Choose Port and Install**. Keep the tab open until it finishes.
-3. Choose **Set Up Wi-Fi** (pick a network, enter its password; sent over USB with Improv Wi-Fi serial and saved only
-   when the board connects) or **USB Only**.
-4. After Wi-Fi setup the board restarts; the window shows its address with **Open GSP32 Web UI** and **Connect to
-   Serial Console**. Set a web UI password on the first visit.
+## Supported Boards
 
-One serial port stays open through the whole window. Opening and closing it leaves the board's reset lines in the
-run state (DTR and RTS off), so the page never resets the board or holds it in reset; it resets the board only after
-flashing, after Wi-Fi setup, and with **Reset Board**.
+- ESP32 (classic) with 4 MB of flash or more
+- ESP32-S3 with 8 MB or 16 MB of flash
 
-thin 10 s" prompt to set up Wi-Fi there.
+The installer detects your board and picks the right firmware automatically.
 
-## Contents
+## Getting Started
 
-- `index.html`, `style.css`, `app.js` - the page
-- `versions.json` - versions the dropdown offers; `manifest.json` - the parts to write for each version
-- `vendor/esptool-js-0.5.7.js` - esptool-js bundle (Apache-2.0, `vendor/esptool-js-LICENSE`)
-- `firmware/gsp32-esp32.bin` - merged 4 MB image from GSP32 (formerly ESP32-httpd) 62600ef (no Wi-Fi settings, no passwords, no
-  personal files: the file system holds only boot.py, main.py and the shipped web pages)
+1. Open the [installer](https://genereese.github.io/gsp32-install/) in Chrome or Edge on a desktop computer, and plug the board in with a USB data cable.
+2. Click **Install GSP32**, choose your board's port, and confirm that installing erases the board. Keep the tab open until it finishes.
+3. Choose **Set Up Wi-Fi** to connect the board to your network, or **USB Only**.
+4. Open the board's web UI from the link shown, and choose whether to set a password on your first visit.
 
-## Release screenshots (Version 46)
-Each release runs `/workspace/review/venv/bin/python release_shots.py http://192.168.2.22` (the DEV board only) to regenerate `shots/*.jpg` and `shots/index.json` for the What You Get strip (`tour.js`).
+GSP32 serves its web UI over plain HTTP and is meant for your home network, not the open internet.
+
+## License
+
+The firmware is free to use and redistribute unmodified. See [LICENSE.txt](LICENSE.txt). The installer uses [esptool-js](https://github.com/espressif/esptool-js) (Apache-2.0, see `vendor/esptool-js-LICENSE`).
