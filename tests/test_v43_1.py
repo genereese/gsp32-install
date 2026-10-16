@@ -28,7 +28,9 @@ with sync_playwright() as p:
     pg.click("#connect"); pg.wait_for_timeout(300)
     pg.evaluate("window.__say(%r)" % RUNNING.replace("\\r\\n", "\r\n"))
     pg.wait_for_timeout(8000)
-    check("running board: no Improv, no Ctrl-C byte sent in 8 s", pg.evaluate("window.__pk") == 0 and pg.evaluate("window.__ctrlc") == 0, pg.evaluate("[window.__pk, window.__ctrlc]"))
+    # Version 81: the connect probe (Version 80) resets the board; it then boots and says "GSP32 Improv Ready", so one
+    #  version request is fine. Still never a bare Ctrl-C, and Improv only once the board listens
+    check("running board: no Ctrl-C byte, at most the one Improv version ask in 8 s", pg.evaluate("window.__ctrlc") == 0 and pg.evaluate("window.__pk") <= 1 and pg.evaluate("window.__badPk") == 0, pg.evaluate("[window.__pk, window.__ctrlc, window.__badPk]"))
     check("running board: still GSP32 Found", "GSP32" in pg.inner_text("#board-state"), pg.inner_text("#board-state"))
     pg.close()
 

@@ -56,9 +56,11 @@ with sync_playwright() as p:
     pg.close()
 
     # Saved note of an unfinished install: Recover right away; cleared after a good install
-    pg = page(b, "if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', 1); localStorage.setItem('gsp32.flash', JSON.stringify({mac: '', version: '42', startedAt: 1})); }")
+    # Version 81: the connect probe (Version 80) resets the board, and the mock then boots GSP32, which rightly clears
+    #  the note (nothing to recover). A board that does not come back as GSP32 (__other) keeps it: Recover
+    pg = page(b, "window.__other = true; if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', 1); localStorage.setItem('gsp32.flash', JSON.stringify({mac: '', version: '42', startedAt: 1})); }")
     pg.click("#connect"); pg.wait_for_timeout(800)
-    check("saved note: Recover GSP32 offered", pg.inner_text("#install-btn") == "Recover GSP32" and "Incomplete Install" in pg.inner_text("#board-status"))
+    check("saved note: Recover GSP32 offered", pg.inner_text("#install-btn") == "Recover GSP32" and "Incomplete Install" in pg.inner_text("#board-state"), pg.inner_text("#board-state"))
     pg.close()
     pg = page(b, "window.__eraseDelay = 1500")
     pg.click("#connect"); pg.wait_for_timeout(500)
