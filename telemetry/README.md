@@ -46,7 +46,9 @@ npx wrangler@3 deploy
 ```
 
 ## Rate limits (V84)
-Per client per hour: /log 30, /visit 30, /install 10, plus a burst limit of 10 per minute across them (Cloudflare
-rate-limit binding `RL`). The client is a SHA-256 of its IP with a random per-isolate salt; the hourly counts live
-only in the isolate's memory and are cleared every hour. Nothing about the client is stored in D1 (migration 0003
-drops the old `rl` table). Over the limit -> 429 with Retry-After.
+Per client per hour: /log 30, /visit 30, /install 10 (one Durable Object `Limiter` per hashed client, counts in memory
+only, never in storage), plus a burst limit of 10 per minute across them (Cloudflare rate-limit binding `RL`). The
+client key is a SHA-256 of its IP with a salt (secret `RL_SALT`, else a fixed one) and the UTC day. Nothing about the
+client is stored in D1 (migration 0003 drops the old `rl` table). Over the limit -> 429 with Retry-After.
+Testing a flood: send the requests over one connection (curl --next); some networks (WARP) give every new connection
+another address, so separate requests never add up.
