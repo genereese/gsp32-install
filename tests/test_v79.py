@@ -27,7 +27,7 @@ js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 81-fw81 everywhere", html.count("?v=81-fw81") == 3, str(html.count("?v=81-fw81")))
+check("cache-bust 82-fw81 everywhere", html.count("?v=82-fw81") == 3, str(html.count("?v=82-fw81")))
 check("no Compatible Boards card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
@@ -50,7 +50,7 @@ def run(b, chip, flash_kb=None, usb=None):
       const real = window.fetch.bind(window);
       window.fetch = (input, init) => {
         const url = typeof input === 'string' ? input : (input && input.url) || '';
-        if (url.indexOf('gsp32-telemetry') >= 0) {
+        if (url.indexOf('gsp32-telemetry') >= 0 && url.indexOf('/log') >= 0) {
           let body = null;
           try { body = JSON.parse(init && init.body || '{}'); } catch (e) { body = init && init.body; }
           window.__telemetry.push({ url, method: (init && init.method) || 'GET', body });
@@ -208,7 +208,7 @@ with sync_playwright() as p:
       const real = window.fetch.bind(window);
       window.fetch = (input, init) => {
         const url = typeof input === 'string' ? input : (input && input.url) || '';
-        if (url.indexOf('gsp32-telemetry') >= 0) return new Promise(() => {}); // never resolves
+        if (url.indexOf('gsp32-telemetry') >= 0 && url.indexOf('/log') >= 0) return new Promise(() => {}); // never resolves
         return real(input, init);
       };
     """)
