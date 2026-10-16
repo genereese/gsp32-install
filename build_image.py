@@ -41,7 +41,10 @@ for name in ("dashboard.html", "example.html", "live.html"):
     if name in fs.listdir("/gsp32-httpd/pages"):
         fs.remove("/gsp32-httpd/pages/" + name)
 for source, target in (("gsp32-httpd/pages/index.html", "/gsp32-httpd/pages/index.html"), ("gsp32-httpd/pages/menu.html", "/gsp32-httpd/pages/menu.html"),
-                       ("main.py", "/main.py")):
+                       ("main.py", "/main.py"), ("LICENSE.txt", "/LICENSE.txt")):
+    # Version 84: the firmware license sits in the board's top folder (GSP32 repo LICENSE.txt)
+    if not os.path.exists(os.path.join(repo, source)):
+        continue
     with fs.open(target, "wb") as f:
         f.write(open(os.path.join(repo, source), "rb").read())
 for bad in ("/config.json", "/webui_auth.json"):
