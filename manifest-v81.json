@@ -1,6 +1,6 @@
 {
   "name": "GSP32",
-  "version": "Version 80 (f953985), rollback",
+  "version": "Version 81 (c49e130), rollback",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 15,
   "builds": [
@@ -9,7 +9,7 @@
       "improv": true,
       "parts": [
         {
-          "path": "firmware/v80/gsp32-esp32.bin",
+          "path": "firmware/v81/gsp32-esp32.bin",
           "offset": 0
         }
       ]
@@ -19,7 +19,7 @@
       "improv": true,
       "parts": [
         {
-          "path": "firmware/v80/gsp32-esp32s3.bin",
+          "path": "firmware/v81/gsp32-esp32s3.bin",
           "offset": 0
         }
       ]
