@@ -1490,6 +1490,10 @@ async function install() {
     flashNoteSet(null);
     bootTimes = [];
     appendConsole("[Installed. Restarting the board.]\n");
+    // Completed-install counter: count only (no MAC/IP), fire-and-forget, never delays anything
+    try {
+      fetch("https://gsp32-telemetry.genereese.workers.dev/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", mode: "cors", keepalive: true }).catch(() => {});
+    } catch (err) {}
     await resetBoard();
     setStatus(installName() + " Installed", "ok");
     // Version 75 (Gene): what to do next, so a newcomer knows the Set Up Wi-Fi button is the way to the Web UI
@@ -2046,6 +2050,13 @@ window.addEventListener("pagehide", () => {
 });
 
 loadVersions();
+// Hourly visit counter: one fire-and-forget POST per page load (stores only UTC hour + path). Never blocks the page.
+try {
+  fetch("https://gsp32-telemetry.genereese.workers.dev/visit", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: location.pathname }), mode: "cors", keepalive: true,
+  }).catch(() => {});
+} catch (err) {}
 syncConsoleButtons();
 
 // For the page tests (Playwright): the slide helper and the console writer
