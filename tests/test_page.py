@@ -150,7 +150,7 @@ with sync_playwright() as p:
     check("V30 install button row back after a failed install", pg.is_visible("#install-btn"))
     check("status line shows the error", "did not finish" in pg.inner_text("#board-status") and "error" in pg.get_attribute("#board-status", "class"), pg.inner_text("#board-status"))
     pg.screenshot(path=shots + "/05-error.png")
-    check("latest build only, as plain text (no dropdown)", pg.inner_text("#version") == LISTED and pg.locator("select").count() == 0, pg.inner_text("#version"))
+    check("latest build only, as plain text (no dropdown)", pg.inner_text("#version") == LISTED and pg.locator("select:not(#release-channel)").count() == 0, pg.inner_text("#version"))
     check("no page errors", not errors, str(errors))
     o = b.new_page(viewport={"width": 1280, "height": 900}); o.add_init_script(path=here + "/mock.js"); o.add_init_script("window.__other = true")
     o.add_init_script("try { localStorage.clear(); } catch (e) {}")
