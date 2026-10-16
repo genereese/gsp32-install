@@ -1128,8 +1128,21 @@ async function probeBoardOnConnect() {
 
 // Version 83: among a family's builds, the one for this board's flash size and PSRAM. Builds may carry "flashMb"
 //  (16 when absent) and "psramMb" (8 = octal, 2 = quad). An S3's in-package PSRAM size (efuse) tells octal (8 MB)
-//  from quad (2 MB); only when it can't be read is the user asked (Gene, V83).
-function pickBuild(builds, family) {
+//  from quad (2 MB); when it can't be read, an in-page ask (askPsram).
+// Version 83: in-page ask for the PSRAM size (8 or 2); closing it (Escape) means 8, the tested N8R8 image
+function askPsram() {
+  const box = $("psram-modal");
+  if (!box || typeof box.showModal !== "function") return Promise.resolve(8);
+  return new Promise((resolve) => {
+    let picked = 8;
+    const pick = (mb) => () => { picked = mb; box.close(); };
+    $("psram-8").onclick = pick(8);
+    $("psram-2").onclick = pick(2);
+    box.addEventListener("close", () => resolve(picked), { once: true });
+    box.showModal();
+  });
+}
+async function pickBuild(builds, family) {
   const list = builds.filter((item) => item.chipFamily === family);
   if (family !== "ESP32-S3" || list.length <= 1 && !(list[0] && list[0].flashMb)) return list[0] || null;
   const info = board.info || {};
@@ -1141,15 +1154,14 @@ function pickBuild(builds, family) {
   if (best.length === 1) return best[0];
   let want = info.psramMb;
   if (want !== 2 && want !== 8) {
-    // Only when the probe could not read the PSRAM size: ask (OK = 8 MB octal, the common module)
-    want = window.confirm("GSP32 could not read this board's PSRAM size.\n\nOK: 8 MB PSRAM (N8R8, most 8 MB boards)\nCancel: 2 MB PSRAM (N8R2, untested)") ? 8 : 2;
-    appendConsole("[PSRAM not readable: chosen " + (want === 8 ? "N8R8" : "N8R2") + "]\n");
+    want = await askPsram();
+    appendConsole("[PSRAM size not readable: " + (want === 2 ? "N8R2" : "N8R8") + " chosen]\n");
   }
   return best.find((item) => (item.psramMb || 8) === want) || best[0];
 }
 async function loadFirmware(family) {
   const { manifest, manifestUrl } = manifestCache || await loadManifest();
-  const build = pickBuild(manifest.builds, family);
+  const build = await pickBuild(manifest.builds, family);
   if (!build) throw new Error("This firmware has no build for " + family + " with this flash size.");
   if (build.label) appendConsole("[Image: " + build.label + (build.untested ? " (untested)" : "") + "]\n");
   const files = [];
