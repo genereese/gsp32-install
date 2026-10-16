@@ -34,7 +34,7 @@ with sync_playwright() as p:
     check("no speed wording anywhere", not any("Calibrat" in t or "Baud" in t or "Didn't Work" in t for t in texts) and "baud" not in pg.inner_text("#console-out").lower().replace("baud:", ""), str(texts))
     check("percent only grows", (lambda ps: ps == sorted(ps))([int(t.rsplit("(", 1)[1].rstrip("%)")) for t in texts if t.startswith("Installing ") and t.endswith("%)")]))
     check("installed", "Installed" in pg.inner_text("body"))
-    check("footer says Flasher Version 81", "Flasher Version 81" in pg.text_content(".flasher-version"))
+    check("footer says Flasher Version 82", "Flasher Version 82" in pg.text_content(".flasher-version"))
     pg.close()
     pg, log, st = run(b, "window.__failWriteAt = [115200];")
     w = [l for l in log if l.startswith("write")]
