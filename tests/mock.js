@@ -3,7 +3,7 @@
   const log = (window.__log = []);
   const enc = new TextEncoder();
   let ctrl = null, booted = false, rts = false, dtr = false, state = 2;
-  const push = (bytes) => ctrl && ctrl.enqueue(bytes);
+  const push = (bytes) => { try { if (ctrl) ctrl.enqueue(bytes); } catch (e) { /* stream closed during probe/reset */ } };
   const say = (text) => push(enc.encode(text));
   const pkt = (type, data) => {
     const b = [0x49,0x4d,0x50,0x52,0x4f,0x56,1,type,data.length,...data];
@@ -51,7 +51,7 @@
   }
   // Like Web Serial: after a reader cancels, port.readable is a fresh stream
   let rs = null, isOpen = false;
-  const fresh = () => new ReadableStream({ start(c) { ctrl = c; }, cancel() { rs = null; } });
+  const fresh = () => new ReadableStream({ start(c) { ctrl = c; }, cancel() { ctrl = null; rs = null; } });
   const port = {
     get readable() { if (!isOpen) return null; if (!rs) rs = fresh(); return rs; },
     writable: null,

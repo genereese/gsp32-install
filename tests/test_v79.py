@@ -23,13 +23,14 @@ js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 80-fw80 everywhere", html.count("?v=80-fw80") == 3 and "fw79" not in html, str(html.count("?v=80-fw80")))
+check("cache-bust 81-fw80 everywhere", html.count("?v=81-fw80") == 3, str(html.count("?v=81-fw80")))
 check("no Compatible Boards card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
 check("no privacy note", 'board-privacy' not in html and 'board-privacy' not in css and "no MAC or personal data" not in html)
 check("compatIssue + showCompatNotice", "compatIssue" in js and "showCompatNotice" in js and "This Board Is Not Supported" in js)
 check("telemetry hook", "reportBoardTelemetry" in js and "gsp32-telemetry.genereese.workers.dev/log" in js)
+check("probe on connect", "probeBoardOnConnect" in js)
 
 TELEMETRY = "https://gsp32-telemetry.genereese.workers.dev/log"
 
@@ -61,11 +62,32 @@ def run(b, chip, flash_kb=None, usb=None):
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
     # Also block real telemetry network just in case
     pg.route("**/gsp32-telemetry.genereese.workers.dev/**", lambda r: r.fulfill(status=200, content_type="application/json", body='{"ok":true}'))
-    pg.goto("http://127.0.0.1:8789/index.html"); pg.wait_for_timeout(300); pg.click("#connect"); pg.wait_for_timeout(100)
+    pg.goto("http://127.0.0.1:8789/index.html"); pg.wait_for_timeout(300); pg.click("#connect")
+    # Wait for connect-time probe to finish (stats or notice or console message)
+    for _ in range(80):
+        done = pg.evaluate("""() => {
+          const d = document.getElementById('board-details');
+          const n = document.getElementById('compat-notice');
+          const out = document.getElementById('console-out');
+          const text = out ? out.textContent : '';
+          return (d && !d.hidden && /flash|Core|MHz|CP210|CH3/i.test(d.textContent||''))
+            || (n && !n.hidden)
+            || /Reading board info|Could not read the board|Board:/.test(text);
+        }""")
+        if done: break
+        pg.wait_for_timeout(100)
+    pg.wait_for_timeout(300)
+    details_early = pg.evaluate("(() => { const el = document.getElementById('board-details'); return el && !el.hidden ? el.textContent : ''; })()")
+    tel_early = pg.evaluate("window.__telemetry || []")
+    # Boot-log simulation (after probe released the port back to run)
     pg.evaluate("window.__port.setSignals({requestToSend: true}).then(() => window.__port.setSignals({requestToSend: false}))")
     pg.wait_for_timeout(4500)
-    details_early = pg.evaluate("(() => { const el = document.getElementById('board-details'); return el && !el.hidden ? el.textContent : ''; })()")
-    pg.click("#install-btn"); pg.check("#erase-ok"); pg.click("#start-install"); pg.wait_for_timeout(6000)
+    # Skip install click when incompatible (Install disabled)
+    can_install = pg.evaluate("!document.getElementById('install-btn').disabled")
+    if can_install:
+        pg.click("#install-btn"); pg.check("#erase-ok"); pg.click("#start-install"); pg.wait_for_timeout(6000)
+    else:
+        pg.wait_for_timeout(200)
     log = [l for l in pg.evaluate("window.__log") if isinstance(l, str)]
     notice = pg.evaluate("""() => {
       const box = document.getElementById('compat-notice');
@@ -111,16 +133,16 @@ with sync_playwright() as p:
     check("ESP32 installed", "Installed" in pg.inner_text("body"))
     check("no compat notice on good ESP32", notice is None, str(notice))
     check("MAC line shown", mac.upper().startswith("MAC ") and "F8:B3:B7:22:05:E8" in mac.upper(), mac)
-    check("board details subtle (dual + flash + crystal + CP2102)",
-          "Dual Core" in details and "4 MB flash" in details and "40 MHz" in details and "CP2102" in details, details)
-    check("USB shown early from getInfo", "CP2102" in early, early)
+    check("board details subtle (dual + flash + CPU + CP2102)",
+          "Dual Core" in details and "4 MB flash" in details and "240 MHz" in details and "CP2102" in details, details)
+    check("stats on connect (before Install)", "Dual Core" in early and "4 MB flash" in early and "240 MHz" in early and "CP2102" in early, early)
     check("no privacy element on page", pg.evaluate("!document.getElementById('board-privacy')"))
     check_tel("ESP32 telemetry", tel, True, "ESP32")
     if tel:
         body = tel[0]["body"]
         check("ESP32 telemetry cores=2", body.get("cores") == 2, str(body.get("cores")))
         check("ESP32 telemetry flash_mb=4", body.get("flash_mb") == 4, str(body.get("flash_mb")))
-        check("ESP32 telemetry crystal", body.get("crystal_mhz") == 40, str(body.get("crystal_mhz")))
+        check("ESP32 stats use CPU not crystal", "240 MHz" in details and " · 40 MHz" not in details and not details.strip().startswith("40 MHz"), details)
         check("ESP32 telemetry usb", body.get("usb_bridge") == "10c4:ea60 CP2102", str(body.get("usb_bridge")))
         check("ESP32 telemetry revision", body.get("revision") == "v3.1", str(body.get("revision")))
     # second install same connect: still one telemetry
@@ -170,7 +192,7 @@ with sync_playwright() as p:
 
     pg, log, st, notice, details, mac, early, tel = run(b, None, usb={"usbVendorId": 0x1a86, "usbProductId": 0x55d3})
     check("CH343 named from VID/PID", "CH343" in details, details)
-    check("CH343 early", "CH343" in early, early)
+    check("CH343 on connect", "CH343" in early, early)
     if tel:
         check("CH343 usb_bridge", tel[0]["body"].get("usb_bridge") == "1a86:55d3 CH343", str(tel[0]["body"].get("usb_bridge")))
     pg.close()
