@@ -33,7 +33,9 @@ Unknown keys or missing required fields -> 400; bad origin -> 403; too big -> 41
 
 `POST /visit` (same Origin rule, 10/min per IP) body optional `{"path":"/gsp32-install/"}` -> increments the UTC-hour bucket for that path. Stores only hour + path + count.
 
-`GET /visits?hours=N` (bearer READ_KEY; N 1-2160, default 24) -> `{hours,total:{visits,installs},hourly:[{hour,visits,installs}],paths}`. Installs = board telemetry rows (one per connect probe) in that hour.
+`POST /install` (same Origin rule, body empty or `{}`) -> increments the completed-install count for the UTC hour. Count only.
+
+`GET /visits?hours=N` (bearer READ_KEY required, 401 otherwise; N 1-2160, default 24) -> `{hours,total:{visits,boards,installs,install_rate_pct},hourly:[{hour,visits,boards,installs}],paths}`. boards = connect-probe rows from /log; installs = completed installs from /install; install_rate_pct = installs/visits.
 
 ## Deploy
 ```
