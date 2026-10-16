@@ -13,6 +13,10 @@ const $ = (id) => document.getElementById(id);
 
 const wizard = $("wizard");
 const versionSelect = $("version");
+const release_channel = $("release-channel");
+const beta_note = $("beta-note");
+// Version 85: the versions.json entries of each channel (an entry without "channel" is Stable)
+let release_versions = { stable: null, beta: null };
 const eraseOk = $("erase-ok");
 let stable = null;
 const startInstall = $("start-install");
@@ -894,19 +898,38 @@ async function loadVersions() {
   try {
     const response = await fetch("versions.json", { cache: "no-store" });
     const list = await response.json();
-    // Only the latest build is offered (older images were removed from the repo; they stay in git history); Version 73: no
-    //  prototype choice any more
-    stable = list.find((item) => !item.prototype) || null;
-    latest = stable;
-    const number = latest ? String(latest.label || latest.version).match(/Version (\d+(?:\.\d+)?)/) : null;
-    versionSelect.textContent = number ? "Version " + number[1] : latest ? String(latest.label || latest.version) : "No Version Found";
-    versionsReady = !!latest;
+    // Only the latest build of each channel is offered (older images were removed from the repo; they stay in git
+    //  history). Version 85 (Gene): Stable (the default) or Beta, picked in the Release dropdown
+    release_versions = {
+      stable: list.find((item) => (!item.prototype) && ((item.channel || "stable") === "stable")) || null,
+      beta: list.find((item) => (!item.prototype) && (item.channel === "beta")) || null,
+    };
+    stable = release_versions.stable;
+    releaseChannelUpdate();
   } catch (err) {
     versionSelect.textContent = "Could Not Load the Version";
     versionsReady = false;
   }
   syncStart();
 }
+
+// The Beta option says when there is no beta right now; the pick sets the version (and manifest) to install
+function releaseChannelUpdate() {
+  const beta_option = release_channel.querySelector('option[value="beta"]');
+  beta_option.disabled = !release_versions.beta;
+  beta_option.textContent = release_versions.beta ? "Beta (Newest, Less Tested)" : "Beta (None Right Now)";
+  if ((release_channel.value === "beta") && !(release_versions.beta)) release_channel.value = "stable";
+  const channel = release_channel.value;
+  const picked = release_versions[channel];
+  if (picked !== latest) manifestCache = null;
+  latest = picked;
+  beta_note.hidden = (channel !== "beta");
+  const number = latest ? String(latest.label || latest.version).match(/Version (\d+(?:\.\d+)?)/) : null;
+  versionSelect.textContent = number ? "Version " + number[1] + ((channel === "beta") ? " Beta" : "") : latest ? String(latest.label || latest.version) : "No Version Found";
+  versionsReady = !!latest;
+  syncStart();
+}
+release_channel.addEventListener("change", releaseChannelUpdate);
 
 function syncStart() {
   startInstall.disabled = !versionsReady || !eraseOk.checked;

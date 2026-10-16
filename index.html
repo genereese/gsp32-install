@@ -89,6 +89,14 @@
       <div id="wizard" class="wizard" hidden>
         <div class="step" data-step="prep" hidden>
           <h3>Install GSP32</h3>
+          <!-- Version 85 (Gene): Stable (default, tested on every board type) or Beta (newest, tested on one ESP32) -->
+          <label class="field release-field" for="release-channel">Release
+            <select id="release-channel">
+              <option value="stable" selected>Stable (Recommended)</option>
+              <option value="beta">Beta (Newest, Less Tested)</option>
+            </select>
+          </label>
+          <p id="beta-note" class="beta-note" hidden>Beta builds have the newest changes but were only tested on one ESP32. Pick Stable if you're not sure.</p>
           <p class="version-line">Installs <b id="version">Loading...</b></p>
           <label class="warn-box warn-check" for="erase-ok">
             <input id="erase-ok" type="checkbox">
