@@ -395,3 +395,6 @@ body.hero50 .start-go { flex-direction: column; gap: 6px; }
 .compat-notice[hidden] { display: none; }
 .compat-notice b { display: block; margin-bottom: 4px; }
 .compat-notice p { margin: 0; font-weight: 400; color: var(--ink, #1a1a1a); }
+/* Version 82: Show Password under the Wi-Fi password field */
+.check.show-password { margin: var(--space-1) 0 0; font-size: var(--text-sm); align-items: center; }
+.check.show-password input { width: 16px; height: 16px; margin: 0; }
