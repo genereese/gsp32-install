@@ -11,6 +11,7 @@
   };
   const strs = (cmd, list) => { const d = []; for (const t of list) { const e = enc.encode(t); d.push(e.length, ...e); } return pkt(4, [cmd, d.length, ...d]); };
   window.__say = (t) => say(t);
+  window.__sayBytes = (arr) => push(new Uint8Array(arr));
   window.__pk = 0; window.__ctrlc = 0; window.__badPk = 0; window.__listen = false;
   // Version 43.1: the web UI's listening window ends ("GSP32 Improv Off"); a packet after that is Ctrl-C to main.py
   window.__stopListening = () => { window.__listen = false; say("GSP32 Improv Off\r\n"); };

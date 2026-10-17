@@ -49,16 +49,16 @@ with sync_playwright() as p:
     check("mismatch once: then verified and Installed", log[-1:] and "md5 verified" in log and "Installed" in pg.inner_text("#board-status"))
     check("console names the MD5 retry", "did not match (MD5 check). Writing it again" in out(pg))
     pg.close()
-    # (a) 3. Two mismatches: never Installed; a clear error naming cable and port; Recover/Install offered
-    pg, errors = page(b, "window.__md5Bad = 2; window.__other = true;")
+    # (a) 3. Three mismatches (every attempt): never Installed; a clear error naming cable and port; Recover/Install offered
+    pg, errors = page(b, "window.__md5Bad = 3; window.__other = true;")
     log = install(pg)
     body = pg.inner_text("body")
-    check("two mismatches: not reported as installed", "Installed" not in pg.inner_text("#board-status") and "[Installed" not in out(pg))
-    check("two mismatches: clear error (cable, port)", "did not match what was sent" in body and "cable" in body and "port" in body, pg.inner_text("#error-text") if pg.is_visible("#error-text") else "")
+    check("three mismatches: not reported as installed", "Installed" not in pg.inner_text("#board-status") and "[Installed" not in out(pg))
+    check("three mismatches: clear error (cable, port)", "did not match what was sent" in body and "cable" in body and "port" in body, pg.inner_text("#error-text") if pg.is_visible("#error-text") else "")
     note = pg.evaluate("JSON.parse(localStorage.getItem('gsp32.flash'))")
-    check("two mismatches: the install note stays (board needs Recover)", bool(note) and note.get("writing") is True)
+    check("three mismatches: the install note stays (board needs Recover)", bool(note) and note.get("writing") is True)
     pg.click("[data-step=error] [data-action=close]"); pg.wait_for_timeout(600)
-    check("two mismatches: Recover/Install GSP32 offered", pg.inner_text("#install-btn") == "Recover/Install GSP32", pg.inner_text("#install-btn"))
+    check("three mismatches: Recover/Install GSP32 offered", pg.inner_text("#install-btn") == "Recover/Install GSP32", pg.inner_text("#install-btn"))
     check("no page errors (a3)", not errors, str(errors)); pg.close()
     # (c) One boot with a corrupted app: broken install, Recover/Install GSP32
     pg, errors = page(b, "window.__other = true;")

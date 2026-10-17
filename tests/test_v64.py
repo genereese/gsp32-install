@@ -39,6 +39,6 @@ with sync_playwright() as p:
     pg, log, st = run(b, "window.__failWriteAt = [115200];")
     w = [l for l in log if l.startswith("write")]
     check("a write error gets one fresh retry", w == ["write at 115200", "write at 115200"] and "Installed" in pg.inner_text("body"), str(w))
-    check("retry explained in the console", "Starting over once" in pg.inner_text("#console-out"))
+    check("retry explained in the console", "Connecting again and writing it again (2 of 3)" in pg.inner_text("#console-out"))
     pg.close(); b.close()
 print("FAILS", fails); sys.exit(1 if fails else 0)

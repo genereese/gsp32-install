@@ -407,3 +407,5 @@ body.hero50 .start-go { flex-direction: column; gap: 6px; }
 .actions-note { margin: 0; align-self: center; }
 .button-note { margin: 6px 0 0; text-align: right; }
 .start-error { margin: 8px 0 0; color: var(--danger); font-size: 0.92rem; text-align: center; max-width: 36rem; }
+/* Fix (label): the main buttons never wrap or clip their label (Recover/Install GSP32 reads in full) */
+#board-actions button, #board-actions .button { white-space: nowrap; flex-shrink: 0; }
