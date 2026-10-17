@@ -402,3 +402,8 @@ body.hero50 .start-go { flex-direction: column; gap: 6px; }
 /* Version 82: Show Password under the Wi-Fi password field */
 .check.show-password { margin: var(--space-1) 0 0; font-size: var(--text-sm); align-items: center; }
 .check.show-password input { width: 16px; height: 16px; margin: 0; }
+
+/* Fix (recover flow): why a main button is greyed, and a port that would not open */
+.actions-note { margin: 0; align-self: center; }
+.button-note { margin: 6px 0 0; text-align: right; }
+.start-error { margin: 8px 0 0; color: var(--danger); font-size: 0.92rem; text-align: center; max-width: 36rem; }

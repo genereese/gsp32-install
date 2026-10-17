@@ -52,14 +52,14 @@ with sync_playwright() as p:
     # 6: Version 61 hotfix: an install that hung before erasing leaves the note; the board still runs GSP32. After a
     #  reload the boot banner must not bring back "Click Recover GSP32" beside a Reinstall GSP32 button
     pg = b.new_page(); pg.add_init_script(path=here + "/mock.js")
-    pg.add_init_script("window.__ver = '60'; window.__noReady = true; localStorage.setItem('gsp32.flash', JSON.stringify({mac: 'f8:b3:b7:22:05:e8', version: '60', startedAt: 1}))")
+    pg.add_init_script("window.__ver = '60'; window.__noReady = true; localStorage.setItem('gsp32.flash', JSON.stringify({mac: 'f8:b3:b7:22:05:e8', version: '60', startedAt: 1, writing: true}))")
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
     pg.goto("http://127.0.0.1:8781/index.html"); pg.wait_for_timeout(300); pg.click("#connect"); pg.wait_for_timeout(300)
-    check("note found: Recover GSP32 offered with the notice", pg.inner_text("#install-btn") == "Recover GSP32" and pg.is_visible("#install-btn"))
+    check("note found: Recover/Install GSP32 offered with the notice", pg.inner_text("#install-btn") == "Recover/Install GSP32" and pg.is_visible("#install-btn"))
     pg.evaluate("window.__port.setSignals({requestToSend: true}).then(() => window.__port.setSignals({requestToSend: false}))"); pg.wait_for_timeout(4000)
     st = pg.inner_text("#board-status") if pg.is_visible("#board-status") else ""
     check("GSP32 seen: note cleared, no stale Recover text", pg.evaluate("localStorage.getItem('gsp32.flash')") is None and "Recover" not in st, st)
-    check("button and status agree", ("Recover GSP32" in st) == (pg.inner_text("#install-btn") == "Recover GSP32"), pg.inner_text("#install-btn") + " / " + st)
+    check("button and status agree", ("Recover/Install GSP32" in st) == (pg.inner_text("#install-btn") == "Recover/Install GSP32"), pg.inner_text("#install-btn") + " / " + st)
     pg.close()
     # 7: the note is cleared by a successful install
     pg, log, texts, st = run(b)

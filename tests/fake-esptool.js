@@ -92,5 +92,11 @@ export class ESPLoader {
     window.__log.push("files " + o.fileArray.length + " size " + o.fileArray[0].data.length + " at " + o.fileArray[0].address + " eraseAll " + o.eraseAll);
     if (window.__eraseDelay) await new Promise(r => setTimeout(r, window.__eraseDelay));
     for (let p = 0; p <= 10; p++) { o.reportProgress(0, p * 10, 100); await new Promise(r => setTimeout(r, window.__flashDelay || 30)); }
+    // Fix (verify): like esptool-js, the flash MD5 is checked against calculateMD5Hash per region
+    if (o.calculateMD5Hash) {
+      for (const f of o.fileArray) window.__log.push("md5 " + o.calculateMD5Hash(f.data));
+      if (window.__md5Bad > 0) { window.__md5Bad--; window.__log.push("md5 mismatch"); throw new Error("MD5 of file does not match data in flash!"); }
+      window.__log.push("md5 verified");
+    } else window.__log.push("md5 not checked");
   }
 }
