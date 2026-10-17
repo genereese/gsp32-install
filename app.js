@@ -927,6 +927,7 @@ function releaseChannelUpdate() {
   syncStart();
 }
 release_channel.addEventListener("change", releaseChannelUpdate);
+release_channel.addEventListener("change", () => recheckCompat());
 
 function syncStart() {
   startInstall.disabled = !versionsReady || !eraseOk.checked;
@@ -941,15 +942,17 @@ async function loadManifest() {
   manifestCache = { manifest, manifestUrl };
   return manifestCache;
 }
-// The chip family for esptool-js's chip name: "ESP32-S3" for an S3, "ESP32" for a classic ESP32, "" otherwise
+// The chip family for esptool-js's chip name: "ESP32-S3" for an S3, "ESP32" for a classic ESP32, "" otherwise.
+// Version 92: "ESP32-C3" too (the Super Mini image, Beta only for now)
 function chipFamily(chip) {
   if (/ESP32-S3/.test(chip)) return "ESP32-S3";
+  if (/ESP32-C3/.test(chip)) return "ESP32-C3";
   if (/ESP32/.test(chip) && !/ESP32-(S|C|H|P)/.test(chip)) return "ESP32";
   return "";
 }
 // Flash sizes from esptool-js getFlashSize() are in KB (4 MB = 4096, 16 MB = 16384)
 // Version 83: S3 boards with 8 MB flash have their own images (N8R8 octal PSRAM, N8R2 quad PSRAM)
-const MIN_FLASH_KB = { "ESP32": 4096, "ESP32-S3": 8192 };
+const MIN_FLASH_KB = { "ESP32": 4096, "ESP32-S3": 8192, "ESP32-C3": 4096 };
 function flashLabel(kb) {
   if (kb == null || kb <= 0) return "an unknown flash size";
   if (kb >= 1024 && kb % 1024 === 0) return (kb / 1024) + " MB flash";
@@ -964,7 +967,22 @@ function compatIssue(chip, flashKb) {
   if (!family) return { chip, flashKb, family: "" };
   const need = MIN_FLASH_KB[family];
   if (flashKb != null && flashKb > 0 && flashKb < need) return { chip, flashKb, family };
+  if (family === "ESP32-C3") {
+    // The C3 image needs chip revision v0.3 or newer; older C3s are not supported
+    const rev = String(chip).match(/revision v(\d+)\.(\d+)/);
+    if (rev && (Number(rev[1]) * 100 + Number(rev[2])) < 3) return { chip, flashKb, family, oldRevision: true };
+    // Only the Beta release has a C3 image: with Stable picked, a short note instead of an install
+    if (release_channel.value !== "beta") return { chip, flashKb, family, betaOnly: true };
+  }
   return null;
+}
+// Version 92: switching Stable/Beta with a C3 connected shows or clears its Beta-only note
+function recheckCompat() {
+  if (!board.chip || (board.compatIssue && !board.compatIssue.betaOnly && board.compatIssue.family !== "ESP32-C3")) return;
+  const issue = compatIssue(board.chip, (board.info && board.info.flashKb) || null);
+  board.compatIssue = issue;
+  if (issue) showCompatNotice(issue); else hideCompatNotice();
+  syncBoardUi();
 }
 function hideCompatNotice() {
   const box = $("compat-notice");
@@ -977,7 +995,20 @@ function showCompatNotice(issue) {
   if (!box || !title || !text) return;
   const chip = chipShort(issue.chip);
   const flash = (issue.flashKb != null && issue.flashKb > 0) ? flashLabel(issue.flashKb) : "";
+  if (issue.betaOnly) {
+    title.textContent = "The ESP32-C3 Is Only on Beta for Now";
+    text.textContent = "Choose Beta under Release to install it.";
+    if (box.hidden || box.shutting) foldOpen(box);
+    appendConsole("[ESP32-C3: only on Beta for now]\n");
+    return;
+  }
   title.textContent = "This Board Is Not Supported";
+  if (issue.oldRevision) {
+    text.textContent = "This board is " + chip + ". GSP32 needs an ESP32-C3 of revision v0.3 or newer. Nothing was installed.";
+    if (box.hidden || box.shutting) foldOpen(box);
+    appendConsole("[Not supported: " + chip + "]\n");
+    return;
+  }
   text.textContent = flash
     ? ("This board is " + chip + " with " + flash + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 8 MB flash (PSRAM recommended). Nothing was installed.")
     : ("This board is " + chip + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 8 MB flash (PSRAM recommended). Nothing was installed.");
@@ -1141,11 +1172,11 @@ async function probeBoardOnConnect() {
     const flashKb = (board.info && board.info.flashKb) || null;
     const issue = compatIssue(chip, flashKb);
     board.compatIssue = issue;
-    reportBoardTelemetry(!issue);
+    reportBoardTelemetry(!issue || !!issue.betaOnly);
     syncBoardUi();
     if (issue) {
       showCompatNotice(issue);
-      appendConsole("[This board is not supported for GSP32. Install is disabled.]\n");
+      if (!issue.betaOnly) appendConsole("[This board is not supported for GSP32. Install is disabled.]\n");
     } else if (chip) {
       appendConsole("[Board: " + chipShort(chip) + (flashKb ? ", " + flashLabel(flashKb) : "") + "]\n");
     }
@@ -1487,7 +1518,7 @@ async function install() {
       board.chip = chip;
       const issue = compatIssue(chip, flashKb);
       // Telemetry already fired on connect probe; only send here if probe never ran
-      reportBoardTelemetry(!issue);
+      reportBoardTelemetry(!issue || !!issue.betaOnly);
       if (issue) {
         board.compatIssue = issue;
         await link.transport.disconnect();

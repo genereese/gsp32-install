@@ -11,7 +11,7 @@
     python tests/test_v61.py         # Version 61: connect time limits and retry, Recover note fix, Busy ... console box
     python tests/test_v64.py         # Version 64: always 115200, no speed tests, status Installing Version N (45%), one retry after a write error
     python tests/test_v75.py         # Version 75: console pinned at Install, time left, Next step to Wi-Fi, versions.json on Get Started, new slides
-    python tests/test_v79.py         # Version 79+/80: two builds (ESP32, ESP32-S3) in one manifest, picked by the chip; other chips refused
+    python tests/test_v79.py         # Version 79+/80: two builds (ESP32, ESP32-S3) in one manifest, picked by the chip; other chips refused. Version 92: ESP32-C3 on Beta only (Stable shows a short note), C3 rev < v0.3 refused
     python tests/test_v85.py         # Version 85: Release dropdown (Stable default, Beta from a versions.json entry with "channel": "beta")
 
 `mock.js` is a fake board on Web Serial (Improv answers, boot lines on an RTS reset; `window.__ets` also prints the

@@ -104,12 +104,13 @@ with sync_playwright() as p:
     check("ESP32 install: wrote image", any(l.startswith("files") for l in pg.evaluate("window.__log") if isinstance(l, str)))
     pg.close()
 
-    # C3: notice + Install disabled + telemetry compatible false — before Install
+    # C3 (Version 92: Beta only for now): on Stable a short Beta-only note + Install disabled, before Install; the board
+    #  itself counts as compatible in telemetry
     pg, details, mac, notice, disabled, tel, log = connect_only(b, "ESP32-C3 (QFN32) (revision v0.4)")
-    check("C3 connect: notice shown", notice and notice["title"] == "This Board Is Not Supported", str(notice))
+    check("C3 connect: Beta-only note shown", notice and notice["title"] == "The ESP32-C3 Is Only on Beta for Now", str(notice))
     check("C3 connect: Single Core stats", "Single Core" in details and "160 MHz" in details, details)
     check("C3 connect: Install disabled", disabled is True, str(disabled))
-    check("C3 connect: telemetry incompatible", len(tel) == 1 and tel[0]["body"].get("compatible") is False, str(tel))
+    check("C3 connect: telemetry compatible (on Beta)", len(tel) == 1 and tel[0]["body"].get("compatible") is True, str(tel))
     check("C3 connect: nothing written", not any(l.startswith("files") for l in log))
     # Clicking Install does nothing / stays disabled
     pg.click("#install-btn", force=True)

@@ -24,9 +24,9 @@ v = json.load(open(os.path.join(site, "versions.json")))
 st = [e for e in v if e.get("channel", "stable") == "stable"]; bt = [e for e in v if e.get("channel") == "beta"]
 check("versions.json: Stable Version 85 only (+ at most one Beta)", len(st) == 1 and st[0]["label"].startswith("Version 85") and st[0]["manifest"] == "manifest.json" and len(bt) <= 1)
 # Version 84: Version 84 stays (V85) as the single unlisted rollback (manifest-v84.json, firmware/v84/, all four images), not in versions.json
-check("versions.json: Beta is Version 91 (manifest-beta.json)", len(bt) == 1 and bt[0]["label"].startswith("Version 91") and bt[0]["manifest"] == "manifest-beta.json")
+check("versions.json: Beta is Version 92 (manifest-beta.json)", len(bt) == 1 and bt[0]["label"].startswith("Version 92") and bt[0]["manifest"] == "manifest-beta.json")
 bm = json.load(open(os.path.join(site, "manifest-beta.json")))
-check("manifest-beta.json: Version 91, firmware/beta images exist", bm["version"].startswith("Version 91") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/beta/") for b in bm["builds"] for p in b["parts"]))
+check("manifest-beta.json: Version 92, firmware/beta images exist", bm["version"].startswith("Version 92") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/beta/") for b in bm["builds"] for p in b["parts"]))
 rb = json.load(open(os.path.join(site, "manifest-v84.json")))
 check("rollback manifest-v84.json points at firmware/v84 images that exist", all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v84/") for b in rb["builds"] for p in b["parts"]))
 check("rollback not listed in versions.json", all(x["manifest"] != "manifest-v84.json" for x in v))
@@ -176,14 +176,27 @@ with sync_playwright() as p:
     pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-C3 (QFN32) (revision v0.4)")
-    check("ESP32-C3: nothing written", not [l for l in log if l.startswith("files")], str(log))
-    check("ESP32-C3: compat notice shown", notice and notice["title"] == "This Board Is Not Supported", str(notice))
-    check("ESP32-C3: Title Case + chip in text", notice and "This board is ESP32-C3" in notice["text"] and "Nothing was installed" in notice["text"], str(notice))
-    check("ESP32-C3: no old clear-error string", "GSP32 runs on ESP32 and ESP32-S3 boards" not in pg.inner_text("body"))
+    # Version 92: Stable (the default) has no C3 image: a short Beta-only note, nothing written
+    check("ESP32-C3 on Stable: nothing written", not [l for l in log if l.startswith("files")], str(log))
+    check("ESP32-C3 on Stable: short Beta-only note", notice and notice["title"] == "The ESP32-C3 Is Only on Beta for Now" and notice["text"] == "Choose Beta under Release to install it.", str(notice))
+    check("ESP32-C3 on Stable: Stable stays the default, plain Stable/Beta", pg.input_value("#release-channel") == "stable" and pg.eval_on_selector_all("#release-channel option", "o => o.map(x => x.textContent.trim())") == ["Stable", "Beta"])
+    check("ESP32-C3: no old clear-error string", "GSP32 runs on ESP32 and ESP32-S3 boards" not in pg.inner_text("body") and "Not Supported" not in (notice or {}).get("title", ""))
     check("ESP32-C3: Single Core in details", "Single Core" in details, details)
-    check_tel("C3 telemetry", tel, False, "ESP32-C3")
+    check_tel("C3 telemetry", tel, True, "ESP32-C3")
     if tel:
         check("C3 telemetry cores=1", tel[0]["body"].get("cores") == 1, str(tel[0]["body"].get("cores")))
+    # Choosing Beta clears the note and installs the C3 image (4 MB at 0)
+    pg.evaluate("() => { const s = document.getElementById('release-channel'); s.value = 'beta'; s.dispatchEvent(new Event('change')); }"); pg.wait_for_timeout(800)
+    hidden = pg.evaluate("document.getElementById('compat-notice').hidden || document.getElementById('compat-notice').shutting === true")
+    check("ESP32-C3 on Beta: note gone, Install enabled", pg.evaluate("!document.getElementById('install-btn').disabled") and pg.text_content("#version").strip() == "Version 92", str(hidden))
+    pg.click("#install-btn"); pg.check("#erase-ok"); pg.click("#start-install"); pg.wait_for_timeout(6000)
+    w = [l for l in pg.evaluate("window.__log") if isinstance(l, str) and l.startswith("files")]
+    check("ESP32-C3 on Beta gets the 4 MB C3 image at 0", w == ["files 1 size 4194304 at 0 eraseAll true"] and "[ESP32-C3 detected: installing its build]" in pg.inner_text("#console-out"), str(w))
+    check("ESP32-C3 installed", "Installed" in pg.inner_text("body"))
+    pg.close()
+
+    pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-C3 (QFN32) (revision v0.2)")
+    check("ESP32-C3 rev v0.2: not supported, nothing written", not [l for l in log if l.startswith("files")] and notice and notice["title"] == "This Board Is Not Supported" and "v0.3 or newer" in notice["text"], str(notice))
     pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-D0WD-V3 (revision v3.1)", flash_kb=2048)

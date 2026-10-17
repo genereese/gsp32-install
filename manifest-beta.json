@@ -1,6 +1,6 @@
 {
   "name": "GSP32",
-  "version": "Version 91 (48991e5)",
+  "version": "Version 92 (21209e6)",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 15,
   "builds": [
@@ -50,6 +50,18 @@
       "parts": [
         {
           "path": "firmware/beta/gsp32-esp32s3-n8r2.bin",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "chipFamily": "ESP32-C3",
+      "improv": true,
+      "label": "ESP32-C3 4 MB (Super Mini)",
+      "untested": true,
+      "parts": [
+        {
+          "path": "firmware/beta/gsp32-esp32c3.bin",
           "offset": 0
         }
       ]
