@@ -1462,6 +1462,118 @@ function resilientReader(onPort) {
   };
   return wrapper;
 }
+// Fix (Linux reset): the reset into the bootloader. EN must rise while GPIO 0 is already low, and the classic
+//  two-transistor circuit has no state with both low, so the step from "reset" (DTR off, RTS on) to "download"
+//  (DTR on, RTS off) must change both lines at once. Desktop esptool on Linux does that in one TIOCMSET
+//  (UnixTightReset). Chromium has no atomic call: on Linux each setSignals is one ioctl per line (DTR, then RTS),
+//  and esptool-js 0.5.7's ClassicReset makes it worse (its setRTS sends a second setSignals for DTR), so a CP2102
+//  board measured 0 of 12 into download mode (boot:0x13) with esptool-js's timing and 4 of 6 with one combined
+//  setSignals per step (pyserial on Gene's laptop, 17 Oct 2026). So each connect attempt takes the next sequence:
+//  the one that worked last on this USB bridge (else tight on Linux, classic elsewhere, USB-JTAG for a native USB
+//  chip), then classic, tight and USB-JTAG in turn; the first round uses esptool's 100 ms hold and
+//  DEFAULT_RESET_DELAY (50 ms), later rounds its extra delay (550 ms). Classic and USB-JTAG are esptool-js's own
+//  calls, unchanged, so Windows behaves as before.
+const RESET_HOLD_MS = 100;
+const DEFAULT_RESET_DELAY = 50;
+const EXTRA_RESET_DELAY = 550;
+const RESET_KEY = "gsp32ResetSeq";
+const USB_JTAG_PID = 0x1001;
+const RESET_SEQUENCES = {
+  // esptool's UnixTightReset, one setSignals per step
+  async tight(p, resetDelay) {
+    await p.setSignals({ dataTerminalReady: false, requestToSend: false });
+    await p.setSignals({ dataTerminalReady: true, requestToSend: true });
+    await p.setSignals({ dataTerminalReady: false, requestToSend: true }); // EN low (reset), GPIO 0 high
+    await delay(RESET_HOLD_MS);
+    await p.setSignals({ dataTerminalReady: true, requestToSend: false }); // GPIO 0 low, EN high
+    await delay(resetDelay);
+    await p.setSignals({ dataTerminalReady: false, requestToSend: false });
+  },
+  // esptool-js 0.5.7 ClassicReset, call for call (its setRTS re-sends DTR)
+  async classic(p, resetDelay) {
+    let dtr = false;
+    const setDTR = async (v) => { dtr = v; await p.setSignals({ dataTerminalReady: v }); };
+    const setRTS = async (v) => { await p.setSignals({ requestToSend: v }); await p.setSignals({ dataTerminalReady: dtr }); };
+    await setDTR(false);
+    await setRTS(true);
+    await delay(RESET_HOLD_MS);
+    await setDTR(true);
+    await setRTS(false);
+    await delay(resetDelay);
+    await setDTR(false);
+  },
+  // esptool-js 0.5.7 UsbJtagSerialReset (ESP32-S3/C3 native USB), call for call
+  async usbJtag(p) {
+    let dtr = false;
+    const setDTR = async (v) => { dtr = v; await p.setSignals({ dataTerminalReady: v }); };
+    const setRTS = async (v) => { await p.setSignals({ requestToSend: v }); await p.setSignals({ dataTerminalReady: dtr }); };
+    await setRTS(false);
+    await setDTR(false);
+    await delay(100);
+    await setDTR(true);
+    await setRTS(false);
+    await delay(100);
+    await setRTS(true);
+    await setDTR(false);
+    await setRTS(true);
+    await delay(100);
+    await setRTS(false);
+    await setDTR(false);
+  },
+};
+function isLinuxBrowser() {
+  const plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+  if (/android/i.test(plat + " " + navigator.userAgent)) return false;
+  return /linux|cros|chrome os/i.test(plat || navigator.userAgent);
+}
+function resetBridgeKey(onPort) {
+  const info = (onPort && onPort.getInfo && onPort.getInfo()) || {};
+  return (info.usbVendorId || 0).toString(16) + ":" + (info.usbProductId || 0).toString(16);
+}
+function rememberedReset(onPort) {
+  try {
+    return (JSON.parse(localStorage.getItem(RESET_KEY) || "{}") || {})[resetBridgeKey(onPort)] || "";
+  } catch (err) {
+    return "";
+  }
+}
+function rememberReset(onPort, name) {
+  try {
+    const all = JSON.parse(localStorage.getItem(RESET_KEY) || "{}") || {};
+    all[resetBridgeKey(onPort)] = name;
+    localStorage.setItem(RESET_KEY, JSON.stringify(all));
+  } catch (err) {
+    // No storage: next time starts from the default order again
+  }
+}
+// The order the connect attempts take: first what worked, then classic, tight, USB-JTAG
+function resetOrder(onPort, linux = isLinuxBrowser(), remembered = rememberedReset(onPort)) {
+  const info = (onPort && onPort.getInfo && onPort.getInfo()) || {};
+  let first = "classic";
+  if (info.usbProductId === USB_JTAG_PID) first = "usbJtag";
+  else if (linux) first = "tight";
+  if (RESET_SEQUENCES[remembered]) first = remembered;
+  return [first].concat(["classic", "tight", "usbJtag"].filter((n) => n !== first));
+}
+// esptool-js asks its resetConstructors for its sequences and cycles through them, one per connect attempt; every
+//  one it gets is this same rotation, so attempt N runs order[N % 3] whatever esptool-js would have picked
+function resetRotation(onPort) {
+  const order = resetOrder(onPort);
+  const rotation = {
+    order,
+    count: 0,
+    name: "",
+    tried: [],
+    async reset() {
+      const i = rotation.count++;
+      rotation.name = order[i % order.length];
+      const resetDelay = i < order.length ? DEFAULT_RESET_DELAY : EXTRA_RESET_DELAY;
+      rotation.tried.push(rotation.name + " " + resetDelay);
+      await RESET_SEQUENCES[rotation.name](onPort, resetDelay);
+    },
+  };
+  return rotation;
+}
 // A borrowed transport on the open port and a loader in the board's flasher stub at 115200
 async function connectLoader(terminal) {
   await reopenPort(FLASH_BAUD);
@@ -1488,10 +1600,18 @@ async function connectLoader(terminal) {
   transport.flushInput = async function () {
     await drainInput(this);
   };
-  const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal });
-  const link = { transport, loader, chip: "" };
+  const rotation = resetRotation(port);
+  const loader = new ESPLoader({
+    transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal,
+    resetConstructors: { classicReset: () => rotation, usbJTAGSerialReset: () => rotation },
+  });
+  const link = { transport, loader, chip: "", rotation };
   try {
     link.chip = await withTimeout(loader.main("default_reset"), CONNECT_MS, "Connecting to the board");
+    if (rotation.name) {
+      rememberReset(port, rotation.name);
+      board.resetSeq = rotation.name;
+    }
     board.chip = (await withTimeout(loader.chip.getChipDescription(loader), READ_MS, "Reading the chip")) || link.chip;
     board.mac = (await withTimeout(loader.chip.readMac(loader), READ_MS, "Reading the MAC")) || "";
     // Only refresh MAC on an in-progress install note — never create one during a connect probe
@@ -1501,6 +1621,7 @@ async function connectLoader(terminal) {
     syncBoardUi();
   } catch (err) {
     if (!link.chip) {
+      if (rotation.tried.length) appendConsole("[Resets tried: " + rotation.tried.join(", ") + "]\n");
       await resetLink(link).catch(() => {});
       throw err;
     }
