@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=85-fw85-b92c">
+  <link rel="stylesheet" href="style.css?v=85-fw85-b92e">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -43,6 +43,7 @@
       </ol>
       <div class="start-go">
         <button id="connect" class="primary big" type="button">Get Started</button>
+        <p id="start-error" class="start-error" role="alert" hidden></p>
         <p class="hint small">Works in Chrome or Edge on a computer.</p>
         <button id="no-board" class="link-button small-link" type="button" aria-expanded="false" aria-controls="board-help">Don't See Your Board?</button>
       </div>
@@ -73,6 +74,7 @@
         <button id="install-btn" class="primary" type="button">Install GSP32</button>
         <button id="wifi-setup" type="button" hidden>Set Up Wi-Fi</button>
         <a id="console-webui" class="button" href="#" target="_blank" rel="noopener" hidden>Open GSP32 Web UI</a>
+        <span id="actions-note" class="hint small actions-note" role="status" hidden></span>
       </div>
       <!-- Version 43.1 (Gene): status and progress under the buttons, so buttons coming and going above never move it -->
       <p id="board-status" class="board-status" role="status" aria-live="polite" hidden></p>
@@ -105,6 +107,7 @@
             <button type="button" data-action="close">Cancel</button>
             <button id="start-install" class="primary" type="button" disabled>Erase and Install</button>
           </div>
+          <p id="start-note" class="hint small button-note" hidden>Tick the box above to continue.</p>
         </div>
 
         <div class="step" data-step="flash" hidden>
@@ -124,6 +127,7 @@
             <button id="wifi-rescan" type="button" hidden>Scan Again</button>
             <button id="wifi-connect" class="primary" type="button" disabled>Connect</button>
           </div>
+          <p id="wifi-note" class="hint small button-note" hidden></p>
         </div>
 
 
@@ -219,9 +223,9 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=85-fw85-b92c"></script>
+  <script type="module" src="app.js?v=85-fw85-b92e"></script>
   <p class="security-note hint">GSP32 boards serve their web interface over plain HTTP (not encrypted). It's meant for your home network: never forward it to the internet.</p>
   <p class="flasher-version hint">Flasher Version 85 · <a href="LICENSE.txt">License</a></p>
-  <script src="tour.js?v=85-fw85-b92c" defer></script>
+  <script src="tour.js?v=85-fw85-b92e" defer></script>
 </body>
 </html>

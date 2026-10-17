@@ -8,6 +8,39 @@ import { ESPLoader, Transport } from "./vendor/esptool-js-0.5.7.js";
 const HEADER = [0x49, 0x4d, 0x50, 0x52, 0x4f, 0x56];
 const MAX_LINES = 2000;
 const FLASH_BAUD = 115200;
+// Fix (verify): an install is reported only once the flash verifies; two mismatches end with this
+const VERIFY_FAILED_TEXT = "The image on the board did not match what was sent (checked twice), so it is not installed. " +
+  "This is usually the USB cable or port: try another data cable, plug the board straight into the computer (no hub), then click Try Again. " +
+  "The flasher already writes at 115200, the slowest standard speed.";
+// MD5 of a binary string (one char per byte), as esptool-js's calculateMD5Hash wants: lowercase hex
+function md5Binary(str) {
+  const K = new Int32Array(64), S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+  for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) | 0;
+  const n = str.length, total = ((n + 8) >>> 6) + 1, words = new Int32Array(total * 16);
+  for (let i = 0; i < n; i++) words[i >> 2] |= (str.charCodeAt(i) & 0xff) << ((i % 4) * 8);
+  words[n >> 2] |= 0x80 << ((n % 4) * 8);
+  words[total * 16 - 2] = (n * 8) | 0;
+  words[total * 16 - 1] = Math.floor(n / 0x20000000) | 0;
+  let a0 = 0x67452301, b0 = 0xefcdab89 | 0, c0 = 0x98badcfe | 0, d0 = 0x10325476;
+  for (let off = 0; off < words.length; off += 16) {
+    let a = a0, b = b0, c = c0, d = d0;
+    for (let i = 0; i < 64; i++) {
+      let f, g;
+      if (i < 16) { f = (b & c) | (~b & d); g = i; }
+      else if (i < 32) { f = (d & b) | (~d & c); g = (5 * i + 1) % 16; }
+      else if (i < 48) { f = b ^ c ^ d; g = (3 * i + 5) % 16; }
+      else { f = c ^ (b | ~d); g = (7 * i) % 16; }
+      const s = S[(i >> 4) * 4 + (i % 4)];
+      const x = (a + f + K[i] + words[off + g]) | 0;
+      a = d; d = c; c = b;
+      b = (b + ((x << s) | (x >>> (32 - s)))) | 0;
+    }
+    a0 = (a0 + a) | 0; b0 = (b0 + b) | 0; c0 = (c0 + c) | 0; d0 = (d0 + d) | 0;
+  }
+  let hex = "";
+  for (const v of [a0, b0, c0, d0]) for (let i = 0; i < 4; i++) hex += ((v >>> (i * 8)) & 0xff).toString(16).padStart(2, "0");
+  return hex;
+}
 const textEncoder = new TextEncoder();
 const $ = (id) => document.getElementById(id);
 
@@ -77,6 +110,7 @@ let lineWatchers = [];
 // What the serial lines tell about the board: GSP32 or not, when its Improv listener is ready, its address
 const board = { installed: false, kind: "unknown", readyAt: 0, bootAt: 0, ip: "", name: "", repl: false, chip: "", mac: "", version: "", asked: 0, listening: false };
 let otherTimer = null;
+let probing = false; // the connect probe (Reading board info) is running
 const FOLD_MS = 220;
 
 function motionOk() {
@@ -219,16 +253,26 @@ function markBroken() {
   clearTimeout(otherTimer);
   stopCheckWait();
   bootingNote = null;
-  setStatus("Incomplete Install Detected. Click Recover GSP32 to erase the board and install again.", "error");
+  setStatus(INCOMPLETE_TEXT, "error");
   syncBoardUi();
 }
 
 // Version 42.1: a note of the install under way, kept until it finishes, so a page refreshed mid-install offers
-//  Recover GSP32 next time (and for the same board, by its MAC)
+//  Recover/Install GSP32 next time (and for the same board, by its MAC)
+// Fix (recover flow): the note is saved only once erasing and writing start (after a good connect), with the MAC
+//  esptool read and writing: true. An install whose connect failed wrote nothing and leaves no note. Older notes
+//  (saved at "Installing", before any connect) are stale: dropped on load
 const FLASH_NOTE_KEY = "gsp32.flash";
+const INCOMPLETE_TEXT = "Incomplete Install Detected. Click Recover/Install GSP32 to erase the board and install again.";
+const RECOVER_LABEL = "Recover/Install GSP32";
 function flashNoteGet() {
   try {
-    return JSON.parse(localStorage.getItem(FLASH_NOTE_KEY) || "null");
+    const note = JSON.parse(localStorage.getItem(FLASH_NOTE_KEY) || "null");
+    if (note && (!note.writing || !note.mac)) {
+      localStorage.removeItem(FLASH_NOTE_KEY);
+      return null;
+    }
+    return note;
   } catch (err) {
     return null;
   }
@@ -241,10 +285,12 @@ function flashNoteSet(note) {
     // Storage blocked: recovery still works from the boot loop
   }
 }
+// Only for a connected board whose MAC (read by the connect probe) is the one the note was written for, and not once
+//  it shows other firmware running (an Arduino sketch, say: plain Install GSP32)
 function flashNoteMatches() {
+  if (!portOpen() || !board.mac || board.kind === "other" || board.kind === "gsp32") return false;
   const note = flashNoteGet();
-  if (!note) return false;
-  return !note.mac || !board.mac || note.mac === board.mac;
+  return !!note && note.mac === board.mac;
 }
 let wifiTimer = null;
 
@@ -264,6 +310,15 @@ function askVersion() {
   writeImprov(buildRpc(3, new Uint8Array(0))).catch(() => {});
 }
 
+// The Incomplete Install text goes from the status line and from the status kept behind the boot banner
+function dropIncomplete() {
+  const stale = /^Incomplete Install/;
+  if (bootingNote && stale.test(bootingNote.nodes.map((node) => node.textContent).join(""))) bootingNote = "";
+  if (stale.test(boardStatus.textContent)) {
+    if (bootingNote === null) setStatus("");
+    else bootingNote = "";
+  }
+}
 function trackBoard(line) {
   if (/GSP32 Improv Ready|Server listening on port|Web UI starts without Wi-Fi|Web UI running/.test(line)) {
     board.kind = "gsp32";
@@ -274,12 +329,7 @@ function trackBoard(line) {
       // Version 61: the boot banner keeps the status shown before it and puts it back afterwards, so a stale
       //  "Incomplete Install Detected. Click Recover GSP32..." came back beside a Reinstall GSP32 button. Drop it
       //  from both places: the board runs GSP32, there is nothing to recover
-      const stale = /^Incomplete Install/;
-      if (bootingNote && stale.test(bootingNote.nodes.map((node) => node.textContent).join(""))) bootingNote = "";
-      if (stale.test(boardStatus.textContent)) {
-        if (bootingNote === null) setStatus("");
-        else bootingNote = "";
-      }
+      dropIncomplete();
     }
     board.readyAt = Date.now();
     clearTimeout(otherTimer);
@@ -293,7 +343,9 @@ function trackBoard(line) {
     askVersion();
   }
   if (/GSP32 Improv Off|No answer: starting without Wi-Fi|^Traceback|KeyboardInterrupt|^MicroPython v/.test(line)) board.listening = false;
-  if (/invalid header|ota data partition invalid|checksum (error|failure)|image checksum|flash read err/i.test(line)) {
+  // Fix (verify): a corrupted app ("E (31) esp_image: invalid segment length 0x...", "Factory app partition is not
+  //  bootable", "No bootable app partitions") is a broken install too
+  if (/invalid header|ota data partition invalid|checksum (error|failure)|image checksum|flash read err|E \(\d+\) esp_image|invalid segment length|partition is not bootable|No bootable app partitions/i.test(line)) {
     markBroken();
     return;
   }
@@ -315,6 +367,9 @@ function trackBoard(line) {
     otherTimer = setTimeout(() => {
       if (board.readyAt < board.bootAt) {
         board.kind = "other";
+        // Other firmware runs (an erased or half-written board would not boot it): no install to recover
+        if (flashNoteGet() && !busy && !flashing) flashNoteSet(null);
+        dropIncomplete();
         endBooting();
         syncBoardUi();
       }
@@ -404,7 +459,7 @@ function syncBoardUi() {
   const broken = board.kind === "broken" || (!gsp32 && flashNoteMatches());
   // Version 92: a C3 with Stable picked can still open the install step, to choose Beta there
   install.disabled = !on || busy || !!(board.compatIssue && !board.compatIssue.betaOnly);
-  install.textContent = broken ? "Recover GSP32" : gsp32 ? "Reinstall GSP32" : "Install GSP32";
+  install.textContent = broken ? RECOVER_LABEL : gsp32 ? "Reinstall GSP32" : "Install GSP32";
   // While installing, Wi-Fi and the web UI button are gone (not greyed); they come back after
   setShown(setup, gsp32 && !flashing);
   setup.disabled = !on || busy;
@@ -464,6 +519,17 @@ function syncBoardUi() {
     state.append(line);
   }
   state.classList.toggle("on", on && gsp32);
+  // Fix (recover flow): a main button shown greyed always says why, or what to do
+  const note = $("actions-note");
+  if (note) {
+    let why = "";
+    if (!on) why = "Not connected. Click Get Started above to connect the board.";
+    else if (install.disabled && board.compatIssue && !board.compatIssue.betaOnly) why = "Install is off: this board is not supported (see the note below).";
+    else if (install.disabled && probing) why = "Reading the board first. This takes a few seconds.";
+    // Other busy steps (installing, Wi-Fi setup, restarts) show their own progress below the buttons
+    note.textContent = why;
+    setShown(note, !!why && !flashing);
+  }
   // Version 39: the green box folds away while installing and comes back when it ends (done, failed or disconnected)
   setFolded(state, !flashing);
 }
@@ -690,9 +756,47 @@ let followConsole = true;
 consoleOut.addEventListener("scroll", () => {
   if (consoleOut.clientHeight) followConsole = consoleOut.scrollHeight - consoleOut.scrollTop - consoleOut.clientHeight < 48;
 });
+// Fix (console flood): a boot-looping board (a restart every 250 ms) froze and crashed Chromium: every line repainted
+//  the whole console. Now at most one paint per frame (or 100 ms when the tab is hidden), only the last DOM_LINES
+//  lines in the page (Copy Log has all MAX_LINES), and a board in a boot loop has its restart output held back
+//  behind one line that counts it
+const DOM_LINES = 500;
+let paintQueued = false;
+let mutedLines = 0;
 function paintConsole() {
-  consoleOut.textContent = lines.join("\n") + (partial ? (lines.length ? "\n" : "") + partial : "");
+  if (paintQueued) return;
+  paintQueued = true;
+  const run = () => {
+    if (!paintQueued) return;
+    paintQueued = false;
+    paintConsoleNow();
+  };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
+  setTimeout(run, 100);
+}
+function consoleText(all) {
+  const shown = all ? lines : lines.slice(-DOM_LINES);
+  let text = shown.join("\n") + (partial ? (shown.length ? "\n" : "") + partial : "");
+  if (mutedLines) text += (text ? "\n" : "") + "[The board keeps restarting (no bootable firmware): " + mutedLines + " lines of its restart output hidden. Click " + RECOVER_LABEL + ".]";
+  return text;
+}
+function paintConsoleNow() {
+  consoleOut.textContent = consoleText(false);
   if (followConsole) consoleOut.scrollTop = consoleOut.scrollHeight;
+}
+// What a restarting board prints (ROM banner, bootloader lines, the reason it can't boot)
+const BOOT_NOISE = /^(rst:0x|ets [A-Z][a-z]{2} |configsip|clk_drv|mode:|load:0x|entry 0x|ho \d|[EIW] \(\d+\) |invalid header|Factory app|No bootable|abort\(\)|Rebooting|Backtrace|ELF file SHA|\s*$)/;
+function muteBootLoop(line) {
+  if (board.kind !== "broken" || busy || flashing) {
+    if (mutedLines) {
+      lines.push("[" + mutedLines + " lines of restart output were hidden]");
+      mutedLines = 0;
+    }
+    return false;
+  }
+  if (!BOOT_NOISE.test(line)) return false;
+  mutedLines++;
+  return true;
 }
 
 function appendConsole(text) {
@@ -709,7 +813,8 @@ function appendConsole(text) {
     partial = "";
   }
   for (const line of pieces) {
-    lines.push(line);
+    const muted = muteBootLoop(line.replace(/\r$/, ""));
+    if (!muted) lines.push(line);
     trackBoard(line);
     for (const watch of lineWatchers.slice()) watch(line);
   }
@@ -910,7 +1015,16 @@ async function pickPort() {
   try {
     await openPort(selected);
   } catch (err) {
-    const fail = new Error("Could not open the port. Close other programs that use it (Arduino, Thonny, mpremote) and try again.");
+    // Fix (recover flow): a port Chromium still holds from before (a stale state) often opens after a close
+    try {
+      await selected.close().catch(() => {});
+      await delay(300);
+      await openPort(selected);
+      return port;
+    } catch (again) {
+      // Fall through to the clear error
+    }
+    const fail = new Error("Could not open the port. Close other programs that use it (Arduino, Thonny, mpremote), unplug and replug the board, then click Get Started again.");
     fail.code = "open";
     throw fail;
   }
@@ -980,6 +1094,14 @@ release_channel.addEventListener("change", () => recheckCompat());
 
 function syncStart() {
   startInstall.disabled = !versionsReady || !eraseOk.checked || !!(board.compatIssue && board.compatIssue.betaOnly);
+  // Fix (recover flow): greyed Erase and Install says why
+  const note = $("start-note");
+  if (!note) return;
+  note.textContent = !startInstall.disabled ? ""
+    : !versionsReady ? "Could not load the version list. Check your internet connection, then reload the page."
+    : board.compatIssue && board.compatIssue.betaOnly ? "Pick Beta under Release to install on this board."
+    : "Tick the box above to continue.";
+  note.hidden = !note.textContent;
 }
 
 // Version 79: one manifest, one build per chip family ("ESP32", "ESP32-S3"), as esp-web-tools picks them. The
@@ -1199,6 +1321,7 @@ async function releaseLoader(link) {
 }
 async function probeBoardOnConnect() {
   if (!portOpen()) return;
+  probing = true;
   board.compatIssue = null;
   hideCompatNotice();
   setBusy(true);
@@ -1230,9 +1353,14 @@ async function probeBoardOnConnect() {
     } else if (chip) {
       appendConsole("[Board: " + chipShort(chip) + (flashKb ? ", " + flashLabel(flashKb) : "") + "]\n");
     }
+    // Fix (recover flow): Incomplete Install only for this board (its MAC is the one an unfinished install wrote to)
+    if (flashNoteMatches()) setStatus(INCOMPLETE_TEXT, "error");
   } finally {
     await releaseLoader(link).catch(() => {});
-    startReading();
+    probing = false;
+    // The port did not come back after the probe (closed, reopen failed): say so and bring Get Started back
+    if (port && !portOpen()) await portLost(port, "\n[The port closed while reading the board. Click Get Started to connect again.]\n");
+    else startReading();
     setBusy(false);
     syncBoardUi();
     syncConsoleButtons();
@@ -1614,9 +1742,6 @@ async function connectLoader(terminal) {
     }
     board.chip = (await withTimeout(loader.chip.getChipDescription(loader), READ_MS, "Reading the chip")) || link.chip;
     board.mac = (await withTimeout(loader.chip.readMac(loader), READ_MS, "Reading the MAC")) || "";
-    // Only refresh MAC on an in-progress install note — never create one during a connect probe
-    const note = flashNoteGet();
-    if (note) flashNoteSet(Object.assign(note, { mac: board.mac }));
     await readBoardExtras(link);
     syncBoardUi();
   } catch (err) {
@@ -1687,7 +1812,6 @@ async function install() {
       write(text) { appendConsole(text); },
     };
     const pickedStart = versionSelect.textContent.match(/Version (\d+(?:\.\d+)?)/);
-    flashNoteSet({ mac: board.mac || "", version: pickedStart ? pickedStart[1] : "", startedAt: Date.now() });
     // Version 64: connect and write at 115200, always the full image. A write error (the occasional
     //  "Invalid head of packet (0xff)") gets one fresh connect and a second full try before it is shown
     for (let attempt = 1; ; attempt++) {
@@ -1741,6 +1865,8 @@ async function install() {
       let lastPercent = -1;
       const started = Date.now();
       const timeLeft = makeTimeLeft();
+      // Erasing starts now: from here an unfinished install leaves the board needing Recover/Install
+      flashNoteSet({ mac: board.mac || "", version: pickedStart ? pickedStart[1] : "", startedAt: Date.now(), writing: true });
       try {
         await link.loader.writeFlash({
           fileArray: files,
@@ -1748,9 +1874,19 @@ async function install() {
           flashMode: "keep",
           flashFreq: "keep",
           eraseAll: true,
+          // Fix (verify): esptool-js checks each region after writing (the stub's flash MD5 against this one) and
+          //  throws "MD5 of file does not match data in flash!" otherwise. Without it a corrupted write (line noise
+          //  on Gene's Linux CP2102) was reported as installed and the board boot-looped
+          calculateMD5Hash: (image) => md5Binary(image),
           compress: true,
           reportProgress: (index, written, total) => {
             const percent = Math.floor((written / total) * 100);
+            if (percent === 100 && lastPercent !== 100) {
+              lastPercent = 100;
+              setProgress("Checking the written image...", 100, "Installing " + installName() + " (100%): Checking the Written Image...");
+              appendConsole("[esptool] Written 100%\n[Checking the written image (MD5)...]\n");
+              return;
+            }
             if (percent !== lastPercent) {
               lastPercent = percent;
               const left = timeLeft.add(written / total);
@@ -1762,12 +1898,18 @@ async function install() {
         });
       } catch (err) {
         await link.transport.disconnect();
-        if (attempt >= 2) throw err;
-        appendConsole("[Write failed (" + (err && err.message ? err.message : err) + "). Starting over once.]\n");
+        const mismatch = /MD5 of file does not match/i.test(err && err.message ? err.message : String(err));
+        if (attempt >= 2) {
+          if (mismatch) throw new Error(VERIFY_FAILED_TEXT);
+          throw err;
+        }
+        appendConsole(mismatch
+          ? "[The written image did not match (MD5 check). Writing it again.]\n"
+          : "[Write failed (" + (err && err.message ? err.message : err) + "). Starting over once.]\n");
         await resetLink(link).catch(() => {});
         continue;
       }
-      appendConsole("[Written in " + Math.round((Date.now() - started) / 1000) + " s, compressed]\n");
+      appendConsole("[Written in " + Math.round((Date.now() - started) / 1000) + " s, compressed; verified (MD5 matches)]\n");
       await link.transport.disconnect();
       break;
     }
@@ -1952,6 +2094,12 @@ function renderNetworks(networks) {
 function syncWifiConnect() {
   const picked = wifiList.querySelector("input:checked");
   wifiConnect.disabled = busy || !picked;
+  // Fix (recover flow): greyed Connect says why (the wait bar shows while busy)
+  const note = $("wifi-note");
+  if (note) {
+    note.textContent = !busy && !picked && wifiList.children.length ? "Pick your network above." : "";
+    note.hidden = !note.textContent;
+  }
   wifiModalConnect.disabled = busy;
   wifiModalCancel.disabled = busy;
   wifiPassword.disabled = busy;
@@ -2214,7 +2362,8 @@ function guard(fn) {
 }
 
 async function copyLog() {
-  const text = consoleOut.textContent;
+  paintConsoleNow();
+  const text = consoleText(true);
   const button = $("copy-log");
   try {
     await navigator.clipboard.writeText(text);
@@ -2272,6 +2421,7 @@ for (const button of wizard.querySelectorAll("[data-action]")) {
 connectBtn.addEventListener("click", guard(async () => {
   // Version 75 (Gene): the version list is fetched again on every Get Started, so a page left open picks up a release
   loadVersions();
+  showStartError("");
   try {
     await pickPort();
   } catch (err) {
@@ -2280,7 +2430,11 @@ connectBtn.addEventListener("click", guard(async () => {
       showBoardHelp(true);
       return;
     }
-    throw err;
+    // Fix (recover flow): the port would not open: one clear line by Get Started, which stays usable
+    showStartError(err && err.message ? err.message : "Could not open the port.");
+    appendConsole("\n[" + (err && err.message ? err.message : "Could not open the port") + "]\n");
+    showStartAgain();
+    return;
   }
   showBoardHelp(false);
   Object.assign(board, { installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {}, telemetrySent: false, compatIssue: null });
@@ -2292,11 +2446,16 @@ connectBtn.addEventListener("click", guard(async () => {
   bootTimes = [];
   syncBoardUi();
   showConsole();
-  // Version 42.1: an install that never finished (page refreshed mid-install) offers Recover GSP32 right away
-  if (flashNoteGet()) setStatus("Incomplete Install Detected. Click Recover GSP32 to erase the board and install again.", "error");
+  // Fix (recover flow): no Incomplete Install yet; the probe shows it once it read this board's MAC
   // Version 80: probe chip/flash now so stats and an incompatible notice appear before Install
   await probeBoardOnConnect();
 }));
+function showStartError(text) {
+  const line = $("start-error");
+  if (!line) return;
+  line.textContent = text;
+  line.hidden = !text;
+}
 function showBoardHelp(open) {
   const help = $("board-help"), link = $("no-board");
   if (open === !help.hidden) return;

@@ -15,6 +15,8 @@
     python tests/test_v85.py         # Version 85: Release dropdown (Stable default, Beta from a versions.json entry with "channel": "beta")
     python tests/test_false_disconnect.py  # Serial line noise (Framing/Break/Parity/Overrun) keeps reading; a real unplug closes the port and brings Get Started back
     python tests/test_reset_order.py      # Reset into the bootloader: tight first on Linux, classic elsewhere, USB-JTAG for native USB; then classic, tight, USB-JTAG per attempt; what worked is remembered
+    python tests/test_recover_flow.py     # Install note only once writing starts; Recover/Install GSP32 only for a connected board with that MAC (or a boot loop); other firmware: Install GSP32; Get Started survives a port that will not open; greyed buttons say why
+    python tests/test_verify_console.py   # MD5 check after writing (retry once, never Installed unverified); console paints per frame, 500 lines, boot-loop output held back; corrupted-app boot errors mean Recover/Install GSP32
 
 `mock.js` is a fake board on Web Serial (Improv answers, boot lines on an RTS reset; `window.__ets` also prints the
 ROM's `ets ...` line like a real ESP32), `fake-esptool.js` stands in for esptool-js. Needs Playwright with Chromium.
