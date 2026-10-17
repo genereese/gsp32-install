@@ -20,6 +20,17 @@ function crystal() {
   if (window.__crystalMhz != null) return window.__crystalMhz;
   return 40;
 }
+// Fix (false disconnect): one recoverable read error in esptool-js's own reads (connect, flash) must not end them
+async function noiseRead(t, tag) {
+  window.__serialError("FramingError");
+  setTimeout(() => window.__say("ok"), 20);
+  try {
+    const r = await Promise.race([t.reader.read(), new Promise((res) => setTimeout(() => res({ timeout: true }), 1000))]);
+    window.__log.push(tag + (r && r.value ? " read ok " + r.value.length : " read none"));
+  } catch (e) {
+    window.__log.push(tag + " read failed " + e.name);
+  }
+}
 export class ESPLoader {
   constructor(o) {
     this.t = o.transport; this.term = o.terminal; window.__log.push("loader baud " + o.baudrate);
@@ -48,6 +59,7 @@ export class ESPLoader {
     await this.t.connect(115200);
     if (window.__hangConnect > 0) { window.__hangConnect--; window.__log.push("connect hang"); await never(); }
     window.__log.push("esptool got reader " + !!this.t.reader);
+    if (window.__esptoolNoise) await noiseRead(this.t, "connect");
     this.term.writeLine("Connecting...");
     this.term.writeLine("Chip is " + chipDesc().split(" (")[0]);
     if (window.__failFlash) throw new Error("Failed to connect with the device");
@@ -60,6 +72,7 @@ export class ESPLoader {
       for (let p = 0; p <= 3; p++) { o.reportProgress(0, p * 10, 100); await new Promise(r => setTimeout(r, 30)); }
       throw new Error("Packet content transfer stopped");
     }
+    if (window.__flashNoise) await noiseRead(this.t, "flash");
     window.__log.push("files " + o.fileArray.length + " size " + o.fileArray[0].data.length + " at " + o.fileArray[0].address + " eraseAll " + o.eraseAll);
     if (window.__eraseDelay) await new Promise(r => setTimeout(r, window.__eraseDelay));
     for (let p = 0; p <= 10; p++) { o.reportProgress(0, p * 10, 100); await new Promise(r => setTimeout(r, window.__flashDelay || 30)); }

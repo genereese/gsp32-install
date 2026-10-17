@@ -785,13 +785,47 @@ async function resetBoard() {
   await setRunState();
 }
 
+// Fix (false disconnect): Web Serial reports line noise (a reset, an Arduino sketch's output at another speed) as a
+//  read error, after which port.readable is a fresh stream. Only a missing readable (or navigator.serial's disconnect
+//  event) means the board is really gone
+const RECOVERABLE_SERIAL = ["BreakError", "FramingError", "ParityError", "BufferOverrunError"];
+function serialRecoverable(err, onPort) {
+  if (!onPort || !onPort.readable) return false;
+  return true;  // with readable still there the port lives on, whatever the error (RECOVERABLE_SERIAL or other)
+}
+function serialErrorName(err) {
+  return (err && (err.name || err.message)) || "error";
+}
+const DISCONNECT_TEXT = "\n[The board disconnected. Plug it in and click Get Started.]\n";
+// A real loss: close the port (so Chromium lets go of it), say so once, and bring Get Started back
+async function portLost(lost, message) {
+  if (!lost || lost.__gsp32Lost) return;
+  lost.__gsp32Lost = true;
+  if (port === lost) port = null;
+  reading = false;
+  board.listening = false;
+  if (message) appendConsole(message);
+  await stopReading().catch(() => {});
+  await lost.close().catch(() => {});
+  syncConsoleButtons();
+  showStartAgain();
+}
+// Get Started (the start row) comes back above the console, which keeps its log
+function showStartAgain() {
+  if (installer.hidden || installer.shutting) foldOpen(installer);
+  connectBtn.disabled = false;
+  connectBtn.hidden = false;
+}
 function startReading() {
   if (reading || !portOpen()) return;
   reading = true;
+  const readPort = port;
+  let lost = false;
   readDone = (async () => {
-    while (reading && port && port.readable) {
+    let errors = 0;
+    while (reading && port === readPort && readPort.readable) {
       try {
-        reader = port.readable.getReader();
+        reader = readPort.readable.getReader();
       } catch (err) {
         break;
       }
@@ -801,13 +835,18 @@ function startReading() {
           const { value, done } = await reader.read();
           if (done) break;
           got = true;
+          errors = 0;
           if (value) consumeSerial(value);
         }
       } catch (err) {
-        if (reading) {
-          reading = false;
-          appendConsole("\n[The board disconnected. Plug it in and click Get Started.]\n");
-          port = null;
+        if (reading && serialRecoverable(err, readPort)) {
+          // Line noise only: a fresh reader on the new stream, a short pause if errors keep coming
+          errors += 1;
+          if (errors <= 3 || errors % 50 === 0) console.warn("Serial read error, reading on:", serialErrorName(err));
+          if (errors > 5) await delay(Math.min(500, errors * 10));
+          got = true;
+        } else if (reading) {
+          lost = true;
         }
       } finally {
         try {
@@ -821,7 +860,13 @@ function startReading() {
       if (!got) await delay(50);
       if (!got && reading && port && port.readable && port.readable.locked) break;
     }
+    if (reading && !lost && !readPort.readable) lost = true;
     reading = false;
+    if (lost) {
+      readDone = Promise.resolve();
+      await portLost(readPort, DISCONNECT_TEXT);
+      return;
+    }
     syncConsoleButtons();
   })();
 }
@@ -835,6 +880,9 @@ async function stopReading() {
 async function openPort(selected) {
   if (port === selected && portOpen()) return;
   if (port && port !== selected) await closePort();
+  // Still open from before (a lost state): close it first, or open() fails with "already open"
+  if (selected.readable || selected.writable) await selected.close().catch(() => {});
+  selected.__gsp32Lost = false;
   await selected.open({ baudRate: FLASH_BAUD });
   portBaud = FLASH_BAUD;
   port = selected;
@@ -1392,6 +1440,28 @@ async function resetLink(link) {
   portBaud = FLASH_BAUD;
   await setRunState().catch(() => {});
 }
+// Fix (false disconnect): esptool-js reads through this. A recoverable read error (port.readable still there) takes a
+//  fresh reader from the new stream and reads again, once per error; a real loss rejects as before
+function resilientReader(onPort) {
+  let inner = onPort.readable.getReader();
+  const wrapper = {
+    async read() {
+      try {
+        return await inner.read();
+      } catch (err) {
+        if (!serialRecoverable(err, onPort)) throw err;
+        console.warn("Serial read error during connect/flash, reading on:", serialErrorName(err));
+        try { inner.releaseLock(); } catch (e) { /* released already */ }
+        inner = onPort.readable.getReader();
+        return await inner.read();
+      }
+    },
+    cancel(reason) { return inner.cancel(reason); },
+    releaseLock() { return inner.releaseLock(); },
+    get closed() { return inner.closed; },
+  };
+  return wrapper;
+}
 // A borrowed transport on the open port and a loader in the board's flasher stub at 115200
 async function connectLoader(terminal) {
   await reopenPort(FLASH_BAUD);
@@ -1400,7 +1470,7 @@ async function connectLoader(terminal) {
   transport.connect = async function (baud) {
     this.baudrate = baud;
     await reopenPort(baud);
-    this.reader = port.readable.getReader();
+    this.reader = resilientReader(port);
   };
   transport.disconnect = async function () {
     if (this.reader) {
@@ -1461,7 +1531,7 @@ async function drainInput(transport, quietMs = 100, maxMs = 500) {
   } catch (err) {
     // Released already
   }
-  transport.reader = port && port.readable ? port.readable.getReader() : undefined;
+  transport.reader = port && port.readable ? resilientReader(port) : undefined;
   transport.buffer = new Uint8Array(0);
   return dropped;
 }
@@ -2016,7 +2086,10 @@ if (window.ResizeObserver) {
 }
 
 function guard(fn) {
-  return () => fn().catch((err) => appendConsole("\n[" + (err && err.message ? err.message : "Something went wrong") + "]\n"));
+  return () => fn().catch((err) => {
+    appendConsole("\n[" + (err && err.message ? err.message : "Something went wrong") + "]\n");
+    if (!portOpen()) { syncConsoleButtons(); showStartAgain(); }
+  });
 }
 
 async function copyLog() {
@@ -2131,12 +2204,7 @@ $("console-form").addEventListener("submit", (event) => {
 
 if ("serial" in navigator) {
   navigator.serial.addEventListener("disconnect", (event) => {
-    if (event.target === port) {
-      reading = false;
-      port = null;
-      syncConsoleButtons();
-      hideConsole();
-    }
+    if (event.target === port) portLost(port, DISCONNECT_TEXT);
   });
 }
 document.addEventListener("visibilitychange", () => {

@@ -72,6 +72,10 @@
     },
   };
   window.__port = port;
+  // Fix (false disconnect): line noise (a FramingError, BreakError, ...) errors the open stream; the port stays open and
+  //  port.readable is a fresh stream, as in Chromium
+  window.__serialError = (name) => { const c = ctrl; rs = null; ctrl = null; log.push("serial error " + name);
+    try { if (c) c.error(new DOMException("Serial line error", name)); } catch (e) {} };
   // Version 61: a pulled cable: the port closes under the page, open readers error, then the disconnect event
   const unplugged = [];
   window.__unplug = () => { log.push("UNPLUG"); try { ctrl && ctrl.error(new TypeError("The device has been lost.")); } catch (e) {} isOpen = false; rs = null; port.writable = null;
