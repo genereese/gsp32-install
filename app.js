@@ -402,7 +402,8 @@ function syncBoardUi() {
   const gsp32 = board.kind === "gsp32";
   // Version 42.1: a half-finished install (boot loop, or the saved note of an install that never ended) offers Recover
   const broken = board.kind === "broken" || (!gsp32 && flashNoteMatches());
-  install.disabled = !on || busy || !!board.compatIssue;
+  // Version 92: a C3 with Stable picked can still open the install step, to choose Beta there
+  install.disabled = !on || busy || !!(board.compatIssue && !board.compatIssue.betaOnly);
   install.textContent = broken ? "Recover GSP32" : gsp32 ? "Reinstall GSP32" : "Install GSP32";
   // While installing, Wi-Fi and the web UI button are gone (not greyed); they come back after
   setShown(setup, gsp32 && !flashing);
@@ -930,7 +931,7 @@ release_channel.addEventListener("change", releaseChannelUpdate);
 release_channel.addEventListener("change", () => recheckCompat());
 
 function syncStart() {
-  startInstall.disabled = !versionsReady || !eraseOk.checked;
+  startInstall.disabled = !versionsReady || !eraseOk.checked || !!(board.compatIssue && board.compatIssue.betaOnly);
 }
 
 // Version 79: one manifest, one build per chip family ("ESP32", "ESP32-S3"), as esp-web-tools picks them. The
@@ -983,6 +984,7 @@ function recheckCompat() {
   board.compatIssue = issue;
   if (issue) showCompatNotice(issue); else hideCompatNotice();
   syncBoardUi();
+  syncStart();
 }
 function hideCompatNotice() {
   const box = $("compat-notice");
@@ -2040,7 +2042,7 @@ $("console-webui").addEventListener("click", (event) => {
   if (event.currentTarget.classList.contains("waiting")) event.preventDefault();
 });
 $("install-btn").addEventListener("click", () => {
-  if (busy || board.compatIssue) return;
+  if (busy || (board.compatIssue && !board.compatIssue.betaOnly)) return;
   eraseOk.checked = false;
   syncStart();
   showStep("prep");
