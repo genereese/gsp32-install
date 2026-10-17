@@ -34,6 +34,7 @@ async function noiseRead(t, tag) {
 export class ESPLoader {
   constructor(o) {
     this.t = o.transport; this.term = o.terminal; window.__log.push("loader baud " + o.baudrate);
+    this.resetConstructors = o.resetConstructors || {};
     this.chip = {
       getChipDescription: async () => chipDesc(),
       readMac: async () => {
@@ -59,6 +60,21 @@ export class ESPLoader {
     await this.t.connect(115200);
     if (window.__hangConnect > 0) { window.__hangConnect--; window.__log.push("connect hang"); await never(); }
     window.__log.push("esptool got reader " + !!this.t.reader);
+    // Fix (Linux reset): like esptool-js 0.5.7's connect(): its sequences from resetConstructors (USB-JTAG by PID,
+    //  else classic 50 and 550), one per attempt, 7 attempts; the board enters download mode only on __resetWorks
+    if (window.__resetWorks !== undefined) {
+      const rc = this.resetConstructors;
+      const pid = this.t.device.getInfo().usbProductId;
+      const seqs = pid === 4097 ? [rc.usbJTAGSerialReset(this.t)] : [rc.classicReset(this.t, 50), rc.classicReset(this.t, 550)];
+      let ok = false;
+      for (let i = 0; i < 7 && !ok; i++) {
+        const seq = seqs[i % seqs.length];
+        await seq.reset();
+        window.__log.push("reset " + seq.name);
+        ok = seq.name === window.__resetWorks;
+      }
+      if (!ok) throw new Error("Failed to connect with the device");
+    }
     if (window.__esptoolNoise) await noiseRead(this.t, "connect");
     this.term.writeLine("Connecting...");
     this.term.writeLine("Chip is " + chipDesc().split(" (")[0]);
