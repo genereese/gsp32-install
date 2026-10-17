@@ -5,9 +5,9 @@
     "label": "Version 85 (af151ff), latest"
   },
   {
-    "version": "248b61e",
+    "version": "7281e4c",
     "manifest": "manifest-beta.json",
-    "label": "Version 88 (248b61e), beta",
+    "label": "Version 89 (7281e4c), beta",
     "channel": "beta"
   }
 ]
