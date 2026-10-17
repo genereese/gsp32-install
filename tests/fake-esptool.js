@@ -89,6 +89,17 @@ export class ESPLoader {
       throw new Error("Packet content transfer stopped");
     }
     if (window.__flashNoise) await noiseRead(this.t, "flash");
+    // Fix (write retries): line noise breaks the write partway, like esptool-js's SLIP reader does. __writePlan
+    //  scripts each write in turn: "noise", "md5" (written, then the MD5 check fails) or "ok"
+    const step = Array.isArray(window.__writePlan) ? window.__writePlan.shift() : undefined;
+    if (step === "md5") window.__md5Bad = 1;
+    if (step === "noise") window.__noiseWrites = 1;
+    if (window.__noiseWrites > 0) {
+      window.__noiseWrites--;
+      for (let p = 0; p <= 4; p++) { o.reportProgress(0, p * 10, 100); await new Promise(r => setTimeout(r, 20)); }
+      window.__log.push("write noise");
+      throw new Error("Invalid head of packet (0xff): Possible serial noise or corruption.");
+    }
     window.__log.push("files " + o.fileArray.length + " size " + o.fileArray[0].data.length + " at " + o.fileArray[0].address + " eraseAll " + o.eraseAll);
     if (window.__eraseDelay) await new Promise(r => setTimeout(r, window.__eraseDelay));
     for (let p = 0; p <= 10; p++) { o.reportProgress(0, p * 10, 100); await new Promise(r => setTimeout(r, window.__flashDelay || 30)); }

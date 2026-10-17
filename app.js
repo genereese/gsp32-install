@@ -9,9 +9,22 @@ const HEADER = [0x49, 0x4d, 0x50, 0x52, 0x4f, 0x56];
 const MAX_LINES = 2000;
 const FLASH_BAUD = 115200;
 // Fix (verify): an install is reported only once the flash verifies; two mismatches end with this
-const VERIFY_FAILED_TEXT = "The image on the board did not match what was sent (checked twice), so it is not installed. " +
+const VERIFY_FAILED_TEXT = "The image on the board did not match what was sent (checked " + 3 + " times), so it is not installed. " +
   "This is usually the USB cable or port: try another data cable, plug the board straight into the computer (no hub), then click Try Again. " +
   "The flasher already writes at 115200, the slowest standard speed.";
+// Fix (write retries): a write that breaks on line noise ("Invalid head of packet (0xff): Possible serial noise or
+//  corruption", timeouts, a stopped transfer) or fails its MD5 check is written again from a fresh connect (reset
+//  rotation, sync, stub), up to WRITE_ATTEMPTS writes in all. The raw esptool text stays in the console; the last
+//  failure is said plainly
+const WRITE_ATTEMPTS = 3;
+const GARBLED_TEXT = "The connection to the board kept getting garbled. Try a different (short) USB cable, plugged straight into the computer.";
+const NOISE_ERROR = /Invalid head of packet|serial noise|corruption|Timeout|timed out|took longer than|Packet content transfer stopped|Invalid response|invalid packet|Failed to (read|write)|Unexpected|checksum|SLIP/i;
+function writeFailureText(err) {
+  const raw = err && err.message ? err.message : String(err);
+  if (/MD5 of file does not match/i.test(raw)) return VERIFY_FAILED_TEXT;
+  if (NOISE_ERROR.test(raw)) return GARBLED_TEXT;
+  return raw;
+}
 // MD5 of a binary string (one char per byte), as esptool-js's calculateMD5Hash wants: lowercase hex
 function md5Binary(str) {
   const K = new Int32Array(64), S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
@@ -346,6 +359,8 @@ function trackBoard(line) {
   // Fix (verify): a corrupted app ("E (31) esp_image: invalid segment length 0x...", "Factory app partition is not
   //  bootable", "No bootable app partitions") is a broken install too
   if (/invalid header|ota data partition invalid|checksum (error|failure)|image checksum|flash read err|E \(\d+\) esp_image|invalid segment length|partition is not bootable|No bootable app partitions/i.test(line)) {
+    // Only these say there is no bootable firmware (the console's restart line names it then)
+    if (/invalid header|E \(\d+\) esp_image|invalid segment length|not bootable|No bootable app/i.test(line)) board.noBootable = true;
     markBroken();
     return;
   }
@@ -777,17 +792,83 @@ function paintConsole() {
 function consoleText(all) {
   const shown = all ? lines : lines.slice(-DOM_LINES);
   let text = shown.join("\n") + (partial ? (shown.length ? "\n" : "") + partial : "");
-  if (mutedLines) text += (text ? "\n" : "") + "[The board keeps restarting (no bootable firmware): " + mutedLines + " lines of its restart output hidden. Click " + RECOVER_LABEL + ".]";
+  if (gate.hidden) text += (text ? "\n" : "") + "[Board output isn't readable at 115200 (other firmware?): " + gate.bytes + " bytes hidden]";
+  if (mutedLines) text += (text ? "\n" : "") + "[The board keeps restarting" + (board.noBootable ? " (no bootable firmware)" : "") + ": " + mutedLines + " lines of its restart output hidden. Click " + RECOVER_LABEL + ".]";
   return text;
 }
 function paintConsoleNow() {
   consoleOut.textContent = consoleText(false);
   if (followConsole) consoleOut.scrollTop = consoleOut.scrollHeight;
 }
+// Fix (unreadable output): a board whose firmware talks at another speed (a factory sketch at 9600, 57600, 921600)
+//  reads as a stream of 0xF0/0xFC/"p"/"|" at 115200. Once a quarter of the recent characters are unreadable
+//  (replacement characters, control codes), its output is held back behind one updating line; it shows again once a
+//  clean run with a line break comes (the ROM banner of a restart, GSP32 after an install). This is only display: it
+//  never marks the board broken; such a board is "other firmware" (Install GSP32)
+const UNREADABLE_SHARE = 0.25;
+const UNREADABLE_MIN = 64;
+const CLEAN_RUN = 64;
+let gate = { good: 0, bad: 0, hidden: false, bytes: 0, cleanRun: 0, cleanBreak: false };
+function readableGateReset() {
+  if (gate.hidden && gate.bytes) lines.push("[" + gate.bytes + " bytes of unreadable output were hidden]");
+  gate = { good: 0, bad: 0, hidden: false, bytes: 0, cleanRun: 0, cleanBreak: false };
+}
+function unreadableChar(code) {
+  return code === 0xfffd || (code < 0x20 && code !== 9 && code !== 10 && code !== 13) || (code >= 0x7f && code < 0xa0);
+}
+function readableGate(text, byteCount) {
+  if (!gate.hidden) {
+    let bad = 0;
+    for (let i = 0; i < text.length; i++) if (unreadableChar(text.charCodeAt(i))) bad++;
+    gate.bad += bad;
+    gate.good += text.length - bad;
+    if (gate.good + gate.bad > 512) { gate.good /= 2; gate.bad /= 2; }
+    const total = gate.good + gate.bad;
+    if (total < UNREADABLE_MIN || gate.bad / total < UNREADABLE_SHARE) return text;
+    // Hidden from here: the unfinished garbled line goes too
+    gate.hidden = true;
+    gate.bytes = byteCount + partial.length;
+    partial = "";
+    gate.cleanRun = 0;
+    gate.cleanBreak = false;
+    paintConsole();
+    return "";
+  }
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (unreadableChar(code)) {
+      gate.cleanRun = 0;
+      gate.cleanBreak = false;
+      continue;
+    }
+    gate.cleanRun++;
+    if (code === 10) gate.cleanBreak = true;
+    if (gate.cleanRun >= CLEAN_RUN && gate.cleanBreak) {
+      // Readable again: from the start of the clean run
+      const start = i + 1 - gate.cleanRun;
+      gate.bytes += Math.max(0, start);
+      readableGateReset();
+      return text.slice(Math.max(0, start));
+    }
+  }
+  gate.bytes += byteCount;
+  paintConsole();
+  return "";
+}
+
 // What a restarting board prints (ROM banner, bootloader lines, the reason it can't boot)
 const BOOT_NOISE = /^(rst:0x|ets [A-Z][a-z]{2} |configsip|clk_drv|mode:|load:0x|entry 0x|ho \d|[EIW] \(\d+\) |invalid header|Factory app|No bootable|abort\(\)|Rebooting|Backtrace|ELF file SHA|\s*$)/;
+// Fix (fold during install): the fold stays while the install gets ready (busy), and ends when esptool takes the port
+function endConsoleFolds() {
+  if (mutedLines) {
+    lines.push("[" + mutedLines + " lines of restart output were hidden]");
+    mutedLines = 0;
+  }
+  readableGateReset();
+  paintConsole();
+}
 function muteBootLoop(line) {
-  if (board.kind !== "broken" || busy || flashing) {
+  if (board.kind !== "broken") {
     if (mutedLines) {
       lines.push("[" + mutedLines + " lines of restart output were hidden]");
       mutedLines = 0;
@@ -825,7 +906,10 @@ function appendConsole(text) {
 function consumeSerial(chunk) {
   const taken = takeSerialBytes(concatBytes(pending, chunk));
   pending = taken.rest;
-  if (taken.text.length) appendConsole(textDecoder.decode(taken.text, { stream: true }));
+  if (taken.text.length) {
+    const shown = readableGate(textDecoder.decode(taken.text, { stream: true }), taken.text.length);
+    if (shown) appendConsole(shown);
+  }
   for (const packet of taken.packets) {
     // Any answer is GSP32; a provisioned state's result carries the board's address
     board.kind = "gsp32";
@@ -998,6 +1082,7 @@ async function openPort(selected) {
   await setRunState();
   pending = new Uint8Array(0);
   textDecoder = new TextDecoder("utf-8");
+  readableGateReset();
   startReading();
   syncConsoleButtons();
 }
@@ -1806,6 +1891,7 @@ async function install() {
     // Version 79: the image follows the chip, so it is fetched once per family after the first connect
     const imageFor = {};
     await stopReading();
+    endConsoleFolds();
     const terminal = {
       clean() {},
       writeLine(text) { appendConsole("[esptool] " + text + "\n"); },
@@ -1898,14 +1984,17 @@ async function install() {
         });
       } catch (err) {
         await link.transport.disconnect();
-        const mismatch = /MD5 of file does not match/i.test(err && err.message ? err.message : String(err));
-        if (attempt >= 2) {
-          if (mismatch) throw new Error(VERIFY_FAILED_TEXT);
-          throw err;
+        const raw = err && err.message ? err.message : String(err);
+        const mismatch = /MD5 of file does not match/i.test(raw);
+        if (attempt >= WRITE_ATTEMPTS) {
+          appendConsole("[Write " + attempt + " of " + WRITE_ATTEMPTS + " failed (" + raw + "). Giving up.]\n");
+          const plain = new Error(writeFailureText(err));
+          plain.plain = true;
+          throw plain;
         }
         appendConsole(mismatch
-          ? "[The written image did not match (MD5 check). Writing it again.]\n"
-          : "[Write failed (" + (err && err.message ? err.message : err) + "). Starting over once.]\n");
+          ? "[The written image did not match (MD5 check). Writing it again (" + (attempt + 1) + " of " + WRITE_ATTEMPTS + ").]\n"
+          : "[Write failed (" + raw + "). Connecting again and writing it again (" + (attempt + 1) + " of " + WRITE_ATTEMPTS + ").]\n");
         await resetLink(link).catch(() => {});
         continue;
       }
@@ -1917,6 +2006,7 @@ async function install() {
     setProgress("Restarting the board...", 100, "Installing " + installName() + " (100%): Restarting the Board...");
     // Detect again from the new boot: the buttons follow what the fresh firmware prints
     board.kind = "unknown";
+    board.noBootable = false;
     board.ip = "";
     board.readyAt = 0;
     const picked = versionSelect.textContent.match(/Version (\d+(?:\.\d+)?)/);
@@ -1949,7 +2039,9 @@ async function install() {
     startReading();
     setBusy(false);
     stopFlashGuard();
-    showError("The install did not finish: " + (err && err.message ? err.message : err), "prep");
+    // Fix (write retries): the plain text alone; the raw esptool text is in the console
+    if (err && err.plain) appendConsole("[The install did not finish: " + err.message + "]\n");
+    showError(err && err.plain ? "The install did not finish. " + err.message : "The install did not finish: " + (err && err.message ? err.message : err), "prep");
     showActions(true);
   }
   syncConsoleButtons();
@@ -2437,7 +2529,7 @@ connectBtn.addEventListener("click", guard(async () => {
     return;
   }
   showBoardHelp(false);
-  Object.assign(board, { installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {}, telemetrySent: false, compatIssue: null });
+  Object.assign(board, { noBootable: false, installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {}, telemetrySent: false, compatIssue: null });
   // USB bridge is known from the open port (no guess); keep it after the board-state reset
   const bridge = usbBridgeInfo();
   if (bridge) { board.info.usb = bridge.name; board.info.usbLabel = bridge.label; }

@@ -17,6 +17,9 @@
     python tests/test_reset_order.py      # Reset into the bootloader: tight first on Linux, classic elsewhere, USB-JTAG for native USB; then classic, tight, USB-JTAG per attempt; what worked is remembered
     python tests/test_recover_flow.py     # Install note only once writing starts; Recover/Install GSP32 only for a connected board with that MAC (or a boot loop); other firmware: Install GSP32; Get Started survives a port that will not open; greyed buttons say why
     python tests/test_verify_console.py   # MD5 check after writing (retry once, never Installed unverified); console paints per frame, 500 lines, boot-loop output held back; corrupted-app boot errors mean Recover/Install GSP32
+    python tests/test_unreadable.py       # Output at another speed (factory firmware): console stays at 115200, one updating "not readable" line, never broken, Install GSP32
+    python tests/test_boot_loop_label.py  # Restart loop without an image error is not called "no bootable firmware"; every broken state reads Recover/Install GSP32 in full
+    python tests/test_write_retry.py      # Noise or MD5 failure during a write: reconnect and write again, 3 writes in all; plain final message; boot-loop fold lasts until esptool takes the port
 
 `mock.js` is a fake board on Web Serial (Improv answers, boot lines on an RTS reset; `window.__ets` also prints the
 ROM's `ets ...` line like a real ESP32), `fake-esptool.js` stands in for esptool-js. Needs Playwright with Chromium.
