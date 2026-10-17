@@ -5,9 +5,9 @@
     "label": "Version 85 (af151ff), latest"
   },
   {
-    "version": "7281e4c",
+    "version": "cabb3de",
     "manifest": "manifest-beta.json",
-    "label": "Version 89 (7281e4c), beta",
+    "label": "Version 90 (cabb3de), beta",
     "channel": "beta"
   }
 ]

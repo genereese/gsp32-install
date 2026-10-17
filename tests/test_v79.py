@@ -24,9 +24,9 @@ v = json.load(open(os.path.join(site, "versions.json")))
 st = [e for e in v if e.get("channel", "stable") == "stable"]; bt = [e for e in v if e.get("channel") == "beta"]
 check("versions.json: Stable Version 85 only (+ at most one Beta)", len(st) == 1 and st[0]["label"].startswith("Version 85") and st[0]["manifest"] == "manifest.json" and len(bt) <= 1)
 # Version 84: Version 84 stays (V85) as the single unlisted rollback (manifest-v84.json, firmware/v84/, all four images), not in versions.json
-check("versions.json: Beta is Version 89 (manifest-beta.json)", len(bt) == 1 and bt[0]["label"].startswith("Version 89") and bt[0]["manifest"] == "manifest-beta.json")
+check("versions.json: Beta is Version 90 (manifest-beta.json)", len(bt) == 1 and bt[0]["label"].startswith("Version 90") and bt[0]["manifest"] == "manifest-beta.json")
 bm = json.load(open(os.path.join(site, "manifest-beta.json")))
-check("manifest-beta.json: Version 89, firmware/beta images exist", bm["version"].startswith("Version 89") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/beta/") for b in bm["builds"] for p in b["parts"]))
+check("manifest-beta.json: Version 90, firmware/beta images exist", bm["version"].startswith("Version 90") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/beta/") for b in bm["builds"] for p in b["parts"]))
 rb = json.load(open(os.path.join(site, "manifest-v84.json")))
 check("rollback manifest-v84.json points at firmware/v84 images that exist", all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v84/") for b in rb["builds"] for p in b["parts"]))
 check("rollback not listed in versions.json", all(x["manifest"] != "manifest-v84.json" for x in v))
