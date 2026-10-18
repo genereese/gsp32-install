@@ -45,6 +45,17 @@ check("probe on connect", "probeBoardOnConnect" in js)
 
 TELEMETRY = "https://gsp32-telemetry.genereese.workers.dev/log"
 
+
+# Version 94 (item 4): wait for the install to finish instead of a fixed 6-7 s
+INSTALLED = "n => ((document.getElementById('console-out') || {}).innerText || '').split('[Installed. Restarting the board.]').length - 1 > n"
+def installs(pg):
+    return pg.evaluate("((document.getElementById('console-out') || {}).innerText || '').split('[Installed. Restarting the board.]').length - 1")
+def startInstall(pg, timeout=30000):
+    n = installs(pg); pg.click("#start-install")
+    try: pg.wait_for_function(INSTALLED, arg=n, timeout=timeout, polling=100)
+    except Exception: pass
+    pg.wait_for_timeout(800)
+
 def run(b, chip, flash_kb=None, usb=None, auto_install=True):
     pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js")
     init = "window.__ver = '47'; window.__log = []; window.__telemetry = [];"
@@ -96,7 +107,7 @@ def run(b, chip, flash_kb=None, usb=None, auto_install=True):
     # Skip install click when incompatible (Install disabled)
     can_install = auto_install and pg.evaluate("!document.getElementById('install-btn').disabled")
     if can_install:
-        pg.click("#install-btn"); pg.check("#erase-ok"); pg.click("#start-install"); pg.wait_for_timeout(6000)
+        pg.click("#install-btn"); pg.check("#erase-ok"); startInstall(pg)
     else:
         pg.wait_for_timeout(200)
     log = [l for l in pg.evaluate("window.__log") if isinstance(l, str)]
@@ -157,7 +168,7 @@ with sync_playwright() as p:
         check("ESP32 telemetry usb", body.get("usb_bridge") == "10c4:ea60 CP2102", str(body.get("usb_bridge")))
         check("ESP32 telemetry revision", body.get("revision") == "v3.1", str(body.get("revision")))
     # second install same connect: still one telemetry
-    pg.click("#install-btn"); pg.check("#erase-ok"); pg.click("#start-install"); pg.wait_for_timeout(6000)
+    pg.click("#install-btn"); pg.check("#erase-ok"); startInstall(pg)
     tel2 = pg.evaluate("window.__telemetry")
     check("telemetry once per connect", len(tel2) == 1, str(tel2))
     pg.close()
@@ -193,7 +204,7 @@ with sync_playwright() as p:
     pg.select_option("#release-channel", "beta"); pg.wait_for_timeout(800)
     hidden = pg.evaluate("document.getElementById('compat-notice').hidden || document.getElementById('compat-notice').shutting === true")
     check("ESP32-C3 on Beta: note gone, Version 92, Erase and Install on", hidden and pg.text_content("#version").strip() == "Version 92" and pg.evaluate("!document.getElementById('start-install').disabled"), str(hidden))
-    pg.click("#start-install"); pg.wait_for_timeout(6000)
+    startInstall(pg)
     w = [l for l in pg.evaluate("window.__log") if isinstance(l, str) and l.startswith("files")]
     check("ESP32-C3 on Beta gets the 4 MB C3 image at 0", w == ["files 1 size 4194304 at 0 eraseAll true"] and "[ESP32-C3 detected: installing its build]" in pg.inner_text("#console-out") and "[Image: ESP32-C3 4 MB (Super Mini)" in pg.inner_text("#console-out"), str(w))
     check("ESP32-C3 installed", "Installed" in pg.inner_text("body"))
@@ -240,7 +251,7 @@ with sync_playwright() as p:
     pg.goto("http://127.0.0.1:8789/index.html"); pg.wait_for_timeout(300); pg.click("#connect"); pg.wait_for_timeout(100)
     pg.evaluate("window.__port.setSignals({requestToSend: true}).then(() => window.__port.setSignals({requestToSend: false}))")
     pg.wait_for_timeout(4500)
-    pg.click("#install-btn"); pg.check("#erase-ok"); pg.click("#start-install"); pg.wait_for_timeout(7000)
+    pg.click("#install-btn"); pg.check("#erase-ok"); startInstall(pg)
     log = [l for l in pg.evaluate("window.__log") if isinstance(l, str)]
     check("hanging telemetry does not block install", any(l.startswith("files") for l in log) and "Installed" in pg.inner_text("body"), str([l for l in log if l.startswith("files")]))
     pg.close()
