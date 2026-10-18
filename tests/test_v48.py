@@ -3,7 +3,7 @@ import sys, http.server, threading, functools, os
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); here = os.path.dirname(os.path.abspath(__file__))
 http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
-srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8771), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
+srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8813), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 fails = 0
 shots = sys.argv[1] if len(sys.argv) > 1 else None
@@ -12,7 +12,7 @@ def check(name, ok, extra=""):
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(viewport={"width": 1440, "height": 900})
-    pg.goto("http://127.0.0.1:8771/index.html"); pg.wait_for_timeout(1200)
+    pg.goto("http://127.0.0.1:8813/index.html"); pg.wait_for_timeout(1200)
     check("heading Check It Out", pg.inner_text("#tour-title") == "Check It Out")
     check("flasher shows its version", "Flasher Version 85" in pg.inner_text("body"))
     check("strip visible without scrolling at 1440x900", pg.locator(".tour-thumb >> nth=0").bounding_box()["y"] < 900, str(pg.locator(".tour-thumb >> nth=0").bounding_box()))
@@ -34,7 +34,7 @@ with sync_playwright() as p:
     check("X closes", not pg.is_visible("#tour-modal"))
     pg.close()
     pg = b.new_page(viewport={"width": 390, "height": 844}, has_touch=True)
-    pg.goto("http://127.0.0.1:8771/index.html"); pg.wait_for_timeout(1000)
+    pg.goto("http://127.0.0.1:8813/index.html"); pg.wait_for_timeout(1000)
     xs = [pg.locator(".steps-row li:not(.arrow) >> nth=%d" % i).bounding_box() for i in range(3)]
     check("V50: steps stack, one per line, inside 390", max(x["x"] + x["width"] for x in xs) <= 390 and len({round(x["y"]) for x in xs}) == 3, str(xs))
     pg.click(".tour-thumb >> nth=0"); pg.wait_for_timeout(300)
@@ -47,7 +47,7 @@ with sync_playwright() as p:
     # busy console: Wi-Fi step open disables typing, Cancel restores it
     pg = b.new_page(viewport={"width": 1440, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script("window.__ver = '47'")
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
-    pg.goto("http://127.0.0.1:8771/index.html"); pg.wait_for_timeout(300); pg.click("#connect"); pg.wait_for_timeout(100)
+    pg.goto("http://127.0.0.1:8813/index.html"); pg.wait_for_timeout(300); pg.click("#connect"); pg.wait_for_timeout(100)
     pg.evaluate("window.__port.setSignals({requestToSend: true}).then(() => window.__port.setSignals({requestToSend: false}))")
     pg.wait_for_timeout(4500)
     check("idle: input and Send enabled", pg.is_enabled("#console-in") and not pg.is_visible("#console-note"))

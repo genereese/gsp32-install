@@ -3,14 +3,14 @@ import sys, http.server, threading, functools, os
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
-srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8773), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
+srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8814), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 fails = 0
 def check(name, ok, extra=""):
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, extra)
 with sync_playwright() as p:
     b = p.chromium.launch()
-    pg = b.new_page(viewport={"width": 1366, "height": 768}); pg.goto("http://127.0.0.1:8773/index.html"); pg.wait_for_timeout(1000)
+    pg = b.new_page(viewport={"width": 1366, "height": 768}); pg.goto("http://127.0.0.1:8814/index.html"); pg.wait_for_timeout(1000)
     last = pg.locator(".tour-thumb").last.bounding_box()
     check("whole gallery on one 1366x768 screen", last["y"] + last["height"] <= 768, str(last))
     s3 = pg.locator(".steps-row li:not(.arrow) >> nth=2").bounding_box()
