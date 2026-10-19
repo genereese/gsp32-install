@@ -24,9 +24,9 @@ v = json.load(open(os.path.join(site, "versions.json")))
 st = [e for e in v if e.get("channel", "stable") == "stable"]; bt = [e for e in v if e.get("channel") == "beta"]
 check("versions.json: Stable Version 85 only (+ at most one Beta)", len(st) == 1 and st[0]["label"].startswith("Version 85") and st[0]["manifest"] == "manifest.json" and len(bt) <= 1)
 # Version 84: Version 84 stays (V85) as the single unlisted rollback (manifest-v84.json, firmware/v84/, all four images), not in versions.json
-check("versions.json: Beta is Version 97 (manifest-beta.json)", len(bt) == 1 and bt[0]["label"].startswith("Version 97 ") and bt[0]["manifest"] == "manifest-beta.json")
+check("versions.json: Beta is Version 98 (manifest-beta.json)", len(bt) == 1 and bt[0]["label"].startswith("Version 98 ") and bt[0]["manifest"] == "manifest-beta.json")
 bm = json.load(open(os.path.join(site, "manifest-beta.json")))
-check("manifest-beta.json: Version 97, firmware/beta images exist", bm["version"].startswith("Version 97 ") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/beta/") for b in bm["builds"] for p in b["parts"]))
+check("manifest-beta.json: Version 98, firmware/beta images exist", bm["version"].startswith("Version 98 ") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/beta/") for b in bm["builds"] for p in b["parts"]))
 rb = json.load(open(os.path.join(site, "manifest-v84.json")))
 check("rollback manifest-v84.json points at firmware/v84 images that exist", all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v84/") for b in rb["builds"] for p in b["parts"]))
 check("rollback not listed in versions.json", all(x["manifest"] != "manifest-v84.json" for x in v))
@@ -203,7 +203,7 @@ with sync_playwright() as p:
     # Choosing Beta clears the note and installs the C3 image (4 MB at 0)
     pg.select_option("#release-channel", "beta"); pg.wait_for_timeout(800)
     hidden = pg.evaluate("document.getElementById('compat-notice').hidden || document.getElementById('compat-notice').shutting === true")
-    check("ESP32-C3 on Beta: note gone, Version 97, Erase and Install on", hidden and pg.text_content("#version").strip() == "Version 97" and pg.evaluate("!document.getElementById('start-install').disabled"), str(hidden))
+    check("ESP32-C3 on Beta: note gone, Version 98, Erase and Install on", hidden and pg.text_content("#version").strip() == "Version 98" and pg.evaluate("!document.getElementById('start-install').disabled"), str(hidden))
     startInstall(pg)
     w = [l for l in pg.evaluate("window.__log") if isinstance(l, str) and l.startswith("files")]
     check("ESP32-C3 on Beta gets the 4 MB C3 image at 0", w == ["files 1 size 4194304 at 0 eraseAll true"] and "[ESP32-C3 detected: installing its build]" in pg.inner_text("#console-out") and "[Image: ESP32-C3 4 MB (Super Mini)" in pg.inner_text("#console-out"), str(w))
