@@ -11,10 +11,10 @@ def check(name, ok, extra=""):
 
 js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
-check("cache-bust 85-fw85", html.count("?v=85-fw85") == 3)
+check("cache-bust 99-fw99", html.count("?v=99-fw99-b99") == 3)
 check("probeBoardOnConnect present", "probeBoardOnConnect" in js and "Reading board info" in js)
 check("Install disabled when compatIssue", "board.compatIssue" in js and "install.disabled" in js)
-check("footer Flasher Version 85", "Flasher Version 85" in html)
+check("footer Flasher Version 99", "Flasher Version 99" in html)
 
 def connect_only(b, chip=None, flash_kb=None, usb=None):
     pg = b.new_page(viewport={"width": 1100, "height": 900})
@@ -108,16 +108,18 @@ with sync_playwright() as p:
     #  Release is) but Erase and Install stays off until Beta is chosen. The board
     #  itself counts as compatible in telemetry
     pg, details, mac, notice, disabled, tel, log = connect_only(b, "ESP32-C3 (QFN32) (revision v0.4)")
-    check("C3 connect: Beta-only note shown", notice and notice["title"] == "The ESP32-C3 Is Only on Beta for Now", str(notice))
+    # Version 99: Stable has the C3 image now (no note on connect); the previous Stable is checked in test_v79
+    check("C3 connect: no note on Stable", not notice, str(notice))
     check("C3 connect: Single Core stats", "Single Core" in details and "160 MHz" in details, details)
-    check("C3 connect: Install opens the step (to choose Beta)", disabled is False, str(disabled))
+    check("C3 connect: Install opens the step", disabled is False, str(disabled))
     check("C3 connect: telemetry compatible (on Beta)", len(tel) == 1 and tel[0]["body"].get("compatible") is True, str(tel))
     check("C3 connect: nothing written", not any(l.startswith("files") for l in log))
     pg.click("#install-btn", force=True)
     pg.wait_for_timeout(300)
+    pg.select_option("#release-channel", "previous"); pg.wait_for_timeout(300)
     if pg.is_visible("#erase-ok"): pg.check("#erase-ok")
-    check("C3 on Stable: Erase and Install stays off", pg.evaluate("document.getElementById('start-install').disabled"))
-    check("C3 on Stable: nothing written after the Install click", not any(l.startswith("files") for l in pg.evaluate("window.__log") if isinstance(l, str)))
+    check("C3 on Previous: Erase and Install stays off", pg.evaluate("document.getElementById('start-install').disabled"))
+    check("C3 on Previous: nothing written after the Install click", not any(l.startswith("files") for l in pg.evaluate("window.__log") if isinstance(l, str)))
     tel3 = pg.evaluate("window.__telemetry")
     check("C3: still one telemetry after Install click", len(tel3) == 1, str(tel3))
     pg.close()

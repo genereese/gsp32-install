@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=85-fw85-b99">
+  <link rel="stylesheet" href="style.css?v=99-fw99-b99">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -96,6 +96,8 @@
             <select id="release-channel">
               <option value="stable" selected>Stable</option>
               <option value="beta">Beta</option>
+              <!-- Version 99 (Gene): the previous Stable stays one pick away -->
+              <option value="previous" hidden disabled>Previous</option>
             </select>
           </label>
           <p class="version-line">Installs <b id="version">Loading...</b></p>
@@ -223,9 +225,9 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=85-fw85-b99"></script>
+  <script type="module" src="app.js?v=99-fw99-b99"></script>
   <p class="security-note hint">GSP32 boards serve their web interface over plain HTTP (not encrypted). It's meant for your home network: never forward it to the internet.</p>
-  <p class="flasher-version hint">Flasher Version 85 · <a href="LICENSE.txt">License</a></p>
-  <script src="tour.js?v=85-fw85-b99" defer></script>
+  <p class="flasher-version hint">Flasher Version 99 · <a href="LICENSE.txt">License</a></p>
+  <script src="tour.js?v=99-fw99-b99" defer></script>
 </body>
 </html>

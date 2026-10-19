@@ -14,15 +14,22 @@ fam = {}
 for b in m["builds"]: fam.setdefault(b["chipFamily"], b["parts"])  # Version 83: first S3 build is the 16 MB one
 s3_8 = {b["psramMb"]: os.path.getsize(os.path.join(site, b["parts"][0]["path"])) for b in m["builds"] if b.get("flashMb") == 8}
 check("V83: 8 MB S3 builds N8R8 + N8R2, 8 MB each", s3_8 == {8: 0x800000, 2: 0x800000}, str(s3_8))
-check("manifest: ESP32 and ESP32-S3 builds", sorted(fam) == ["ESP32", "ESP32-S3"], str(sorted(fam)))
+check("manifest: ESP32, ESP32-C3 and ESP32-S3 builds (Version 99)", sorted(fam) == ["ESP32", "ESP32-C3", "ESP32-S3"], str(sorted(fam)))
 check("both at offset 0", all(len(p) == 1 and p[0]["offset"] == 0 for p in fam.values()))
 sz = {f: os.path.getsize(os.path.join(site, p[0]["path"])) for f, p in fam.items()}
-check("ESP32 image 4 MB, S3 image 16 MB", sz == {"ESP32": 0x400000, "ESP32-S3": 0x1000000}, str(sz))
+check("ESP32 and C3 images 4 MB, S3 image 16 MB", sz == {"ESP32": 0x400000, "ESP32-S3": 0x1000000, "ESP32-C3": 0x400000}, str(sz))
 s3img = open(os.path.join(site, fam["ESP32-S3"][0]["path"]), "rb").read(4)
 check("S3 image starts with a bootloader header at 0", s3img[0] == 0xE9)
 v = json.load(open(os.path.join(site, "versions.json")))
 st = [e for e in v if e.get("channel", "stable") == "stable"]; bt = [e for e in v if e.get("channel") == "beta"]
-check("versions.json: Stable Version 85 only (+ at most one Beta)", len(st) == 1 and st[0]["label"].startswith("Version 85") and st[0]["manifest"] == "manifest.json" and len(bt) <= 1)
+check("versions.json: Stable Version 99 only (+ at most one Beta)", len(st) == 1 and st[0]["label"].startswith("Version 99 ") and st[0]["manifest"] == "manifest.json" and len(bt) <= 1)
+# Version 99 (Gene): Version 85 stays as the previous Stable, a Release pick of its own (manifest-v85.json, firmware/v85/)
+pv = [e for e in v if e.get("channel") == "previous"]
+pm = json.load(open(os.path.join(site, "manifest-v85.json")))
+check("versions.json: Previous is Version 85 (manifest-v85.json, firmware/v85 images)", len(pv) == 1 and pv[0]["label"].startswith("Version 85 ") and pv[0]["manifest"] == "manifest-v85.json"
+      and pm["version"].startswith("Version 85 ") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v85/") for b in pm["builds"] for p in b["parts"]))
+sm = json.load(open(os.path.join(site, "manifest.json")))
+check("manifest.json: Version 99 with a C3 build", sm["version"].startswith("Version 99 ") and "ESP32-C3" in [b["chipFamily"] for b in sm["builds"]])
 # Version 84: Version 84 stays (V85) as the single unlisted rollback (manifest-v84.json, firmware/v84/, all four images), not in versions.json
 check("versions.json: Beta is Version 99 (manifest-beta.json)", len(bt) == 1 and bt[0]["label"].startswith("Version 99 ") and bt[0]["manifest"] == "manifest-beta.json")
 bm = json.load(open(os.path.join(site, "manifest-beta.json")))
@@ -34,7 +41,7 @@ js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 85-fw85 everywhere", html.count("?v=85-fw85") == 3, str(html.count("?v=85-fw85")))
+check("cache-bust 99-fw99 everywhere", html.count("?v=99-fw99-b99") == 3, str(html.count("?v=99-fw99")))
 check("no Compatible Boards card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
@@ -140,13 +147,13 @@ def check_tel(name, tel, expect_compatible, expect_chip_substr=None):
     if "browser" in body:
         check(name + ": browser enum", body["browser"] in ("chrome", "edge", "opera", "brave", "other"), body["browser"])
     if "flasher_version" in body:
-        check(name + ": flasher_version", body["flasher_version"] == "85", body["flasher_version"])
+        check(name + ": flasher_version", body["flasher_version"] == "99", body["flasher_version"])
 
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(); pg.goto("http://127.0.0.1:8789/index.html"); body = pg.inner_text("body")
     check("text names ESP32 and ESP32-S3", "ESP32 and ESP32-S3" in body)
-    check("footer Flasher Version 85", "Flasher Version 85" in pg.text_content(".flasher-version"))
+    check("footer Flasher Version 99", "Flasher Version 99" in pg.text_content(".flasher-version"))
     check("no Compatible Boards on page", "Compatible Boards" not in body); pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None)
@@ -187,19 +194,24 @@ with sync_playwright() as p:
     pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, "ESP32-C3 (QFN32) (revision v0.4)", auto_install=False)
-    # Version 92: Stable (the default) has no C3 image: a short Beta-only note, nothing written
-    check("ESP32-C3 on Stable: nothing written", not [l for l in log if l.startswith("files")], str(log))
-    check("ESP32-C3 on Stable: short Beta-only note", notice and notice["title"] == "The ESP32-C3 Is Only on Beta for Now" and notice["text"] == "Choose Beta under Release to install it.", str(notice))
-    check("ESP32-C3 on Stable: Stable stays the default, plain Stable/Beta", pg.input_value("#release-channel") == "stable" and pg.eval_on_selector_all("#release-channel option", "o => o.map(x => x.textContent.trim())") == ["Stable", "Beta"])
+    # Version 99: Stable (the default) has a C3 image: no note; only the previous Stable (Version 85) has none
+    check("ESP32-C3 on Stable: nothing written yet", not [l for l in log if l.startswith("files")], str(log))
+    check("ESP32-C3 on Stable: no note", not notice, str(notice))
+    check("ESP32-C3: Stable stays the default; Stable, Beta, Previous (Version 85)", pg.input_value("#release-channel") == "stable" and pg.eval_on_selector_all("#release-channel option", "o => o.map(x => x.textContent.trim())") == ["Stable", "Beta", "Previous (Version 85)"])
     check("ESP32-C3: no old clear-error string", "GSP32 runs on ESP32 and ESP32-S3 boards" not in pg.inner_text("body") and "Not Supported" not in (notice or {}).get("title", ""))
     check("ESP32-C3: Single Core in details", "Single Core" in details, details)
     check_tel("C3 telemetry", tel, True, "ESP32-C3")
     if tel:
         check("C3 telemetry cores=1", tel[0]["body"].get("cores") == 1, str(tel[0]["body"].get("cores")))
     # The user's path: Install opens the step with the Release list; on Stable, Erase and Install stays off
-    check("ESP32-C3 on Stable: Install opens the step (to choose Beta)", pg.evaluate("!document.getElementById('install-btn').disabled"))
+    check("ESP32-C3 on Stable: Install opens the step", pg.evaluate("!document.getElementById('install-btn').disabled"))
     pg.click("#install-btn"); pg.wait_for_timeout(500); pg.check("#erase-ok")
-    check("ESP32-C3 on Stable: Erase and Install stays off", pg.evaluate("document.getElementById('start-install').disabled"))
+    check("ESP32-C3 on Stable: Erase and Install is on", pg.evaluate("!document.getElementById('start-install').disabled"))
+    pg.select_option("#release-channel", "previous"); pg.wait_for_timeout(500)
+    note = pg.evaluate("[document.getElementById('compat-notice-title').textContent, document.getElementById('compat-notice-text').textContent]")
+    check("ESP32-C3 on Previous (Version 85): a short note, Erase and Install off", note == ["The ESP32-C3 Isn't in the Previous Release", "Choose Stable or Beta under Release to install it."]
+          and pg.evaluate("document.getElementById('start-install').disabled") and pg.text_content("#version").strip() == "Version 85", str(note))
+    pg.select_option("#release-channel", "stable"); pg.wait_for_timeout(300)
     # Choosing Beta clears the note and installs the C3 image (4 MB at 0)
     pg.select_option("#release-channel", "beta"); pg.wait_for_timeout(800)
     hidden = pg.evaluate("document.getElementById('compat-notice').hidden || document.getElementById('compat-notice').shutting === true")

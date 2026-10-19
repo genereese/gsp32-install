@@ -1,8 +1,14 @@
 [
   {
-    "version": "af151ff",
+    "version": "5e88eb9",
     "manifest": "manifest.json",
-    "label": "Version 85 (af151ff), latest"
+    "label": "Version 99 (5e88eb9), latest"
+  },
+  {
+    "version": "af151ff",
+    "manifest": "manifest-v85.json",
+    "label": "Version 85 (af151ff), previous Stable",
+    "channel": "previous"
   },
   {
     "version": "5e88eb9",

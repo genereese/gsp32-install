@@ -61,7 +61,7 @@ const wizard = $("wizard");
 const versionSelect = $("version");
 const release_channel = $("release-channel");
 // Version 85: the versions.json entries of each channel (an entry without "channel" is Stable)
-let release_versions = { stable: null, beta: null };
+let release_versions = { stable: null, beta: null, previous: null };
 const eraseOk = $("erase-ok");
 let stable = null;
 const startInstall = $("start-install");
@@ -1150,6 +1150,8 @@ async function loadVersions() {
     release_versions = {
       stable: list.find((item) => (!item.prototype) && ((item.channel || "stable") === "stable")) || null,
       beta: list.find((item) => (!item.prototype) && (item.channel === "beta")) || null,
+      // Version 99 (Gene): the previous Stable (Version 85) as a fallback pick
+      previous: list.find((item) => (!item.prototype) && (item.channel === "previous")) || null,
     };
     stable = release_versions.stable;
     releaseChannelUpdate();
@@ -1165,6 +1167,14 @@ function releaseChannelUpdate() {
   const beta_option = release_channel.querySelector('option[value="beta"]');
   beta_option.disabled = !release_versions.beta;
   if ((release_channel.value === "beta") && !(release_versions.beta)) release_channel.value = "stable";
+  const previous_option = release_channel.querySelector('option[value="previous"]');
+  if (previous_option) {
+    const old = release_versions.previous;
+    const old_number = old ? String(old.label || old.version).match(/Version (\d+(?:\.\d+)?)/) : null;
+    previous_option.hidden = previous_option.disabled = !old;
+    previous_option.textContent = old_number ? "Previous (Version " + old_number[1] + ")" : "Previous";
+    if ((release_channel.value === "previous") && !(old)) release_channel.value = "stable";
+  }
   const channel = release_channel.value;
   const picked = release_versions[channel];
   if (picked !== latest) manifestCache = null;
@@ -1184,7 +1194,7 @@ function syncStart() {
   if (!note) return;
   note.textContent = !startInstall.disabled ? ""
     : !versionsReady ? "Could not load the version list. Check your internet connection, then reload the page."
-    : board.compatIssue && board.compatIssue.betaOnly ? "Pick Beta under Release to install on this board."
+    : board.compatIssue && board.compatIssue.betaOnly ? "Pick Stable or Beta under Release to install on this board."
     : "Tick the box above to continue.";
   note.hidden = !note.textContent;
 }
@@ -1227,8 +1237,8 @@ function compatIssue(chip, flashKb) {
     // The C3 image needs chip revision v0.3 or newer; older C3s are not supported
     const rev = String(chip).match(/revision v(\d+)\.(\d+)/);
     if (rev && (Number(rev[1]) * 100 + Number(rev[2])) < 3) return { chip, flashKb, family, oldRevision: true };
-    // Only the Beta release has a C3 image: with Stable picked, a short note instead of an install
-    if (release_channel.value !== "beta") return { chip, flashKb, family, betaOnly: true };
+    // Version 99: Stable and Beta have a C3 image; the previous Stable (Version 85) has none: a short note instead
+    if (release_channel.value === "previous") return { chip, flashKb, family, betaOnly: true };
   }
   return null;
 }
@@ -1253,10 +1263,10 @@ function showCompatNotice(issue) {
   const chip = chipShort(issue.chip);
   const flash = (issue.flashKb != null && issue.flashKb > 0) ? flashLabel(issue.flashKb) : "";
   if (issue.betaOnly) {
-    title.textContent = "The ESP32-C3 Is Only on Beta for Now";
-    text.textContent = "Choose Beta under Release to install it.";
+    title.textContent = "The ESP32-C3 Isn't in the Previous Release";
+    text.textContent = "Choose Stable or Beta under Release to install it.";
     if (box.hidden || box.shutting) foldOpen(box);
-    appendConsole("[ESP32-C3: only on Beta for now]\n");
+    appendConsole("[ESP32-C3: not in the previous release]\n");
     return;
   }
   title.textContent = "This Board Is Not Supported";
