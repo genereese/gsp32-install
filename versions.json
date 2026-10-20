@@ -1,19 +1,19 @@
 [
   {
-    "version": "5e88eb9",
+    "version": "be94e69",
     "manifest": "manifest.json",
-    "label": "Version 99 (5e88eb9), latest"
+    "label": "Version 103 (be94e69), latest"
   },
   {
-    "version": "af151ff",
-    "manifest": "manifest-v85.json",
-    "label": "Version 85 (af151ff), previous Stable",
+    "version": "5e88eb9",
+    "manifest": "manifest-v99.json",
+    "label": "Version 99 (5e88eb9), previous Stable",
     "channel": "previous"
   },
   {
-    "version": "c58f2ef",
+    "version": "be94e69",
     "manifest": "manifest-beta.json",
-    "label": "Version 102 (c58f2ef), beta",
+    "label": "Version 103 (be94e69), beta",
     "channel": "beta"
   }
 ]

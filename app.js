@@ -1169,7 +1169,7 @@ async function loadVersions() {
     release_versions = {
       stable: list.find((item) => (!item.prototype) && ((item.channel || "stable") === "stable")) || null,
       beta: list.find((item) => (!item.prototype) && (item.channel === "beta")) || null,
-      // Version 99 (Gene): the previous Stable (Version 85) as a fallback pick
+      // Version 99 (Gene): the previous Stable as a fallback pick (Version 99 since Version 103 became Stable)
       previous: list.find((item) => (!item.prototype) && (item.channel === "previous")) || null,
     };
     stable = release_versions.stable;
@@ -1256,8 +1256,8 @@ function compatIssue(chip, flashKb) {
     // The C3 image needs chip revision v0.3 or newer; older C3s are not supported
     const rev = String(chip).match(/revision v(\d+)\.(\d+)/);
     if (rev && (Number(rev[1]) * 100 + Number(rev[2])) < 3) return { chip, flashKb, family, oldRevision: true };
-    // Version 99: Stable and Beta have a C3 image; the previous Stable (Version 85) has none: a short note instead
-    if (release_channel.value === "previous") return { chip, flashKb, family, betaOnly: true };
+    // Version 103: Stable, Beta and the previous Stable (Version 99) all have a C3 image (Version 99's no-C3 note for
+    //  the previous Stable, Version 85, is gone with it)
   }
   return null;
 }

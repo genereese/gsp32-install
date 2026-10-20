@@ -11,7 +11,7 @@ def check(name, ok, extra=""):
 
 js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
-check("cache-bust 102-fw99", html.count("?v=102-fw99-b102") == 3)
+check("cache-bust 102-fw103", html.count("?v=102-fw103-b103") == 3)
 check("probeBoardOnConnect present", "probeBoardOnConnect" in js and "Reading board info" in js)
 check("Install disabled when compatIssue", "board.compatIssue" in js and "install.disabled" in js)
 check("footer Flasher Version 102", "Flasher Version 102" in html)
@@ -118,7 +118,8 @@ with sync_playwright() as p:
     pg.wait_for_timeout(300)
     pg.select_option("#release-channel", "previous"); pg.wait_for_timeout(300)
     if pg.is_visible("#erase-ok"): pg.check("#erase-ok")
-    check("C3 on Previous: Erase and Install stays off", pg.evaluate("document.getElementById('start-install').disabled"))
+    # Version 103: the previous Stable is Version 99, which has the C3 image
+    check("C3 on Previous (Version 99): Erase and Install is on", pg.evaluate("!document.getElementById('start-install').disabled"))
     check("C3 on Previous: nothing written after the Install click", not any(l.startswith("files") for l in pg.evaluate("window.__log") if isinstance(l, str)))
     tel3 = pg.evaluate("window.__telemetry")
     check("C3: still one telemetry after Install click", len(tel3) == 1, str(tel3))
