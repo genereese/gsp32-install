@@ -11,9 +11,9 @@
     "channel": "previous"
   },
   {
-    "version": "f5a6b0d",
+    "version": "a949d3f",
     "manifest": "manifest-beta.json",
-    "label": "Version 100 (f5a6b0d), beta",
+    "label": "Version 101 (a949d3f), beta",
     "channel": "beta"
   }
 ]

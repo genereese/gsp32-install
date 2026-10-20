@@ -11,7 +11,7 @@ def check(name, ok, extra=""):
 
 js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
-check("cache-bust 99-fw99", html.count("?v=99-fw99-b100") == 3)
+check("cache-bust 99-fw99", html.count("?v=99-fw99-b101") == 3)
 check("probeBoardOnConnect present", "probeBoardOnConnect" in js and "Reading board info" in js)
 check("Install disabled when compatIssue", "board.compatIssue" in js and "install.disabled" in js)
 check("footer Flasher Version 99", "Flasher Version 99" in html)
