@@ -147,7 +147,7 @@ def check_tel(name, tel, expect_compatible, expect_chip_substr=None):
     if "browser" in body:
         check(name + ": browser enum", body["browser"] in ("chrome", "edge", "opera", "brave", "other"), body["browser"])
     if "flasher_version" in body:
-        check(name + ": flasher_version", body["flasher_version"] == "99", body["flasher_version"])
+        check(name + ": flasher_version", body["flasher_version"] == "102", body["flasher_version"])
 
 with sync_playwright() as p:
     b = p.chromium.launch()
