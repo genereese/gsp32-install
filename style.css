@@ -405,6 +405,9 @@ body.hero50 .start-go { flex-direction: column; gap: 6px; }
 
 /* Fix (recover flow): why a main button is greyed, and a port that would not open */
 .actions-note { margin: 0; align-self: center; }
+/* Version 101 (Gene): Disconnect sits at the right end of the Install GSP32 row (it slides in and out with setShown) */
+:root { --board-disconnect-push: auto; }
+.actions .board-disconnect { margin-left: var(--board-disconnect-push); }
 .button-note { margin: 6px 0 0; text-align: right; }
 .start-error { margin: 8px 0 0; color: var(--danger); font-size: 0.92rem; text-align: center; max-width: 36rem; }
 /* Fix (label): the main buttons never wrap or clip their label (Recover/Install GSP32 reads in full) */

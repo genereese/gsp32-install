@@ -491,6 +491,11 @@ function syncBoardUi() {
     web.removeAttribute("aria-disabled");
     web.removeAttribute("tabindex");
   }
+  // Version 101 (Gene): Disconnect at the right of the row while the port is open; gone (slid away) while installing,
+  //  greyed while the flasher is busy
+  const leave = $("board-disconnect");
+  setShown(leave, on && !flashing);
+  leave.disabled = !on || busy;
   // The next step is the solid blue button, the others light blue: Install on a board without GSP32, Set Up Wi-Fi
   //  once GSP32 runs, Open GSP32 Web UI once it is on Wi-Fi
   const next = !gsp32 ? install : address ? web : setup;
@@ -2566,9 +2571,16 @@ function showBoardHelp(open) {
   else foldShut(help);
 }
 $("no-board").addEventListener("click", () => showBoardHelp($("board-help").hidden));
-disconnectBtn.addEventListener("click", guard(async () => {
+// Version 101: the board row's Disconnect does the same as the console's: the reader stops, the board is left
+//  running (EN and GPIO 0 high), the port closes, and the page goes back to Get Started
+async function disconnectBoard() {
   await closePort();
   hideConsole();
+}
+disconnectBtn.addEventListener("click", guard(disconnectBoard));
+$("board-disconnect").addEventListener("click", guard(async () => {
+  if (busy) return;
+  await disconnectBoard();
 }));
 resetBtn.addEventListener("click", guard(resetBoard));
 ctrlCBtn.addEventListener("click", guard(() => writeBytes(new Uint8Array([0x03]))));
