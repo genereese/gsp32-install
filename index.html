@@ -89,6 +89,15 @@
         <b id="compat-notice-title">This Board Is Not Supported</b>
         <p id="compat-notice-text"></p>
       </div>
+      <!-- S3 native USB: the page can't switch the board into download mode, and its port changes when it restarts -->
+      <div id="usb-guide" class="warn-box compat-notice usb-guide" role="status" hidden>
+        <b id="usb-guide-title">Hold BOOT, Tap RST, Release BOOT, Then Pick the Port Again</b>
+        <p id="usb-guide-text"></p>
+        <div class="actions tight">
+          <button id="usb-guide-pick" class="primary" type="button">Pick the Port Again</button>
+          <button id="usb-guide-wifi" class="secondary" type="button" hidden>Set Up Wi-Fi Instead</button>
+        </div>
+      </div>
       <!-- Version 43.2 (Gene): the steps (Wi-Fi networks, password, buttons) sit under the status line they belong to -->
       <div id="wizard" class="wizard" hidden>
         <div class="step" data-step="prep" hidden>
