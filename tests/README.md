@@ -21,6 +21,7 @@
     python tests/test_boot_loop_label.py  # Restart loop without an image error is not called "no bootable firmware"; every broken state reads Recover/Install GSP32 in full
     python tests/test_write_retry.py      # Noise or MD5 failure during a write: reconnect and write again, 3 writes in all; plain final message; boot-loop fold lasts until esptool takes the port
     python tests/test_v101.py             # Version 101: Disconnect at the right end of the Install GSP32 row (slides in once connected, gone while installing), closes the port with the board left running; phone layout
+    python tests/test_s3_boardinfo.py     # S3 native USB (0x303A): BOOT/RST guide when the reset or the port fails, the port picked again (or taken when it comes back), read in download mode without a reset, install, restart onto GSP32's port, Wi-Fi without board info; other bridges unchanged
 
 `mock.js` is a fake board on Web Serial (Improv answers, boot lines on an RTS reset; `window.__ets` also prints the
 ROM's `ets ...` line like a real ESP32), `fake-esptool.js` stands in for esptool-js. Needs Playwright with Chromium.

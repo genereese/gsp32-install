@@ -124,6 +124,12 @@ let lineWatchers = [];
 const board = { installed: false, kind: "unknown", readyAt: 0, bootAt: 0, ip: "", name: "", repl: false, chip: "", mac: "", version: "", asked: 0, listening: false };
 let otherTimer = null;
 let probing = false; // the connect probe (Reading board info) is running
+// Fix (S3 native USB): the guide while shown, { kind: "boot" or "repick", resume: "probe", "install", "installed" or
+//  "wifi" }; a restart expected to move a native USB board to a new port, { resume, until }
+let usbGuide = null;
+let usbExpect = null;
+let usbAttaching = false;
+let installConnecting = false;
 const FOLD_MS = 220;
 
 function motionOk() {
@@ -543,13 +549,18 @@ function syncBoardUi() {
   const note = $("actions-note");
   if (note) {
     let why = "";
-    if (!on) why = "Not connected. Click Get Started above to connect the board.";
+    if (!on && usbGuide) why = "Not connected. Pick the port again (see the note below).";
+    else if (!on) why = "Not connected. Click Get Started above to connect the board.";
     else if (install.disabled && board.compatIssue && !board.compatIssue.betaOnly) why = "Install is off: this board is not supported (see the note below).";
     else if (install.disabled && probing) why = "Reading the board first. This takes a few seconds.";
     // Other busy steps (installing, Wi-Fi setup, restarts) show their own progress below the buttons
     note.textContent = why;
     setShown(note, !!why && !flashing);
   }
+  // Fix (S3 native USB): only setting up Wi-Fi needs GSP32 running, not download mode or the board's details: the
+  //  guide offers it while the row's own Set Up Wi-Fi isn't there
+  const instead = $("usb-guide-wifi");
+  if (instead) instead.hidden = !(usbGuide && usbGuide.kind === "boot" && usbGuide.resume === "probe") || (on && gsp32);
   // Version 39: the green box folds away while installing and comes back when it ends (done, failed or disconnected)
   setFolded(state, !flashing);
 }
@@ -1102,6 +1113,10 @@ async function pickPort() {
     cancel.code = "cancel";
     throw cancel;
   }
+  await openPicked(selected);
+  return port;
+}
+async function openPicked(selected) {
   try {
     await openPort(selected);
   } catch (err) {
@@ -1110,7 +1125,7 @@ async function pickPort() {
       await selected.close().catch(() => {});
       await delay(300);
       await openPort(selected);
-      return port;
+      return;
     } catch (again) {
       // Fall through to the clear error
     }
@@ -1118,7 +1133,6 @@ async function pickPort() {
     fail.code = "open";
     throw fail;
   }
-  return port;
 }
 
 async function closePort() {
@@ -1287,6 +1301,154 @@ function showCompatNotice(issue) {
   if (box.hidden || box.shutting) foldOpen(box);
   appendConsole("[Not supported: " + chip + (flash ? ", " + flash : "") + "]\n");
 }
+// Fix (S3 native USB): a board on Espressif's own USB (VID 0x303A) that runs GSP32 talks through TinyUSB, a different
+//  USB device from the ROM's USB-JTAG/serial in download mode (the T-Display-S3: COM12 running, COM10 in download
+//  mode). The page often can't reset it into download mode, and when the board does restart its old port is gone. A
+//  short guide then asks for BOOT and RST by hand and for the port again (the picker shows only 0x303A ports). A port
+//  this page was already allowed to use that comes back (the connect event) is taken without asking. Never a browser
+//  serial auto-grant policy
+const NATIVE_USB_VID = 0x303a;
+const USB_JTAG_SERIAL_PID = 0x1001;
+const USB_GUIDE_TITLE = {
+  boot: "Hold BOOT, Tap RST, Release BOOT, Then Pick the Port Again",
+  repick: "Pick the Port Again",
+};
+const USB_MOVED_TEXT = "\n[The board's USB port changed (native USB). Pick the port again (see the note above the console).]\n";
+const USB_NOT_READY_TEXT = "[Not in download mode yet. Hold BOOT, tap RST, release BOOT, then pick the port again.]\n";
+function nativeUsb(onPort) {
+  try {
+    return !!onPort && typeof onPort.getInfo === "function" && onPort.getInfo().usbVendorId === NATIVE_USB_VID;
+  } catch (err) {
+    return false;
+  }
+}
+function usbPid(onPort) {
+  try {
+    return onPort.getInfo().usbProductId;
+  } catch (err) {
+    return 0;
+  }
+}
+function showUsbGuide(kind, resume) {
+  usbGuide = { kind, resume };
+  const box = $("usb-guide");
+  if (!box) return;
+  $("usb-guide-title").textContent = USB_GUIDE_TITLE[kind];
+  $("usb-guide-text").textContent = kind === "boot"
+    ? "This page can't switch this board's own USB into download mode. In download mode it shows up as a new port."
+    : resume === "installed" ? "GSP32 is installed. The board restarted on a new USB port: pick it to set up Wi-Fi."
+    : "The board restarted on a new USB port: pick it to go on.";
+  if (box.hidden || box.shutting) foldOpen(box);
+  syncBoardUi();
+}
+function hideUsbGuide() {
+  usbGuide = null;
+  const box = $("usb-guide");
+  if (box && !box.hidden) foldShut(box);
+}
+// What a lost native USB port means: the board moved to a new port while the page reset it (reading the board,
+//  connecting to install, the restart after an install or for Wi-Fi). "" = a plain unplug
+function usbLossResume(lost) {
+  if (!nativeUsb(lost)) return "";
+  if (usbGuide) return usbGuide.resume;
+  if (probing) return "probe";
+  if (installConnecting) return "install";
+  if (usbExpect && Date.now() < usbExpect.until) return usbExpect.resume;
+  return "";
+}
+function usbLost(lost, resume) {
+  portLost(lost, USB_MOVED_TEXT);
+  if (!usbGuide) showUsbGuide((resume === "probe" || resume === "install") ? "boot" : "repick", resume);
+}
+// ROM download mode answers esptool's SYNC (command 0x08) at once; a running program never does. Our reader is
+//  stopped by the caller. Bounded, so it can never hang
+const SYNC_FRAME = new Uint8Array([0xc0, 0x00, 0x08, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x07, 0x12, 0x20]
+  .concat(new Array(32).fill(0x55), [0xc0]));
+async function answersSync(onPort, ms = 400) {
+  if (!onPort || !onPort.readable || !onPort.writable) return false;
+  const syncReader = onPort.readable.getReader();
+  let got = new Uint8Array(0);
+  try {
+    await writeBytes(SYNC_FRAME);
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      const result = await Promise.race([syncReader.read(), delay(until - Date.now()).then(() => null)]);
+      if (!result || result.done) break;
+      got = concatBytes(got, result.value);
+      for (let i = 0; i + 2 < got.length; i++) {
+        if (got[i] === 0xc0 && got[i + 1] === 0x01 && got[i + 2] === 0x08) return true;
+      }
+    }
+  } catch (err) {
+    // No answer
+  } finally {
+    await withTimeout(syncReader.cancel(), 300, "Releasing the port").catch(() => {});
+    try {
+      syncReader.releaseLock();
+    } catch (err) {
+      // Released already
+    }
+  }
+  return false;
+}
+// The guide's button: the picker again, only Espressif USB ports in it
+async function pickUsbAgain() {
+  if (!usbGuide || usbAttaching) return;
+  let picked;
+  try {
+    picked = await navigator.serial.requestPort({ filters: [{ usbVendorId: NATIVE_USB_VID }] });
+  } catch (err) {
+    return;  // Picker closed: the guide stays
+  }
+  await attachUsbPort(picked);
+}
+// The new port (picked, or one this page may already use that came back): open it and go on where the page was
+async function attachUsbPort(picked) {
+  if (!usbGuide || usbAttaching) return;
+  usbAttaching = true;
+  const resume = usbGuide.resume;
+  try {
+    // A probe or connect still ending on the old port finishes first (it is time-limited)
+    for (let waited = 0; (probing || installConnecting) && waited < CONNECT_MS + 3000; waited += 100) await delay(100);
+    if (port && port !== picked) await closePort();
+    try {
+      await openPicked(picked);
+    } catch (err) {
+      appendConsole("\n[" + err.message + "]\n");
+      return;
+    }
+    hideUsbGuide();
+    if (!installer.hidden && !installer.shutting) foldShut(installer);
+    usbExpect = null;
+    appendConsole("\n[Port picked again]\n");
+    if (resume === "probe" || resume === "install") {
+      const ok = await probeBoardOnConnect({ guided: true, resume });
+      if (ok && resume === "install" && board.downloadMode && !board.compatIssue) await install();
+    } else if (resume === "installed") {
+      afterInstallRepick(picked);
+    } else if (resume === "wifi") {
+      startWifi(true);
+    }
+  } finally {
+    usbAttaching = false;
+    syncBoardUi();
+    syncConsoleButtons();
+  }
+}
+// Just installed (GSP32 without Wi-Fi listens for Improv until set up): the boot lines may have come before the port
+//  was picked again. With nothing heard from it for a few seconds, the board is taken as listening
+const USB_QUIET_MS = 4000;
+function afterInstallRepick(picked) {
+  const at = Date.now(), heard = lines.length;
+  board.kind = "gsp32";
+  syncBoardUi();
+  setTimeout(() => {
+    if (port !== picked || !portOpen() || board.listening || board.kind !== "gsp32" || board.bootAt > at || lines.length > heard) return;
+    board.listening = true;
+    askVersion();
+    syncBoardUi();
+  }, USB_QUIET_MS);
+}
 // Known USB-serial bridges only (VID:PID from SerialPort.getInfo). Unknown IDs are omitted — never guessed.
 const USB_BRIDGES = {
   "10c4:ea60": "CP2102", "10c4:ea63": "CP2102", "10c4:ea70": "CP2102",
@@ -1414,30 +1576,60 @@ function reportBoardTelemetry(compatible) {
 
 // Version 80: read chip/flash/features as soon as the port is picked (before Install). Leaves the board
 //  running again so the console works; Install reconnects cleanly (bootloader session is not kept).
-async function releaseLoader(link) {
+//  Fix (S3 native USB): a board in download mode stays there for Install (a reset starts its program, on another port)
+async function releaseLoader(link, keep) {
   if (link && link.transport) await link.transport.disconnect().catch(() => {});
   await reopenPort(FLASH_BAUD).catch(() => {});
+  if (keep || board.downloadMode) {
+    await setRunState().catch(() => {});
+    return;
+  }
   await resetBoard().catch(() => setRunState().catch(() => {}));
 }
-async function probeBoardOnConnect() {
-  if (!portOpen()) return;
+// Resolves true once the board was read. options.guided: the port was picked from the native USB guide
+async function probeBoardOnConnect(options = {}) {
+  if (!portOpen()) return false;
+  const probed = port;
+  const resume = options.resume || "probe";
   probing = true;
   board.compatIssue = null;
+  board.note = "";
   hideCompatNotice();
   setBusy(true);
   syncConsoleButtons();
   appendConsole("\n[Reading board info...]\n");
   const terminal = { clean() {}, writeLine() {}, write() {} };
-  let link = null;
+  let link = null, keep = false, ok = false;
   try {
     await stopReading();
+    // Fix (S3 native USB): the ROM's download mode is always the USB-JTAG/serial port (303a:1001; GSP32's own TinyUSB
+    //  port never is). One there is checked for download mode first (picked from the guide, or put there by hand with
+    //  BOOT and RST); a board in it is read without a reset and left there for Install
+    if (nativeUsb(probed) && usbPid(probed) === USB_JTAG_SERIAL_PID) {
+      board.downloadMode = await answersSync(probed);
+      if (board.downloadMode) appendConsole("[Download mode: reading the board without a reset]\n");
+    }
+    if (options.guided && !board.downloadMode) {
+      keep = true;
+      appendConsole(USB_NOT_READY_TEXT);
+      showUsbGuide("boot", resume);
+      return false;
+    }
     try {
       link = await connectLoader(terminal);
     } catch (err) {
-      appendConsole("[Could not read the board yet (" + (err && err.message ? err.message : err) + "). Install can try again.]\n");
+      const why = err && err.message ? err.message : err;
+      if (nativeUsb(probed)) {
+        // The page can't reset this board into download mode: BOOT and RST by hand, and the port again
+        appendConsole("[Could not switch the board into download mode (" + why + ").]\n");
+        board.downloadMode = false;
+        if (port === probed) showUsbGuide("boot", resume);
+      } else {
+        appendConsole("[Could not read the board yet (" + why + "). Install can try again.]\n");
+      }
       await resetLink(link).catch(() => {});
       await setRunState().catch(() => {});
-      return;
+      return false;
     }
     const chip = link.chip || board.chip || "";
     board.chip = chip;
@@ -1455,8 +1647,13 @@ async function probeBoardOnConnect() {
     }
     // Fix (recover flow): Incomplete Install only for this board (its MAC is the one an unfinished install wrote to)
     if (flashNoteMatches()) setStatus(INCOMPLETE_TEXT, "error");
+    if (board.downloadMode) {
+      board.note = "Download Mode: Ready to Install";
+      hideUsbGuide();
+    }
+    ok = true;
   } finally {
-    await releaseLoader(link).catch(() => {});
+    await releaseLoader(link, keep).catch(() => {});
     probing = false;
     // The port did not come back after the probe (closed, reopen failed): say so and bring Get Started back
     if (port && !portOpen()) await portLost(port, "\n[The port closed while reading the board. Click Get Started to connect again.]\n");
@@ -1465,6 +1662,7 @@ async function probeBoardOnConnect() {
     syncBoardUi();
     syncConsoleButtons();
   }
+  return ok;
 }
 
 // Version 83: among a family's builds, the one for this board's flash size and PSRAM. Builds may carry "flashMb"
@@ -1834,8 +2032,18 @@ async function connectLoader(terminal) {
     resetConstructors: { classicReset: () => rotation, usbJTAGSerialReset: () => rotation },
   });
   const link = { transport, loader, chip: "", rotation };
+  // Fix (S3 native USB): a board already in download mode is synced without a reset (a reset would start its program)
+  const mode = board.downloadMode ? "no_reset" : "default_reset";
+  const onPort = port;
+  let lostTimer = null;
+  const lost = new Promise((resolve, reject) => {
+    lostTimer = setInterval(() => {
+      if (port !== onPort) reject(new Error("The port closed"));
+    }, 200);
+  });
   try {
-    link.chip = await withTimeout(loader.main("default_reset"), CONNECT_MS, "Connecting to the board");
+    link.chip = await withTimeout(Promise.race([loader.main(mode), lost]), CONNECT_MS, "Connecting to the board")
+      .finally(() => clearInterval(lostTimer));
     if (rotation.name) {
       rememberReset(port, rotation.name);
       board.resetSeq = rotation.name;
@@ -1918,9 +2126,23 @@ async function install() {
     for (let attempt = 1; ; attempt++) {
       setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
       let link;
+      const installPort = port;
+      installConnecting = true;
       try {
         link = await connectLoader(terminal);
       } catch (err) {
+        // Fix (S3 native USB): no second try for a native USB board: the page can't reset it into download mode, so
+        //  the guide asks for BOOT and RST by hand and the port again, and the install goes on from there
+        if (nativeUsb(installPort)) {
+          installConnecting = false;
+          appendConsole("[Could not switch the board into download mode (" + (err && err.message ? err.message : err) + ").]\n");
+          board.downloadMode = false;
+          board.note = "";
+          showUsbGuide("boot", "install");
+          const guided = new Error("Hold BOOT, tap RST, release BOOT, then pick the port again (see the note above).");
+          guided.plain = true;
+          throw guided;
+        }
         // Version 61: one more try from a clean port, then a clear error with Retry
         appendConsole("[Connect did not answer (" + (err && err.message ? err.message : err) + "), trying once more]\n");
         try {
@@ -1928,6 +2150,8 @@ async function install() {
         } catch (again) {
           throw new Error("The board did not answer. Unplug it, plug it back in and click Try Again. If it still does not answer, hold the BOOT button while you click Try Again.");
         }
+      } finally {
+        installConnecting = false;
       }
       const chip = link.chip || board.chip || "";
       await readBoardExtras(link);
@@ -2030,11 +2254,20 @@ async function install() {
     flashNoteSet(null);
     bootTimes = [];
     appendConsole("[Installed. Restarting the board.]\n");
+    // Fix (S3 native USB): the restart starts GSP32 on its own USB port; the old one goes (see usbLossResume)
+    const native = nativeUsb(port);
+    if (native) usbExpect = { resume: "installed", until: Date.now() + 30000 };
+    board.downloadMode = false;
+    board.note = "";
     // Completed-install counter: count only (no MAC/IP), fire-and-forget, never delays anything
     try {
       fetch("https://gsp32-telemetry.genereese.workers.dev/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", mode: "cors", keepalive: true }).catch(() => {});
     } catch (err) {}
-    await resetBoard();
+    try {
+      await resetBoard();
+    } catch (err) {
+      if (!native) throw err;
+    }
     setStatus(installName() + " Installed", "ok");
     // Version 75 (Gene): what to do next, so a newcomer knows the Set Up Wi-Fi button is the way to the Web UI
     const next = document.createElement("span");
@@ -2099,7 +2332,7 @@ function waitListening(timeoutMs) {
   return new Promise((resolve) => {
     const timer = setInterval(() => {
       const old = !board.listening && upAt > 0 && Date.now() - upAt > OLD_FIRMWARE_MS;
-      if (board.listening || board.kind === "other" || old || Date.now() - since > timeoutMs) {
+      if (board.listening || board.kind === "other" || old || (usbGuide && !portOpen()) || Date.now() - since > timeoutMs) {
         clearInterval(timer);
         lineWatchers = lineWatchers.filter((item) => item !== watch);
         board.oldFirmware = old;
@@ -2214,6 +2447,8 @@ function syncWifiConnect() {
 }
 
 async function startWifi(fresh) {
+  // Fix (S3 native USB): Wi-Fi setup needs GSP32 running, not download mode: the BOOT and RST guide goes
+  if (usbGuide && usbGuide.kind === "boot") hideUsbGuide();
   showStep("wifi");
   setTimeout(() => wizard.scrollIntoView({ behavior: motionOk() ? "smooth" : "auto", block: "nearest" }), motionOk() ? FOLD_MS : 0);
   setFolded(wifiError, false);
@@ -2230,10 +2465,20 @@ async function startWifi(fresh) {
     //  A board on Wi-Fi listens for 30 s after a boot, so one that is not listening is restarted first
     if (!board.listening) {
       if (!fresh) {
-        wifiStatus.textContent = "Restarting the board so GSP32 listens for Wi-Fi setup...";
-        await resetBoard();
+        // Fix (S3 native USB): the page's restart may do nothing on a native USB board (then RST does it), and a
+        //  restart may move it to a new port (the guide asks for it)
+        const native = nativeUsb(port);
+        wifiStatus.textContent = native ? "Restarting the board so GSP32 listens for Wi-Fi setup... If nothing happens, tap RST on the board."
+          : "Restarting the board so GSP32 listens for Wi-Fi setup...";
+        if (native) usbExpect = { resume: "wifi", until: Date.now() + 45000 };
+        try {
+          await resetBoard();
+        } catch (err) {
+          if (!native) throw err;
+        }
       }
       await waitListening(45000);
+      if (!portOpen() && usbGuide) throw new Error("The board restarted on a new USB port. Pick it again (see the note above).");
     }
     const state = board.listening ? await waitBoardReady(8000) : null;
     if (state === null && board.oldFirmware) throw new Error("This board runs an older GSP32. Install Version 43.1 or newer to change Wi-Fi here.");
@@ -2544,7 +2789,11 @@ connectBtn.addEventListener("click", guard(async () => {
     return;
   }
   showBoardHelp(false);
-  Object.assign(board, { noBootable: false, installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {}, telemetrySent: false, compatIssue: null });
+  // Fix (S3 native USB): a native USB port picked while the BOOT and RST guide shows is read as the guide's would be
+  const guided = !!usbGuide && usbGuide.kind === "boot" && nativeUsb(port);
+  hideUsbGuide();
+  usbExpect = null;
+  Object.assign(board, { noBootable: false, installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {}, telemetrySent: false, compatIssue: null, downloadMode: false, note: "" });
   // USB bridge is known from the open port (no guess); keep it after the board-state reset
   const bridge = usbBridgeInfo();
   if (bridge) { board.info.usb = bridge.name; board.info.usbLabel = bridge.label; }
@@ -2555,7 +2804,7 @@ connectBtn.addEventListener("click", guard(async () => {
   showConsole();
   // Fix (recover flow): no Incomplete Install yet; the probe shows it once it read this board's MAC
   // Version 80: probe chip/flash now so stats and an incompatible notice appear before Install
-  await probeBoardOnConnect();
+  await probeBoardOnConnect({ guided, resume: "probe" });
 }));
 function showStartError(text) {
   const line = $("start-error");
@@ -2574,6 +2823,10 @@ $("no-board").addEventListener("click", () => showBoardHelp($("board-help").hidd
 // Version 101: the board row's Disconnect does the same as the console's: the reader stops, the board is left
 //  running (EN and GPIO 0 high), the port closes, and the page goes back to Get Started
 async function disconnectBoard() {
+  hideUsbGuide();
+  usbExpect = null;
+  board.downloadMode = false;
+  board.note = "";
   await closePort();
   hideConsole();
 }
@@ -2588,6 +2841,13 @@ $("wifi-setup").addEventListener("click", () => {
   if (busy) return;
   startWifi(false);
 });
+// Fix (S3 native USB): the guide's buttons (Pick the Port Again opens the picker, so it needs this click)
+$("usb-guide-pick").addEventListener("click", guard(pickUsbAgain));
+$("usb-guide-wifi").addEventListener("click", () => {
+  if (busy || usbAttaching) return;
+  hideUsbGuide();
+  startWifi(false);
+});
 $("console-form").addEventListener("submit", (event) => {
   event.preventDefault();
   if (consoleIn.disabled) return;
@@ -2598,7 +2858,18 @@ $("console-form").addEventListener("submit", (event) => {
 
 if ("serial" in navigator) {
   navigator.serial.addEventListener("disconnect", (event) => {
-    if (event.target === port) portLost(port, DISCONNECT_TEXT);
+    if (event.target !== port) return;
+    // Fix (S3 native USB): a native USB board that moved to a new port while the page reset it gets the guide
+    const resume = usbLossResume(port);
+    if (resume) usbLost(port, resume);
+    else portLost(port, DISCONNECT_TEXT);
+  });
+  // Fix (S3 native USB): while the guide shows, an Espressif USB port this page may already use that comes back (the
+  //  board restarted, or BOOT and RST put it in download mode) is taken at once, without the picker
+  navigator.serial.addEventListener("connect", (event) => {
+    const arrived = event.target;
+    if (!usbGuide || usbAttaching || !nativeUsb(arrived) || (arrived === port && portOpen())) return;
+    attachUsbPort(arrived).catch(() => {});
   });
 }
 document.addEventListener("visibilitychange", () => {

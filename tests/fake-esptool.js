@@ -56,10 +56,17 @@ export class ESPLoader {
   }
   async getFlashSize() { window.__log.push("flashKb " + flashKb()); return flashKb(); }
   async changeBaud() { window.__log.push("change baud " + this.baudrate); await this.t.disconnect(); await this.t.connect(this.baudrate); }
-  async main() {
+  async main(mode) {
     await this.t.connect(115200);
     if (window.__hangConnect > 0) { window.__hangConnect--; window.__log.push("connect hang"); await never(); }
     window.__log.push("esptool got reader " + !!this.t.reader);
+    // Fix (S3 native USB): "no_reset" only syncs, so it connects only to a board already in download mode
+    if (mode === "no_reset") {
+      window.__log.push("main no_reset");
+      if (!window.__downloadMode) throw new Error("Failed to connect with the device");
+      this.term.writeLine("Connecting...");
+      return chipDesc();
+    }
     // Fix (Linux reset): like esptool-js 0.5.7's connect(): its sequences from resetConstructors (USB-JTAG by PID,
     //  else classic 50 and 550), one per attempt, 7 attempts; the board enters download mode only on __resetWorks
     if (window.__resetWorks !== undefined) {

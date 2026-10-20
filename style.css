@@ -412,3 +412,5 @@ body.hero50 .start-go { flex-direction: column; gap: 6px; }
 .start-error { margin: 8px 0 0; color: var(--danger); font-size: 0.92rem; text-align: center; max-width: 36rem; }
 /* Fix (label): the main buttons never wrap or clip their label (Recover/Install GSP32 reads in full) */
 #board-actions button, #board-actions .button { white-space: nowrap; flex-shrink: 0; }
+/* S3 native USB guide (warn-box like the compat notice): its buttons sit under the text */
+.usb-guide .actions { margin-top: var(--space-2); }
