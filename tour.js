@@ -1,7 +1,11 @@
 // Version 46 (Gene): What You Get: thumbnails of the GSP32 web UI (shots/, made by release_shots.py from the dev board).
 //  A click opens the full-size picture with a short tour. Nothing here touches the installer
 // Version 106 (Gene): the tour follows the current web UI: the Experiment menu (Sandbox, Examples), Split in the editor
+// Flasher Version 104 (Gene): the AI Helper first (from the web UI's own feature list: tutorial.js, AI-HELPER.md), no Settings
 var TOUR = {
+  ai: ["An AI Helper That Writes Code", "Writes and Edits Your Code and Pages, Then Shows Each Change to Apply or Discard.",
+    ["Works on the File You're Viewing, Including Both Sandbox Files", "Bring Your Own Key: It Stays in Your Browser, Never on the Board",
+     "Grok, OpenAI, Claude or Gemini, Plus Custom Models With Verify", "AI History Rolls a Change Back"]],
   home: ["Your Board at a Glance", "Open the board's address in any browser and the start page greets you with live graphs of what matters: how busy the web UI is, memory, flash and Wi-Fi signal. Getting Started links the Tutorial, your program, your files and the Experiment pages. It's your own page too, so make it a dashboard for your project.",
     ["Live graphs for Web UI Load, RAM, Flash and Wi-Fi", "Getting Started, with the Sandbox and Examples one click away", "The menu: Home, Files, Experiment and Apps, plus the AI Helper on every page"]],
   files: ["Files Without Cables", "Manage everything on the board from the browser: upload by dragging files in, move them by dragging, rename, download and delete. No USB cable, no extra tools.",
@@ -17,9 +21,7 @@ var TOUR = {
   console: ["A Console in Your Browser", "Watch print() output and errors from main.py as they happen, and type Python straight into the board. It's the serial console, without the serial cable.",
     ["Live output from main.py", "Run Python lines on the board", "The last error kept across reboots"]],
   libraries: ["Add Libraries in Seconds", "Apps, Libraries searches the MicroPython package index and installs packages into /lib with one click. Your browser fetches them, so the board stays fast."],
-  backup: ["Back Up and Restore", "Apps, Backup downloads your whole board as one file, and puts it back on this board or a new one whenever you need to."],
-  settings: ["Make It Yours", "Wi-Fi, the device name, a password and what visitors may open, the AI Helper's provider and key, the clock and time zone, optional apps, and Reset to Factory Files.",
-    ["Network card: device name and .local address, Wi-Fi, password, Discoverable", "AI Helper: your key stays in your browser, never on the board", "Clock with NTP and time zone; optional apps you can switch on and off"]]
+  backup: ["Back Up and Restore", "Apps, Backup downloads your whole board as one file, and puts it back on this board or a new one whenever you need to."]
 };
 
 (function () {

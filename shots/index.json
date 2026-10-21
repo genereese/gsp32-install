@@ -1,5 +1,9 @@
 [
  {
+  "key": "ai",
+  "title": "AI Helper"
+ },
+ {
   "key": "home",
   "title": "Home Page"
  },
@@ -34,9 +38,5 @@
  {
   "key": "backup",
   "title": "Backup"
- },
- {
-  "key": "settings",
-  "title": "Settings"
  }
 ]
