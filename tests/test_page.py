@@ -49,7 +49,8 @@ with sync_playwright() as p:
     check("board card and console are two separate cards", pg.evaluate("(() => { const a = document.getElementById('console'), c = document.getElementById('console-card'); return a.classList.contains('card') && c.classList.contains('card') && !a.contains(c) && c.contains(document.getElementById('console-out')) && !a.contains(document.getElementById('console-out')); })()"))
     def fill():
         return pg.evaluate("[Math.round(innerHeight - document.getElementById('console-card').getBoundingClientRect().bottom - scrollY), document.getElementById('console-out').offsetHeight]")
-    f1 = fill(); pg.set_viewport_size({"width": 1280, "height": 700}); pg.wait_for_timeout(200); f2 = fill(); pg.set_viewport_size({"width": 1280, "height": 380}); pg.wait_for_timeout(200); f3 = fill()
+    # Flasher Version 105: 600 ms to settle after a resize (200 ms was too short with eight suites at once on the box)
+    f1 = fill(); pg.set_viewport_size({"width": 1280, "height": 700}); pg.wait_for_timeout(600); f2 = fill(); pg.set_viewport_size({"width": 1280, "height": 380}); pg.wait_for_timeout(600); f3 = fill()
     pg.set_viewport_size({"width": 1280, "height": 900}); pg.wait_for_timeout(200)
     check("console fills the window height, resizes, at least 200px", 8 <= f1[0] <= 24 and 8 <= f2[0] <= 24 and f2[1] < f1[1] and f3[1] == 200, str((f1, f2, f3)))
     check("V80 connect probe: chip, MAC, CPU MHz stats",
