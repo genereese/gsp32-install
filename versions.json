@@ -1,19 +1,7 @@
 [
   {
-    "version": "be94e69",
+    "version": "2f543b7",
     "manifest": "manifest.json",
-    "label": "Version 103 (be94e69), latest"
-  },
-  {
-    "version": "5e88eb9",
-    "manifest": "manifest-v99.json",
-    "label": "Version 99 (5e88eb9), previous Stable",
-    "channel": "previous"
-  },
-  {
-    "version": "ae9d211",
-    "manifest": "manifest-beta.json",
-    "label": "Version 105 (ae9d211), beta",
-    "channel": "beta"
+    "label": "Version 106 (2f543b7), latest"
   }
 ]

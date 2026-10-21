@@ -1185,6 +1185,8 @@ async function loadVersions() {
 function releaseChannelUpdate() {
   const beta_option = release_channel.querySelector('option[value="beta"]');
   beta_option.disabled = !release_versions.beta;
+  // Version 106 (Gene): with no Beta listed the option isn't shown at all
+  beta_option.hidden = !release_versions.beta;
   if ((release_channel.value === "beta") && !(release_versions.beta)) release_channel.value = "stable";
   const previous_option = release_channel.querySelector('option[value="previous"]');
   if (previous_option) {
@@ -1194,6 +1196,10 @@ function releaseChannelUpdate() {
     previous_option.textContent = old_number ? "Previous (Version " + old_number[1] + ")" : "Previous";
     if ((release_channel.value === "previous") && !(old)) release_channel.value = "stable";
   }
+  // Version 106 (Gene): Stable is the only version listed: one choice is no choice, so the Release dropdown is hidden
+  //  (the "Installs Version N" line stays); a Beta or a Previous in versions.json brings it back
+  const release_field = release_channel.closest(".release-field");
+  if (release_field) release_field.hidden = !(release_versions.beta || release_versions.previous);
   const channel = release_channel.value;
   const picked = release_versions[channel];
   if (picked !== latest) manifestCache = null;

@@ -30,10 +30,13 @@ with sync_playwright() as p:
         first = pg.evaluate("document.querySelector('[data-step=prep] h3').nextElementSibling.querySelector('select')?.id")
         check(label + ": dropdown first in the install step", first == "release-channel")
         disabled = pg.evaluate("document.querySelector('#release-channel option[value=beta]').disabled")
+        field_hidden = pg.evaluate("document.querySelector('.release-field').hidden")
         if label == "no beta":
-            check("no beta: plain Beta, disabled", disabled and pg.text_content("#release-channel option[value=beta]").strip() == "Beta")
+            check("no beta: plain Beta, disabled and hidden", disabled and pg.evaluate("document.querySelector('#release-channel option[value=beta]').hidden") and pg.text_content("#release-channel option[value=beta]").strip() == "Beta")
+            # Version 106 (Gene): Stable alone: the Release dropdown is hidden, the version line stays
+            check("no beta: Stable alone, the Release dropdown is hidden; Installs Version N shows", field_hidden and pg.is_visible("#version") if pg.is_visible("[data-step=prep]") else field_hidden)
         else:
-            check("beta: Beta enabled", not disabled)
+            check("beta: Beta enabled, Release shown", (not disabled) and (not field_hidden))
             show(pg); pg.select_option("#release-channel", "beta"); pg.wait_for_timeout(300)
             check("beta: plain Version 86, no note", pg.text_content("#version").strip() == "Version 86" and pg.locator("#beta-note").count() == 0, pg.text_content("#version"))
             if SHOTS:
