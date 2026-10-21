@@ -9,7 +9,7 @@ BOARD = (sys.argv[1] if len(sys.argv) > 1 else "http://192.168.2.101").rstrip("/
 assert ("192.168.2.100" not in BOARD) and ("192.168.2.228" not in BOARD), "never Gene's board"
 HERE = os.path.dirname(os.path.abspath(__file__))
 # key, page, title; the editor opens with Split on (the live page next to the code)
-SHOTS = [("home", "/", "Home and Graphs"), ("files", "/board", "File Manager"), ("editor", "/edit?path=/main.py", "Code Editor"),
+SHOTS = [("home", "/", "Home Page"), ("files", "/board", "File Manager"), ("editor", "/edit?path=/main.py", "Code Editor"),
          ("sandbox", "/sandbox", "Sandbox"), ("examples", "/examples", "Examples"), ("pins", "/app/pins", "Pin Panel"),
          ("console", "/console", "Web Console"), ("libraries", "/app/libraries", "Libraries"), ("backup", "/app/backup", "Backup"),
          ("settings", "/settings", "Settings")]
