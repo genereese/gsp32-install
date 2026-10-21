@@ -374,7 +374,9 @@ body.hero50 .step-art { width: 32px; height: 24px; }
 body.hero50 .hero { min-height: 0; display: block; }
 body.hero50 .tour-divider { margin-top: 20px; }
 body.hero50 .tour h2 { margin: 0 0 12px; }
-@media (min-width: 1000px) { body.hero50 .tour-list { grid-template-columns: repeat(4, 1fr); gap: 12px; max-width: 900px; margin: 0 auto; } body.hero50 .tour-thumb img { aspect-ratio: 16 / 8; } }
+/* Version 106: ten slides in two rows of --tour-columns (the gallery still fits one laptop screen) */
+:root { --tour-columns: 5; --tour-max: 960px; }
+@media (min-width: 1000px) { body.hero50 .tour-list { grid-template-columns: repeat(var(--tour-columns), 1fr); gap: 12px; max-width: var(--tour-max); margin: 0 auto; } body.hero50 .tour-thumb img { aspect-ratio: 16 / 8; } }
 @media (max-width: 640px) {
   body.hero50 .page-head .lede { white-space: normal; }
   body.hero50 .steps-row { display: grid; grid-template-columns: 1fr; justify-items: center; gap: 6px; }

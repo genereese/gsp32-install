@@ -12,6 +12,14 @@
   "title": "Code Editor"
  },
  {
+  "key": "sandbox",
+  "title": "Sandbox"
+ },
+ {
+  "key": "examples",
+  "title": "Examples"
+ },
+ {
   "key": "pins",
   "title": "Pin Panel"
  },
