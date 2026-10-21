@@ -12,3 +12,18 @@ The fast path for small flasher page updates (text, layout, a tour slide): about
   the screenshot browser. `python tools/boardsim.py` serves it on http://127.0.0.1:8890 to look around.
 - `release_shots.py` without `--sim` still shoots from the dev board (http://192.168.2.101, or its tunnel URL): use it for
   releases where the board itself changed.
+
+## Scoped runs
+
+    python tools/flasher_tests.py --changed [BASE]   # suites tests/scope.json ties to the changed files, plus smoke
+    python tools/flasher_tests.py --changed --dry-run  # just print the pick and why
+    python tools/flasher_tests.py --full             # everything: still required before a Beta or Stable release
+    python tools/flasher_tests.py --check-scope      # warns about files or suites the mapping doesn't know
+
+BASE defaults to the last commit a full run passed on (or origin/main). Core files (index.html, app.js, style.css,
+tour.js, shots/, manifests, versions.json, firmware/, tests/mock.js, the runner and the mapping) run everything, and so
+does any file the mapping doesn't know. Every page suite loads index/app/style/tour, so scoping mostly helps for
+test-only and tooling changes; text or layout changes keep using --smoke for the fast loop.
+Rebuild the mapping after adding suites or page files:
+`python tools/build_scope.py --trace` (one traced full run, ~2 min), or `--from DIR` for an existing trace.
+`python tools/validate_scope.py COMMIT ...` replays real commits through the pick.
