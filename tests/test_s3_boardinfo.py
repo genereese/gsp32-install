@@ -260,6 +260,14 @@ with sync_playwright() as p:
     after = since(pg, n)
     check("SYNC answered: no_reset, no RESET after", "sync base" in after and "main no_reset" in after and "RESET" not in after, after)
     check("no guide", not shown(pg, "#usb-guide"))
+    # Flasher Version 105: the install finds the stub the board check left running and takes it for the stub, so the
+    #  chip erase runs (esptool-js 0.5.7 alone skipped it: the very fast first install with MD5 mismatches)
+    n = len(log(pg))
+    install(pg)
+    check("install from download mode finishes", wait_js(pg, "() => /Installed/.test(document.getElementById('board-status').innerText)", 20000), pg.inner_text("#board-status"))
+    after = since(pg, n)
+    check("the running stub is used as the stub (console line)", "[The flasher stub was still running: using it]" in out(pg), out(pg)[-400:])
+    check("the chip erase runs (not skipped)", "erase all" in after and not any(l.startswith("erase skipped") for l in after), after)
     check("no page errors (manual download mode)", not errors, errors)
     pg.close()
     # 6b. A USB-JTAG port running firmware (no SYNC answer): the usual reset, USB-JTAG first, and the board restarted

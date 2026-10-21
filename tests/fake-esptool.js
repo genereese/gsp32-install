@@ -68,8 +68,14 @@ export class ESPLoader {
       window.__log.push("main no_reset");
       if (!window.__downloadMode) throw new Error("Failed to connect with the device");
       this.term.writeLine("Connecting...");
+      // Flasher Version 105: like esptool-js 0.5.7: a stub still running from an earlier connect answers the SYNC
+      //  (syncStubDetected) and runStub returns without IS_STUB; otherwise the stub is uploaded and stays running
+      this.syncStubDetected = !!window.__stubRunning;
+      this.IS_STUB = !this.syncStubDetected;
+      window.__stubRunning = true;
       return chipDesc();
     }
+    window.__stubRunning = true; this.IS_STUB = true;
     // Fix (Linux reset): like esptool-js 0.5.7's connect(): its sequences from resetConstructors (USB-JTAG by PID,
     //  else classic 50 and 550), one per attempt, 7 attempts; the board enters download mode only on __resetWorks
     if (window.__resetWorks !== undefined) {
@@ -122,6 +128,8 @@ export class ESPLoader {
       window.__log.push("write noise");
       throw new Error("Invalid head of packet (0xff): Possible serial noise or corruption.");
     }
+    // Like esptool-js 0.5.7: the chip erase only runs when it takes itself for the stub
+    if (o.eraseAll) window.__log.push(this.IS_STUB === false ? "erase skipped (IS_STUB false)" : "erase all");
     window.__log.push("files " + o.fileArray.length + " size " + o.fileArray[0].data.length + " at " + o.fileArray[0].address + " eraseAll " + o.eraseAll);
     if (window.__eraseDelay) await new Promise(r => setTimeout(r, window.__eraseDelay));
     for (let p = 0; p <= 10; p++) { o.reportProgress(0, p * 10, 100); await new Promise(r => setTimeout(r, window.__flashDelay || 30)); }

@@ -2246,6 +2246,15 @@ async function connectLoader(terminal) {
   try {
     link.chip = await withTimeout(Promise.race([loader.main(mode), lost]), CONNECT_MS, "Connecting to the board")
       .finally(() => clearInterval(lostTimer));
+    // Fix (S3 web flash, Flasher Version 105): a board read in download mode keeps the flasher stub running (no reset
+    //  in between), and esptool-js 0.5.7 then says "Stub is already running" without taking itself for the stub
+    //  (IS_STUB stays false; esptool's own Python does take it). Its writeFlash then skipped the chip erase, sent the
+    //  ROM's begin command to the stub and checked the MD5 without waiting for the last block: the very fast first
+    //  install and its MD5 mismatches on the T-Display-S3. A stub that answered the SYNC is the stub
+    if (loader.syncStubDetected && !loader.IS_STUB) {
+      loader.IS_STUB = true;
+      appendConsole("[The flasher stub was still running: using it]\n");
+    }
     if (rotation.name) {
       rememberReset(port, rotation.name);
       board.resetSeq = rotation.name;
