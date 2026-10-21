@@ -1,5 +1,11 @@
 # Install page tests (Playwright, fake Web Serial board)
 
+Run them all side by side with `python tools/flasher_tests.py` (about 2 minutes; the release check), or the quick
+subset for text and layout changes with `python tools/flasher_tests.py --smoke` (about 20 s: test_smoke, test_v48,
+test_v50, test_v80, test_v85). The runner fails a suite on a FAIL line or a non-zero count too, not only on its exit code.
+
+    python tests/test_smoke.py        # Flasher Version 105: page loads clean, versions.json and its files, gallery, footer, cache tag
+
     python tests/test_page.py         # the page: steps, install, Wi-Fi, console, layout (59 checks)
     python tests/test_button_row.py   # hotfix fe97719: the button row always comes back (success, failure, reboot)
     python tests/test_wifi_wait.py    # Version 37: Open GSP32 Web UI waits greyed for Wi-Fi, fades to blue, no shift
