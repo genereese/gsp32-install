@@ -152,7 +152,7 @@ with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(); pg.goto("http://127.0.0.1:8789/index.html"); body = pg.inner_text("body")
     check("text names ESP32 and ESP32-S3", "ESP32 and ESP32-S3" in body)
-    check("footer Flasher Version 102", "Flasher Version 102" in pg.text_content(".flasher-version"))
+    check("footer Flasher Version 103", "Flasher Version 103" in pg.text_content(".flasher-version"))
     check("no Compatible Boards on page", "Compatible Boards" not in body); pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None)
