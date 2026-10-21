@@ -105,7 +105,8 @@ with sync_playwright() as p:
     check("chip title and MAC from esptool", pg.inner_text("#board-chip").startswith("ESP32-D0WD-V3") and "F8:B3:B7:22:05:E8" in pg.inner_text("#board-mac")
           and pg.evaluate("getComputedStyle(document.getElementById('board-mac')).textTransform") == "uppercase", pg.inner_text("#board-chip") + " / " + pg.inner_text("#board-mac"))
     # Version 43.1: the version is known from the install, so nothing is asked; nothing ever reaches a board that is not listening
-    check("V43.1: version known after install, no Improv to a quiet board", re.search(r"Version (4[3-9]|[5-9][0-9])", pg.inner_text("#board-state")) is not None and pg.evaluate("window.__badPk") == 0, pg.inner_text("#board-state"))
+    # Flasher Version 104: three-digit versions (106) count too
+    check("V43.1: version known after install, no Improv to a quiet board", re.search(r"Version (4[3-9]|[5-9][0-9]|[1-9][0-9]{2})", pg.inner_text("#board-state")) is not None and pg.evaluate("window.__badPk") == 0, pg.inner_text("#board-state"))
     pg.screenshot(path=shots + "/03-choice.png")
     pg.click("#wifi-setup"); pg.wait_for_timeout(600)
     check("Wi-Fi wizard scrolled into view", pg.evaluate("(() => { const r = document.getElementById('wizard').getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; })()"))
