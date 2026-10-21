@@ -107,6 +107,14 @@ export class ESPLoader {
     if (window.__failFlash) throw new Error("Failed to connect with the device");
     return chipDesc();
   }
+  // Flasher Version 105: register writes are logged; the S3 watchdog reset (WDTWPROTECT locked again after
+  //  WDTCONFIG0) calls window.__onWdt (the test's board restart); __wdtSilent: the stub never answers them
+  async writeReg(addr, value, mask) {
+    window.__log.push("writeReg 0x" + (addr >>> 0).toString(16) + "=0x" + (value >>> 0).toString(16) + (mask !== undefined ? "/0x" + (mask >>> 0).toString(16) : ""));
+    if (window.__wdtSilent) return new Promise(() => {});
+    if ((addr >>> 0) === 0x60008098) this.__wdtArmed = true;
+    if ((addr >>> 0) === 0x600080b0 && value === 0 && this.__wdtArmed && window.__onWdt) setTimeout(() => window.__onWdt(), 10);
+  }
   async writeFlash(o) {
     window.__log.push("write at " + this.baudrate);
     if ((window.__failWriteAt || []).includes(this.baudrate)) {

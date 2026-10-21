@@ -71,6 +71,9 @@ HELPERS = """(() => {
     if (this === dl && window.__reenumDlOnRun && s.requestToSend === true) { window.__reenumDlOnRun = false; setTimeout(() => window.__lose("dl"), 200); }
   };
   window.__lose = (name) => { const p = ports[name]; window.__log.push("LOSE " + name); p.close(); p.writable = null; fns.disconnect.forEach((fn) => fn({ target: p })); };
+  // The board starting GSP32 (as after a reset; GSP32's boot lines come on its own port once it is open)
+  window.__boot = async () => { const quiet = window.__silentReset; window.__silentReset = false;
+    try { await base.setSignals({ dataTerminalReady: false, requestToSend: true }); await base.setSignals({ requestToSend: false }); } finally { window.__silentReset = quiet; } };
   window.__arrive = (name) => { window.__log.push("ARRIVE " + name); fns.connect.forEach((fn) => fn({ target: ports[name] })); };
   serial.requestPort = async (o) => {
     window.__requests.push(JSON.stringify(o || null));
@@ -139,10 +142,18 @@ with sync_playwright() as p:
     pg.screenshot(path=SHOTS + "/s3-download-mode.png")
     # Install: no reset into the bootloader again; the restart afterwards moves the board back to GSP32's port
     n = len(log(pg))
-    pg.evaluate("window.__reenumDlOnRun = true")
+    # Flasher Version 105: the restart is the watchdog reset through the stub (a system reset: the board leaves
+    #  download mode), and its USB-JTAG port goes
+    pg.evaluate("""() => { window.__onWdt = () => { window.__lose('dl'); window.__boot(); }; }""")
     install(pg)
     check("install finishes", wait_js(pg, "() => /Installed/.test(document.getElementById('board-status').innerText)", 20000), pg.inner_text("#board-status"))
     after = since(pg, n)
+    check("watchdog reset: FORCE_DOWNLOAD_BOOT cleared, then esptool's S3 RTC WDT writes", [l for l in after if l.startswith("writeReg")] == [
+        "writeReg 0x6000812c=0x0/0x1", "writeReg 0x600080b0=0x50d83aa1/0xffffffff", "writeReg 0x6000809c=0x7d0/0xffffffff",
+        "writeReg 0x60008098=0xd0000102/0xffffffff", "writeReg 0x600080b0=0x0/0xffffffff"] or [l for l in after if l.startswith("writeReg")] == [
+        "writeReg 0x6000812c=0x0/0x1", "writeReg 0x600080b0=0x50d83aa1", "writeReg 0x6000809c=0x7d0", "writeReg 0x60008098=0xd0000102", "writeReg 0x600080b0=0x0"], [l for l in after if l.startswith("writeReg")])
+    check("no RTS restart after the watchdog reset", "RESET" not in (after[:after.index("LOSE dl")] if "LOSE dl" in after else after), after)
+    check("no Next step while GSP32 hasn't started", "Next:" not in pg.inner_text("#board-status"), pg.inner_text("#board-status"))
     check("install connects with no_reset too", "main no_reset" in after and not any(l.startswith("reset ") for l in after), after)
     check("written", any(l.startswith("write at") for l in after))
     check("restart moved the board: repick guide", wait_js(pg, "() => !document.getElementById('usb-guide').hidden", 5000))
@@ -153,9 +164,13 @@ with sync_playwright() as p:
     check("Installed status kept", "Installed" in pg.inner_text("#board-status"))
     reqs = len(pg.evaluate("window.__requests"))
     pg.evaluate("window.__arrive('base')"); pg.wait_for_timeout(800)
-    check("allowed port back: taken without the picker", len(pg.evaluate("window.__requests")) == reqs and pg.evaluate("!document.getElementById('disconnect').disabled"))
+    # (the old port's esptool session is closed within 1 s once the watchdog reset took it away)
+    back = wait_js(pg, "() => !document.getElementById('disconnect').disabled", 4000)
+    check("allowed port back: taken without the picker", len(pg.evaluate("window.__requests")) == reqs and back)
     check("guide gone after reconnecting", not shown(pg, "#usb-guide"))
+    pg.wait_for_timeout(600)  # the row folds open
     check("Set Up Wi-Fi offered (GSP32 just installed)", shown(pg, "#wifi-setup"))
+    check("Next step once GSP32's port is back", "Next: click Set Up Wi-Fi" in pg.inner_text("#board-status"), pg.inner_text("#board-status"))
     pg.wait_for_timeout(4500)
     n = len(log(pg))
     pg.click("#wifi-setup")
@@ -268,7 +283,30 @@ with sync_playwright() as p:
     after = since(pg, n)
     check("the running stub is used as the stub (console line)", "[The flasher stub was still running: using it]" in out(pg), out(pg)[-400:])
     check("the chip erase runs (not skipped)", "erase all" in after and not any(l.startswith("erase skipped") for l in after), after)
+    # Flasher Version 105: nothing restarted the board (still in download mode, still answering SYNC): the guide says
+    #  to tap RST; no Next step yet. RST: the port goes, GSP32's port comes, the Next step then
+    check("still in download mode: Tap RST guide", wait_js(pg, "() => !document.getElementById('usb-guide').hidden", 5000))
+    pg.wait_for_timeout(400)
+    check("rst guide title (Title Case)", pg.inner_text("#usb-guide-title").strip() == "Tap RST to Start GSP32", pg.inner_text("#usb-guide-title"))
+    check("rst guide text short, says download mode", "download mode" in pg.inner_text("#usb-guide-text") and len(pg.inner_text("#usb-guide-text")) <= 130, pg.inner_text("#usb-guide-text"))
+    check("rst guide: Pick the Port Again, no Set Up Wi-Fi Instead", shown(pg, "#usb-guide-pick") and not shown(pg, "#usb-guide-wifi"))
+    check("console: still in download mode line", "[The board is still in download mode. Tap RST (not BOOT)" in out(pg), out(pg)[-400:])
+    check("no Next step in download mode", "Next:" not in pg.inner_text("#board-status"), pg.inner_text("#board-status"))
+    pg.screenshot(path=SHOTS + "/s3-tap-rst.png")
+    pg.evaluate("window.__downloadMode = false; window.__lose('base')"); pg.wait_for_timeout(300)
+    check("RST: 'USB port changed', guide stays", "USB port changed" in out(pg) and shown(pg, "#usb-guide"), out(pg)[-300:])
+    pg.evaluate("window.__arrive('base')"); pg.wait_for_timeout(900)
+    check("GSP32's port back: guide gone, Next step shown", not shown(pg, "#usb-guide") and "Next: click Set Up Wi-Fi" in pg.inner_text("#board-status"), pg.inner_text("#board-status"))
     check("no page errors (manual download mode)", not errors, errors)
+    pg.close()
+    # 6c. The stub never answers the watchdog writes: time-limited, then the usual RTS restart
+    pg, errors = page(b, "window.__downloadMode = true; window.__usb = { usbVendorId: 0x303a, usbProductId: 0x1001 };")
+    pg.click("#connect"); wait_text(pg, "Board: ESP32-S3", 15000); pg.wait_for_timeout(500)
+    pg.evaluate("window.__wdtSilent = true"); n = len(log(pg)); install(pg)
+    check("silent stub: install still finishes", wait_js(pg, "() => /Installed/.test(document.getElementById('board-status').innerText)", 25000), pg.inner_text("#board-status"))
+    after = since(pg, n)
+    check("silent stub: the watchdog line, then the RTS restart", "[The watchdog reset did not answer" in out(pg) and "RESET" in after, out(pg)[-400:])
+    check("no page errors (silent stub)", not errors, errors)
     pg.close()
     # 6b. A USB-JTAG port running firmware (no SYNC answer): the usual reset, USB-JTAG first, and the board restarted
     pg, errors = page(b, "window.__usb = { usbVendorId: 0x303a, usbProductId: 0x1001 }; window.__resetWorks = 'usbJtag';")
