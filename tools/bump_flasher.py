@@ -16,8 +16,14 @@ def main():
     changed = []
     for path in [index] + sorted(glob.glob(os.path.join(HERE, "tests", "test_*.py"))):
         text = open(path, encoding="utf-8").read()
-        result = text.replace("Flasher Version " + old, "Flasher Version " + new).replace(old_tag, new_tag)
-        result = result.replace('["flasher_version"] == "%s"' % old, '["flasher_version"] == "%s"' % new)
+        lines = []
+        for line in text.split("\n"):
+            # history comments ("# Flasher Version 104 (Gene): ...") stay as they are
+            if not (line.lstrip().startswith("#")):
+                line = line.replace("Flasher Version " + old, "Flasher Version " + new).replace(old_tag, new_tag)
+                line = line.replace('["flasher_version"] == "%s"' % old, '["flasher_version"] == "%s"' % new)
+            lines.append(line)
+        result = "\n".join(lines)
         if (os.path.basename(path) == "index.html"):
             assert result.count("?v=" + new_tag) == 3, "index.html: expected three ?v= tags"
         if (result != text):
