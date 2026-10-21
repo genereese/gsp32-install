@@ -1,6 +1,6 @@
 {
  "about": "Flasher Version 105.1: file globs -> the suites that cover them (tools/scope.py). Built by tools/build_scope.py from a trace run plus the suites' sources; rebuild after adding a suite or a site file.",
- "built_from": "2e6e430",
+ "built_from": "ed10b9a",
  "built": "2026-10-21",
  "core": [
   "index.html",
@@ -52,6 +52,7 @@
   "test_recover_flow",
   "test_reset_order",
   "test_s3_boardinfo",
+  "test_s3_crashproof",
   "test_smoke",
   "test_unreadable",
   "test_v101",
@@ -104,6 +105,7 @@
   "test_recover_flow": 20,
   "test_reset_order": 18,
   "test_s3_boardinfo": 19,
+  "test_s3_crashproof": 19,
   "test_smoke": 19,
   "test_unreadable": 17,
   "test_v101": 19,
