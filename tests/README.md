@@ -29,7 +29,9 @@ test_v50, test_v80, test_v85). The runner fails a suite on a FAIL line or a non-
     python tests/test_v101.py             # Version 101: Disconnect at the right end of the Install GSP32 row (slides in once connected, gone while installing), closes the port with the board left running; phone layout
     python tests/test_s3_boardinfo.py     # S3 native USB (0x303A): BOOT/RST guide when the reset or the port fails, the port picked again (or taken when it comes back), read in download mode without a reset, install, restart onto GSP32's port, Wi-Fi without board info; other bridges unchanged
     python tests/test_s3_crashproof.py    # Flasher Version 105: a Chromium-like port (close order, locked streams, stalled writes): never the tab-killing new readable after a dropped close; writes bounded and aborted; esptool-js stopped after a connect timeout; a stuck port asks for an unplug
+    python tests/test_v107_classic.py     # Flasher Version 107: the S3 fixes only on native USB (0x303A); on a classic port the REAL esptool-js against espemu.js (an ESP32 ROM + stub) makes the same port calls as Flasher 104, clean and with line faults; the Classic copies are 104's verbatim
 
 `mock.js` is a fake board on Web Serial (Improv answers, boot lines on an RTS reset; `window.__ets` also prints the
-ROM's `ets ...` line like a real ESP32), `fake-esptool.js` stands in for esptool-js. Needs Playwright with Chromium.
+ROM's `ets ...` line like a real ESP32), `fake-esptool.js` stands in for esptool-js. `espemu.js` (Flasher Version 107) is an ESP32 ROM and flasher stub behind a
+Chromium-like port for the real vendored esptool-js, recording every port call. Needs Playwright with Chromium.
 Screenshots go to a temp folder (or `SHOTS`).

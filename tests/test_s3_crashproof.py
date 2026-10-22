@@ -62,7 +62,9 @@ CHROMIUM = """(() => {
 })();"""
 def page(b, init=""):
     pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js")
-    pg.add_init_script("window.__ver = '106'; window.__ets = true;" + init)
+    # Flasher Version 107: these fixes run on native USB only (Espressif's VID 0x303A: the S3's USB-JTAG/serial in
+    #  download mode here); a classic USB-UART bridge port runs Flasher 104's code (test_v107_classic)
+    pg.add_init_script("window.__ver = '106'; window.__ets = true; window.__usb = window.__usb || { usbVendorId: 0x303a, usbProductId: 0x1001 };" + init)
     pg.add_init_script(CHROMIUM)
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
     if (APP): pg.route("**/app.js*", lambda r: r.fulfill(path=APP, content_type="text/javascript"))

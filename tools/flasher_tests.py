@@ -20,7 +20,7 @@ PYTHON = os.environ.get("TEST_PYTHON", "/workspace/pw-venv/bin/python")
 # The page loads clean, the version list, the gallery, the footer and the cache tag
 SMOKE = ["test_smoke", "test_v48", "test_v50", "test_v80", "test_v85"]
 # Seconds alone (Flasher Version 104 run), so the long ones start first
-TIMES = {"test_v61": 97, "test_v75": 93, "test_recover_flow": 71, "test_page": 53, "test_v79": 53, "test_s3_boardinfo": 52, "test_s3_crashproof": 50,
+TIMES = {"test_v61": 97, "test_v75": 93, "test_recover_flow": 71, "test_page": 53, "test_v79": 53, "test_s3_boardinfo": 52, "test_s3_crashproof": 50, "test_v107_classic": 200,
          "test_v43_1": 46, "test_button_row": 43, "test_v42_1": 37, "test_boot_loop_label": 35, "test_v43_2": 35}
 FAIL_LINE = re.compile(r"^FAIL\b(?!S)", re.M)
 COUNT = re.compile(r"^(?:FAILURES:|FAILS|fails)\s+(\d+)\s*$|^(\d+) passed (\d+) failed\s*$", re.M)

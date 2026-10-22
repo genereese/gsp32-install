@@ -959,8 +959,15 @@ function consumeSerial(chunk) {
 }
 
 // Serial port: open once, reset lines to run, our reader; esptool-js borrows the port while flashing
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's portOpen; on any other port Flasher 104's, unchanged
 function portOpen() {
+  return nativeUsb(port) ? portOpenNative() : portOpenClassic();
+}
+function portOpenNative() {
   return !!(readableOf(port) && writableOf(port));
+}
+function portOpenClassic() {
+  return !!(port && port.readable && port.writable);
 }
 
 // Fix (S3 web flash, Flasher Version 105): Chromium's close() cancels the readable first and then throws when the
@@ -1136,8 +1143,16 @@ async function resetBoard() {
 //  read error, after which port.readable is a fresh stream. Only a missing readable (or navigator.serial's disconnect
 //  event) means the board is really gone
 const RECOVERABLE_SERIAL = ["BreakError", "FramingError", "ParityError", "BufferOverrunError"];
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's serialRecoverable; on any other port Flasher 104's, unchanged
 function serialRecoverable(err, onPort) {
+  return nativeUsb(onPort) ? serialRecoverableNative(err, onPort) : serialRecoverableClassic(err, onPort);
+}
+function serialRecoverableNative(err, onPort) {
   if (!readableOf(onPort)) return false;
+  return true;  // with readable still there the port lives on, whatever the error (RECOVERABLE_SERIAL or other)
+}
+function serialRecoverableClassic(err, onPort) {
+  if (!onPort || !onPort.readable) return false;
   return true;  // with readable still there the port lives on, whatever the error (RECOVERABLE_SERIAL or other)
 }
 function serialErrorName(err) {
@@ -1145,7 +1160,11 @@ function serialErrorName(err) {
 }
 const DISCONNECT_TEXT = "\n[The board disconnected. Plug it in and click Get Started.]\n";
 // A real loss: close the port (so Chromium lets go of it), say so once, and bring Get Started back
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's portLost; on any other port Flasher 104's, unchanged
 async function portLost(lost, message) {
+  return nativeUsb(lost) ? portLostNative(lost, message) : portLostClassic(lost, message);
+}
+async function portLostNative(lost, message) {
   if (!lost || lost.__gsp32Lost) return;
   lost.__gsp32Lost = true;
   if (port === lost) port = null;
@@ -1157,13 +1176,29 @@ async function portLost(lost, message) {
   syncConsoleButtons();
   showStartAgain();
 }
+async function portLostClassic(lost, message) {
+  if (!lost || lost.__gsp32Lost) return;
+  lost.__gsp32Lost = true;
+  if (port === lost) port = null;
+  reading = false;
+  board.listening = false;
+  if (message) appendConsole(message);
+  await stopReading().catch(() => {});
+  await lost.close().catch(() => {});
+  syncConsoleButtons();
+  showStartAgain();
+}
 // Get Started (the start row) comes back above the console, which keeps its log
 function showStartAgain() {
   if (installer.hidden || installer.shutting) foldOpen(installer);
   connectBtn.disabled = false;
   connectBtn.hidden = false;
 }
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's startReading; on any other port Flasher 104's, unchanged
 function startReading() {
+  return nativeUsb(port) ? startReadingNative() : startReadingClassic();
+}
+function startReadingNative() {
   if (reading || !portOpen()) return;
   reading = true;
   const readPort = port;
@@ -1216,15 +1251,82 @@ function startReading() {
     syncConsoleButtons();
   })();
 }
+function startReadingClassic() {
+  if (reading || !portOpen()) return;
+  reading = true;
+  const readPort = port;
+  let lost = false;
+  readDone = (async () => {
+    let errors = 0;
+    while (reading && port === readPort && readPort.readable) {
+      try {
+        reader = readPort.readable.getReader();
+      } catch (err) {
+        break;
+      }
+      let got = false;
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          got = true;
+          errors = 0;
+          if (value) consumeSerial(value);
+        }
+      } catch (err) {
+        if (reading && serialRecoverable(err, readPort)) {
+          // Line noise only: a fresh reader on the new stream, a short pause if errors keep coming
+          errors += 1;
+          if (errors <= 3 || errors % 50 === 0) console.warn("Serial read error, reading on:", serialErrorName(err));
+          if (errors > 5) await delay(Math.min(500, errors * 10));
+          got = true;
+        } else if (reading) {
+          lost = true;
+        }
+      } finally {
+        try {
+          reader.releaseLock();
+        } catch (err) {
+          // Already released when the device unplugs
+        }
+        reader = null;
+      }
+      // A stream that ends at once again and again would spin here: give the port a moment, then stop
+      if (!got) await delay(50);
+      if (!got && reading && port && port.readable && port.readable.locked) break;
+    }
+    if (reading && !lost && !readPort.readable) lost = true;
+    reading = false;
+    if (lost) {
+      readDone = Promise.resolve();
+      await portLost(readPort, DISCONNECT_TEXT);
+      return;
+    }
+    syncConsoleButtons();
+  })();
+}
 
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's stopReading; on any other port Flasher 104's, unchanged
 async function stopReading() {
+  return nativeUsb(port) ? stopReadingNative() : stopReadingClassic();
+}
+async function stopReadingNative() {
   reading = false;
   // Bounded: on a stuck USB device Chromium's cancel can wait for a read that never ends
   if (reader) await withTimeout(reader.cancel().catch(() => {}), 1000, "Releasing the port").catch(() => {});
   await withTimeout(readDone, 1500, "Stopping the reader").catch(() => {});
 }
+async function stopReadingClassic() {
+  reading = false;
+  if (reader) await reader.cancel().catch(() => {});
+  await readDone;
+}
 
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's openPort; on any other port Flasher 104's, unchanged
 async function openPort(selected) {
+  return nativeUsb(selected) ? openPortNative(selected) : openPortClassic(selected);
+}
+async function openPortNative(selected) {
   if (port === selected && portOpen()) return;
   if (selected.__gsp32Stuck) throw stuckError();
   if (port && port !== selected) await closePort();
@@ -1233,6 +1335,26 @@ async function openPort(selected) {
   selected.__gsp32Lost = false;
   await selected.open({ baudRate: FLASH_BAUD });
   selected.__gsp32Opened = true;
+  portBaud = FLASH_BAUD;
+  port = selected;
+  board.info = Object.assign({}, board.info || {});
+  const bridge = usbBridgeInfo();
+  if (bridge) { board.info.usb = bridge.name; board.info.usbLabel = bridge.label; }
+  syncBoardUi();
+  await setRunState();
+  pending = new Uint8Array(0);
+  textDecoder = new TextDecoder("utf-8");
+  readableGateReset();
+  startReading();
+  syncConsoleButtons();
+}
+async function openPortClassic(selected) {
+  if (port === selected && portOpen()) return;
+  if (port && port !== selected) await closePort();
+  // Still open from before (a lost state): close it first, or open() fails with "already open"
+  if (selected.readable || selected.writable) await selected.close().catch(() => {});
+  selected.__gsp32Lost = false;
+  await selected.open({ baudRate: FLASH_BAUD });
   portBaud = FLASH_BAUD;
   port = selected;
   board.info = Object.assign({}, board.info || {});
@@ -1260,7 +1382,11 @@ async function pickPort() {
   await openPicked(selected);
   return port;
 }
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's openPicked; on any other port Flasher 104's, unchanged
 async function openPicked(selected) {
+  return nativeUsb(selected) ? openPickedNative(selected) : openPickedClassic(selected);
+}
+async function openPickedNative(selected) {
   try {
     await openPort(selected);
   } catch (err) {
@@ -1280,8 +1406,30 @@ async function openPicked(selected) {
     throw fail;
   }
 }
+async function openPickedClassic(selected) {
+  try {
+    await openPort(selected);
+  } catch (err) {
+    // Fix (recover flow): a port Chromium still holds from before (a stale state) often opens after a close
+    try {
+      await selected.close().catch(() => {});
+      await delay(300);
+      await openPort(selected);
+      return;
+    } catch (again) {
+      // Fall through to the clear error
+    }
+    const fail = new Error("Could not open the port. Close other programs that use it (Arduino, Thonny, mpremote), unplug and replug the board, then click Get Started again.");
+    fail.code = "open";
+    throw fail;
+  }
+}
 
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's closePort; on any other port Flasher 104's, unchanged
 async function closePort() {
+  return nativeUsb(port) ? closePortNative() : closePortClassic();
+}
+async function closePortNative() {
   if (!port) return;
   const closing = port;
   await stopReading();
@@ -1294,10 +1442,36 @@ async function closePort() {
   if (port === closing) port = null;
   syncConsoleButtons();
 }
+async function closePortClassic() {
+  if (!port) return;
+  const closing = port;
+  await stopReading();
+  try {
+    await setRunState();
+  } catch (err) {
+    // The device may be gone already
+  }
+  await closing.close().catch(() => {});
+  if (port === closing) port = null;
+  syncConsoleButtons();
+}
 
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's writeBytes; on any other port Flasher 104's, unchanged
 async function writeBytes(bytes) {
+  return nativeUsb(port) ? writeBytesNative(bytes) : writeBytesClassic(bytes);
+}
+async function writeBytesNative(bytes) {
   if (!portOpen()) throw new Error("not connected");
   await writeTo(port, bytes);
+}
+async function writeBytesClassic(bytes) {
+  if (!portOpen()) throw new Error("not connected");
+  const writer = port.writable.getWriter();
+  try {
+    await writer.write(bytes);
+  } finally {
+    writer.releaseLock();
+  }
 }
 
 // Versions
@@ -1521,7 +1695,11 @@ function usbLost(lost, resume) {
 //  stopped by the caller. Bounded, so it can never hang
 const SYNC_FRAME = new Uint8Array([0xc0, 0x00, 0x08, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x07, 0x12, 0x20]
   .concat(new Array(32).fill(0x55), [0xc0]));
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's answersSync; on any other port Flasher 104's, unchanged
 async function answersSync(onPort, ms = 400) {
+  return nativeUsb(onPort) ? answersSyncNative(onPort, ms) : answersSyncClassic(onPort, ms);
+}
+async function answersSyncNative(onPort, ms = 400) {
   if (!readableOf(onPort) || !writableOf(onPort)) return false;
   const syncReader = takeReader(onPort);
   let got = new Uint8Array(0);
@@ -1541,6 +1719,33 @@ async function answersSync(onPort, ms = 400) {
   } finally {
     await withTimeout(syncReader.cancel(), 300, "Releasing the port").catch(() => {});
     dropReader(onPort, syncReader);
+  }
+  return false;
+}
+async function answersSyncClassic(onPort, ms = 400) {
+  if (!onPort || !onPort.readable || !onPort.writable) return false;
+  const syncReader = onPort.readable.getReader();
+  let got = new Uint8Array(0);
+  try {
+    await writeBytes(SYNC_FRAME);
+    const until = Date.now() + ms;
+    while (Date.now() < until) {
+      const result = await Promise.race([syncReader.read(), delay(until - Date.now()).then(() => null)]);
+      if (!result || result.done) break;
+      got = concatBytes(got, result.value);
+      for (let i = 0; i + 2 < got.length; i++) {
+        if (got[i] === 0xc0 && got[i + 1] === 0x01 && got[i + 2] === 0x08) return true;
+      }
+    }
+  } catch (err) {
+    // No answer
+  } finally {
+    await withTimeout(syncReader.cancel(), 300, "Releasing the port").catch(() => {});
+    try {
+      syncReader.releaseLock();
+    } catch (err) {
+      // Released already
+    }
   }
   return false;
 }
@@ -1731,9 +1936,22 @@ function reportBoardTelemetry(compatible) {
 // Version 80: read chip/flash/features as soon as the port is picked (before Install). Leaves the board
 //  running again so the console works; Install reconnects cleanly (bootloader session is not kept).
 //  Fix (S3 native USB): a board in download mode stays there for Install (a reset starts its program, on another port)
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's releaseLoader; on any other port Flasher 104's, unchanged
 async function releaseLoader(link, keep) {
+  return nativeUsb(port) ? releaseLoaderNative(link, keep) : releaseLoaderClassic(link, keep);
+}
+async function releaseLoaderNative(link, keep) {
   if (link && link.transport) await link.transport.disconnect().catch(() => {});
   stopLink(link);
+  await reopenPort(FLASH_BAUD).catch(() => {});
+  if (keep || board.downloadMode) {
+    await setRunState().catch(() => {});
+    return;
+  }
+  await resetBoard().catch(() => setRunState().catch(() => {}));
+}
+async function releaseLoaderClassic(link, keep) {
+  if (link && link.transport) await link.transport.disconnect().catch(() => {});
   await reopenPort(FLASH_BAUD).catch(() => {});
   if (keep || board.downloadMode) {
     await setRunState().catch(() => {});
@@ -1792,7 +2010,8 @@ async function probeBoardOnConnect(options = {}) {
         appendConsole("[Could not read the board yet (" + why + "). Install can try again.]\n");
       }
       // Fix (S3 web flash, Flasher Version 105): connectLoader already reset the link (a second close and reopen here,
-      //  of a port that may be moving, is gone)
+      //  of a port that may be moving, is gone). Flasher Version 107: native USB only; other ports as in 104
+      if (!nativeUsb(probed)) await resetLink(link).catch(() => {});
       await setRunState().catch(() => {});
       return false;
     }
@@ -1994,12 +2213,23 @@ function setStatus(text, kind, ip) {
 // Version 64 (Gene): every install runs at 115200. Faster rates were tried in Versions 49-63; Chrome and Edge on
 //  Windows restart CP2102 boards whenever the port reopens for a speed change, so none held up (see IDEAS.md)
 let portBaud = FLASH_BAUD;
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's reopenPort; on any other port Flasher 104's, unchanged
 async function reopenPort(baud) {
+  return nativeUsb(port) ? reopenPortNative(baud) : reopenPortClassic(baud);
+}
+async function reopenPortNative(baud) {
   if (!port || portBaud === baud) return;
   const onPort = port;
   if (!(await safeClose(onPort))) throw stuckError();
   await onPort.open({ baudRate: baud });
   onPort.__gsp32Opened = true;
+  portBaud = baud;
+  await setRunState().catch(() => {});
+}
+async function reopenPortClassic(baud) {
+  if (!port || portBaud === baud) return;
+  await port.close();
+  await port.open({ baudRate: baud });
   portBaud = baud;
   await setRunState().catch(() => {});
 }
@@ -2015,7 +2245,11 @@ function withTimeout(promise, ms, what) {
 }
 // Version 61: full cleanup between attempts. Cancel and release esptool's reader (a read left pending on a dead
 //  rate keeps the stream locked), then close the port and open it fresh at 115200. Each part is time-limited too.
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's resetLink; on any other port Flasher 104's, unchanged
 async function resetLink(link) {
+  return nativeUsb(port) ? resetLinkNative(link) : resetLinkClassic(link);
+}
+async function resetLinkNative(link) {
   const transport = link && link.transport;
   stopLink(link);
   if (transport && transport.reader) {
@@ -2036,9 +2270,31 @@ async function resetLink(link) {
   portBaud = FLASH_BAUD;
   await setRunState().catch(() => {});
 }
+async function resetLinkClassic(link) {
+  const transport = link && link.transport;
+  if (transport && transport.reader) {
+    await withTimeout(transport.reader.cancel(), 1000, "Releasing the port").catch(() => {});
+    try {
+      transport.reader.releaseLock();
+    } catch (err) {
+      // Released already
+    }
+    transport.reader = undefined;
+  }
+  if (transport) transport.buffer = new Uint8Array(0);
+  if (!port) return;
+  await withTimeout(port.close(), 2000, "Closing the port").catch(() => {});
+  await withTimeout(port.open({ baudRate: FLASH_BAUD }), 2000, "Opening the port");
+  portBaud = FLASH_BAUD;
+  await setRunState().catch(() => {});
+}
 // Fix (false disconnect): esptool-js reads through this. A recoverable read error (port.readable still there) takes a
 //  fresh reader from the new stream and reads again, once per error; a real loss rejects as before
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's resilientReader; on any other port Flasher 104's, unchanged
 function resilientReader(onPort) {
+  return nativeUsb(onPort) ? resilientReaderNative(onPort) : resilientReaderClassic(onPort);
+}
+function resilientReaderNative(onPort) {
   let inner = takeReader(onPort);
   const wrapper = {
     async read() {
@@ -2054,6 +2310,26 @@ function resilientReader(onPort) {
     },
     cancel(reason) { return inner.cancel(reason); },
     releaseLock() { return dropReader(onPort, inner); },
+    get closed() { return inner.closed; },
+  };
+  return wrapper;
+}
+function resilientReaderClassic(onPort) {
+  let inner = onPort.readable.getReader();
+  const wrapper = {
+    async read() {
+      try {
+        return await inner.read();
+      } catch (err) {
+        if (!serialRecoverable(err, onPort)) throw err;
+        console.warn("Serial read error during connect/flash, reading on:", serialErrorName(err));
+        try { inner.releaseLock(); } catch (e) { /* released already */ }
+        inner = onPort.readable.getReader();
+        return await inner.read();
+      }
+    },
+    cancel(reason) { return inner.cancel(reason); },
+    releaseLock() { return inner.releaseLock(); },
     get closed() { return inner.closed; },
   };
   return wrapper;
@@ -2184,7 +2460,7 @@ function linkLive(link, onPort) {
   return !!link && !link.aborted && port === onPort && portUsable(onPort);
 }
 function stopLink(link) {
-  if (!link || link.aborted) return;
+  if (!link || !link.native || link.aborted) return;
   link.aborted = true;
   if (link.transport) {
     link.transport.reader = DEAD_READER;
@@ -2203,11 +2479,15 @@ function loaderDevice(onPort, link) {
   };
 }
 // A borrowed transport on the open port and a loader in the board's flasher stub at 115200
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's connectLoader; on any other port Flasher 104's, unchanged
 async function connectLoader(terminal) {
+  return nativeUsb(port) ? connectLoaderNative(terminal) : connectLoaderClassic(terminal);
+}
+async function connectLoaderNative(terminal) {
   if (!portOpen()) throw new Error("The port closed");
   await reopenPort(FLASH_BAUD);
   const onPort = port;
-  const link = { transport: null, loader: null, chip: "", rotation: null, aborted: false };
+  const link = { transport: null, loader: null, chip: "", rotation: null, aborted: false, native: true };
   const device = loaderDevice(onPort, link);
   const transport = new Transport(device, false);
   link.transport = transport;
@@ -2291,9 +2571,76 @@ async function connectLoader(terminal) {
   }
   return link;
 }
+async function connectLoaderClassic(terminal) {
+  await reopenPort(FLASH_BAUD);
+  const transport = new Transport(port, false);
+  // The port is already open at 115200: esptool-js borrows its reader
+  transport.connect = async function (baud) {
+    this.baudrate = baud;
+    await reopenPort(baud);
+    this.reader = resilientReader(port);
+  };
+  transport.disconnect = async function () {
+    if (this.reader) {
+      await withTimeout(this.reader.cancel(), 1000, "Releasing the port").catch(() => {});
+      try {
+        this.reader.releaseLock();
+      } catch (err) {
+        // Released already
+      }
+    }
+    this.reader = undefined;
+  };
+  // Version 61: esptool-js 0.5.7's flushInput awaits reader.closed, which only settles once the port closes, so
+  //  on an open port it waits forever (the Version 60 hang). Ours drains, bounded (see drainInput)
+  transport.flushInput = async function () {
+    await drainInput(this);
+  };
+  const rotation = resetRotation(port);
+  const loader = new ESPLoader({
+    transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal,
+    resetConstructors: { classicReset: () => rotation, usbJTAGSerialReset: () => rotation },
+  });
+  const link = { transport, loader, chip: "", rotation };
+  // Fix (S3 native USB): a board already in download mode is synced without a reset (a reset would start its program)
+  const mode = board.downloadMode ? "no_reset" : "default_reset";
+  const onPort = port;
+  let lostTimer = null;
+  const lost = new Promise((resolve, reject) => {
+    lostTimer = setInterval(() => {
+      if (port !== onPort) reject(new Error("The port closed"));
+    }, 200);
+  });
+  try {
+    link.chip = await withTimeout(Promise.race([loader.main(mode), lost]), CONNECT_MS, "Connecting to the board")
+      .finally(() => clearInterval(lostTimer));
+    if (rotation.name) {
+      rememberReset(port, rotation.name);
+      board.resetSeq = rotation.name;
+    }
+    board.chip = (await withTimeout(loader.chip.getChipDescription(loader), READ_MS, "Reading the chip")) || link.chip;
+    board.mac = (await withTimeout(loader.chip.readMac(loader), READ_MS, "Reading the MAC")) || "";
+    await readBoardExtras(link);
+    syncBoardUi();
+  } catch (err) {
+    if (!link.chip) {
+      if (rotation.tried.length) appendConsole("[Resets tried: " + rotation.tried.join(", ") + "]\n");
+      await resetLink(link).catch(() => {});
+      throw err;
+    }
+    board.chip = link.chip;
+    await readBoardExtras(link).catch(() => {});
+    syncBoardUi();
+  }
+  return link;
+}
 // Read and discard what is waiting until 100 ms pass with nothing (500 ms at most), then a fresh reader, which also
 //  drops any read left waiting by an earlier timeout. Bounded throughout, so it can never hang
+// Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's drainInput; on any other port Flasher 104's, unchanged
 async function drainInput(transport, quietMs = 100, maxMs = 500) {
+  return nativeUsb(port) ? drainInputNative(transport, quietMs, maxMs) : drainInputClassic(transport, quietMs, maxMs);
+}
+async function drainInputNative(transport, quietMs = 100, maxMs = 500) {
   let dropped = transport.buffer ? transport.buffer.length : 0;
   transport.buffer = new Uint8Array(0);
   const reader = transport.reader;
@@ -2313,6 +2660,29 @@ async function drainInput(transport, quietMs = 100, maxMs = 500) {
     // Released already
   }
   transport.reader = transport.device && transport.device.readable ? resilientReader(port) : undefined;
+  transport.buffer = new Uint8Array(0);
+  return dropped;
+}
+async function drainInputClassic(transport, quietMs = 100, maxMs = 500) {
+  let dropped = transport.buffer ? transport.buffer.length : 0;
+  transport.buffer = new Uint8Array(0);
+  const reader = transport.reader;
+  if (!reader) return dropped;
+  const started = Date.now();
+  let pending = reader.read();
+  while (Date.now() - started < maxMs) {
+    const got = await Promise.race([pending.catch(() => ({ done: true })), delay(quietMs).then(() => null)]);
+    if (got === null || got.done) break;
+    dropped += got.value ? got.value.length : 0;
+    pending = reader.read();
+  }
+  await withTimeout(reader.cancel(), 300, "Releasing the port").catch(() => {});
+  try {
+    reader.releaseLock();
+  } catch (err) {
+    // Released already
+  }
+  transport.reader = port && port.readable ? resilientReader(port) : undefined;
   transport.buffer = new Uint8Array(0);
   return dropped;
 }
@@ -2471,12 +2841,12 @@ async function install() {
         continue;
       }
       appendConsole("[Written in " + Math.round((Date.now() - started) / 1000) + " s, compressed; verified (MD5 matches)]\n");
-      installEnding = true;
+      installEnding = nativeUsb(port);
       // Fix (S3 web flash, Flasher Version 105): on the S3's USB-JTAG/serial port the page's RTS restart is only a
       //  core reset, which keeps the board in download mode (BOOT is read again only by a system reset). A watchdog
       //  reset through the stub is one (as esptool's own Python does it); the board then starts GSP32
       flashedPort = installPort;
-      if (family === "ESP32-S3" && usbPid(port) === USB_JTAG_SERIAL_PID) {
+      if (family === "ESP32-S3" && nativeUsb(port) && usbPid(port) === USB_JTAG_SERIAL_PID) {
         usbExpect = { resume: "installed", until: Date.now() + 30000 };  // its port goes with the reset
         watchdogDone = await watchdogReset(link.loader);
       }
@@ -2518,10 +2888,18 @@ async function install() {
     // Version 75 (Gene): what to do next, so a newcomer knows the Set Up Wi-Fi button is the way to the Web UI.
     //  Fix (S3 web flash, Flasher Version 105): only once GSP32 has started (its boot lines, or its new USB port
     //  picked): a board left in download mode showed it while Set Up Wi-Fi could not work
-    nextStepPending = true;
+    // Flasher Version 107: native USB only; on any other port the line comes at once, as in 104
+    if (native) nextStepPending = true;
+    else {
+      const next = document.createElement("span");
+      next.className = "status-more next-step";
+      next.append("Next: click ", Object.assign(document.createElement("b"), { textContent: "Set Up Wi-Fi" }),
+        " above to connect the board to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
+      boardStatus.append(" ", next);
+    }
     // Fix (S3 web flash, Flasher Version 105): a USB-JTAG board still answering the ROM's SYNC after the restart did
     //  not leave download mode: the guide says to tap RST (the new port then goes on as after any restart)
-    if (flashedPort === port && usbPid(port) === USB_JTAG_SERIAL_PID) {
+    if (flashedPort === port && nativeUsb(port) && usbPid(port) === USB_JTAG_SERIAL_PID) {
       await delay(LEFT_DOWNLOAD_MS);
       if (port === flashedPort && portOpen() && !usbGuide && await answersSync(port)) {
         appendConsole(STILL_DOWNLOAD_TEXT);
