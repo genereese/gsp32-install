@@ -1,5 +1,8 @@
 // Version 79: flash size, features, crystal for board details + compat check
-export class Transport { constructor(device) { this.device = device; } async flushInput() { if (this.reader && !await this.reader.closed) window.__log.push("flushed"); } }
+export class Transport { constructor(device) { this.device = device; } async flushInput() { if (this.reader && !await this.reader.closed) window.__log.push("flushed"); }
+  // Flasher Version 105: like esptool-js 0.5.7's write (the page replaces it with a bounded one)
+  slipWriter(d) { return d; }
+  async write(d) { const w = this.device.writable.getWriter(); await w.write(this.slipWriter(d)); w.releaseLock(); } }
 const never = () => new Promise(() => {});
 function chipDesc() { return window.__chip || "ESP32-D0WD-V3 (revision v3.1)"; }
 function flashKb() {
@@ -82,6 +85,16 @@ export class ESPLoader {
       }
       if (!ok) throw new Error("Failed to connect with the device");
     }
+    // Flasher Version 105: like esptool-js against a board that never answers: SYNC after SYNC (7 attempts of 5), every
+    //  error caught, going on whatever the page does (it can't be stopped from outside)
+    if (window.__syncWrites && mode !== "no_reset") {
+      for (let i = 0; i < 35; i++) {
+        try { await this.t.write(new Uint8Array(46).fill(0x55)); window.__log.push("sync write"); }
+        catch (e) { window.__log.push("sync write failed " + ((e && e.message) || e)); }
+        await new Promise((r) => setTimeout(r, window.__syncGap || 400));
+      }
+      throw new Error("Failed to connect with the device");
+    }
     if (window.__esptoolNoise) await noiseRead(this.t, "connect");
     this.term.writeLine("Connecting...");
     this.term.writeLine("Chip is " + chipDesc().split(" (")[0]);
@@ -96,6 +109,8 @@ export class ESPLoader {
       throw new Error("Packet content transfer stopped");
     }
     if (window.__flashNoise) await noiseRead(this.t, "flash");
+    // Flasher Version 105: the board stops taking data partway through a write (a USB device whose buffer is full)
+    if (window.__stallInWrite) { window.__stallInWrite = false; o.reportProgress(0, 10, 100); window.__stallAfter = window.__writeBytes || 0; await this.t.write(new Uint8Array(4096).fill(0x11)); }
     // Fix (write retries): line noise breaks the write partway, like esptool-js's SLIP reader does. __writePlan
     //  scripts each write in turn: "noise", "md5" (written, then the MD5 check fails) or "ok"
     const step = Array.isArray(window.__writePlan) ? window.__writePlan.shift() : undefined;
