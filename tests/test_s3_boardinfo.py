@@ -102,8 +102,9 @@ with sync_playwright() as p:
     pg, errors = page(b, "window.__resetWorks = 'none'; window.__silentReset = true;")
     pg.evaluate("""(() => { window.__guideAnim = []; const a = Element.prototype.animate; Element.prototype.animate = function (k, o) {
         if (this.id === 'usb-guide' && Array.isArray(k)) window.__guideAnim.push(Object.keys(k[0]).join(',')); return a.call(this, k, o); }; })()""")
-    pg.click("#connect")
-    check("probe fails on native USB: the guide folds open", wait_js(pg, "() => !document.getElementById('usb-guide').hidden", 20000))
+    t0 = time.time(); pg.click("#connect")
+    check("probe on native USB: the guide folds open", wait_js(pg, "() => !document.getElementById('usb-guide').hidden", 20000))
+    check("Flasher Version 105: at once (no 12 s of resets first)", time.time() - t0 < 3, round(time.time() - t0, 1))
     pg.wait_for_timeout(400)
     check("guide title in Title Case", pg.inner_text("#usb-guide-title").strip() == TITLE, pg.inner_text("#usb-guide-title"))
     check("guide text is short (one or two sentences)", 0 < len(pg.inner_text("#usb-guide-text")) <= 130, pg.inner_text("#usb-guide-text"))
@@ -111,11 +112,11 @@ with sync_playwright() as p:
     anim = pg.evaluate("window.__guideAnim")
     check("it slides and fades open (height, opacity)", bool(anim) and "height" in anim[0] and "opacity" in anim[0], anim)
     check("warn-box style like the compat notice", "warn-box" in pg.get_attribute("#usb-guide", "class"))
-    check("console: could not switch into download mode", "[Could not switch the board into download mode" in out(pg), out(pg)[-400:])
+    check("console: GSP32's own port can't be switched from the page", "[GSP32's own USB port: the page can't switch it into download mode" in out(pg), out(pg)[-400:])
     check("not the plain 'Install can try again' line", "Install can try again" not in out(pg))
     check("still connected: Install and Disconnect usable", pg.evaluate("!document.getElementById('install-btn').disabled && !document.getElementById('disconnect').disabled"))
     check("silent board: no GSP32 seen, so no Set Up Wi-Fi in the row", not shown(pg, "#wifi-setup"))
-    check("Resets tried listed (the page did try)", "[Resets tried:" in out(pg))
+    check("Flasher Version 105: no reset sequence, no esptool connect, no SYNC on GSP32's TinyUSB port", "[Resets tried:" not in out(pg) and not any(l.startswith(("reset ", "loader", "sync")) for l in log(pg)), log(pg))
     pg.screenshot(path=SHOTS + "/s3-guide.png")
     # BOOT + RST by hand: the TinyUSB port goes, the board now waits in download mode on its USB-JTAG port
     pg.evaluate("window.__downloadMode = true; window.__lose('base')"); pg.wait_for_timeout(500)
@@ -163,15 +164,17 @@ with sync_playwright() as p:
     check("no page errors (flow)", not errors, errors)
     pg.close()
 
-    # 2. The page's reset does restart the board, onto a new port (MicroPython's own DTR/RTS reboot into download
-    #    mode): the guide shows at once, not after the 12 s connect limit, and an allowed port that comes back is used
+    # 2. A board whose reset would move it to a new port (MicroPython's own DTR/RTS reboot into download mode):
+    #    Flasher Version 105 sends no reset to GSP32's TinyUSB port, so it stays put; the guide at once, and an allowed
+    #    port that comes back (BOOT+RST by hand) is used
     pg, errors = page(b, "window.__resetWorks = 'none';")
     pg.wait_for_timeout(100)
     t0 = time.time(); pg.evaluate("window.__reenumArm = true"); pg.click("#connect")
     ok = wait_js(pg, "() => !document.getElementById('usb-guide').hidden", 15000); dt = time.time() - t0
-    check("lost during the probe: guide within a few seconds", ok and dt < 6, round(dt, 1))
+    check("guide within a second or two", ok and dt < 3, round(dt, 1))
     check("guide title (boot)", pg.inner_text("#usb-guide-title").strip() == TITLE)
-    check("'USB port changed' line, not the unplug one", "USB port changed" in out(pg) and "The board disconnected" not in out(pg), out(pg)[-300:])
+    check("no reset sent, so the port never moved", "LOSE base" not in log(pg) and "USB port changed" not in out(pg), log(pg)[-8:])
+    pg.evaluate("window.__lose('base')"); pg.wait_for_timeout(300)
     pg.wait_for_timeout(300)
     reqs = len(pg.evaluate("window.__requests"))
     pg.evaluate("window.__downloadMode = true; window.__arrive('dl')")
@@ -235,7 +238,9 @@ with sync_playwright() as p:
     # 5b. The page's restart does work but moves the board to a new port: the guide, the port back, Wi-Fi goes on
     pg, errors = page(b, "window.__resetWorks = 'none';")
     pg.click("#connect"); wait_js(pg, "() => !document.getElementById('usb-guide').hidden", 20000); pg.wait_for_timeout(600)
-    check("GSP32 seen (the restart printed it): Set Up Wi-Fi in the row, no Instead", shown(pg, "#wifi-setup") and not shown(pg, "#usb-guide-wifi"))
+    # GSP32 prints its lines (it just booted: the page sends no reset to this port since Flasher Version 105)
+    pg.evaluate("(async () => { await window.__port.setSignals({ dataTerminalReady: false, requestToSend: true }); await window.__port.setSignals({ dataTerminalReady: false, requestToSend: false }); })()"); pg.wait_for_timeout(1200)
+    check("GSP32 seen (its boot lines): Set Up Wi-Fi in the row, no Instead", shown(pg, "#wifi-setup") and not shown(pg, "#usb-guide-wifi"))
     # GSP32 on Wi-Fi stopped listening after its first 30 s: Set Up Wi-Fi restarts it, and the restart moves the port
     pg.evaluate("window.__stopListening()"); pg.wait_for_timeout(200)
     pg.evaluate("window.__reenumOnRun = true"); pg.click("#wifi-setup")
