@@ -148,16 +148,11 @@ with sync_playwright() as p:
     install(pg)
     check("install finishes", wait_js(pg, "() => /Installed/.test(document.getElementById('board-status').innerText)", 20000), pg.inner_text("#board-status"))
     after = since(pg, n)
-    regs = [l for l in after if l.startswith(("writeReg", "readReg"))]
-    check("Flasher Version 105: watchdogs off after the connect (esptool's S3 USB-JTAG disable_watchdogs)", regs[:7] == [
-        "writeReg 0x600080b0=0x50d83aa1", "writeReg 0x60008098=0x0", "writeReg 0x600080b0=0x0", "readReg 0x600080b4",
-        "writeReg 0x600080b8=0x8f1d312a", "writeReg 0x600080b4=0x80000000", "writeReg 0x600080b8=0x0"] and "writeReg 0x600080b8=0x0" in regs, regs)
-    tail = after[after.index("md5 verified"):] if "md5 verified" in after else after
-    check("watchdog reset: FORCE_DOWNLOAD_BOOT cleared, then esptool's S3 RTC WDT writes", [l for l in tail if l.startswith("writeReg")] == [
+    check("watchdog reset: FORCE_DOWNLOAD_BOOT cleared, then esptool's S3 RTC WDT writes", [l for l in after if l.startswith("writeReg")] == [
         "writeReg 0x6000812c=0x0/0x1", "writeReg 0x600080b0=0x50d83aa1/0xffffffff", "writeReg 0x6000809c=0x7d0/0xffffffff",
-        "writeReg 0x60008098=0xd0000102/0xffffffff", "writeReg 0x600080b0=0x0/0xffffffff"] or [l for l in tail if l.startswith("writeReg")] == [
-        "writeReg 0x6000812c=0x0/0x1", "writeReg 0x600080b0=0x50d83aa1", "writeReg 0x6000809c=0x7d0", "writeReg 0x60008098=0xd0000102", "writeReg 0x600080b0=0x0"], [l for l in tail if l.startswith("writeReg")])
-    check("no RTS restart after the watchdog reset", "RESET" not in (tail[:tail.index("LOSE dl")] if "LOSE dl" in tail else tail), tail)
+        "writeReg 0x60008098=0xd0000102/0xffffffff", "writeReg 0x600080b0=0x0/0xffffffff"] or [l for l in after if l.startswith("writeReg")] == [
+        "writeReg 0x6000812c=0x0/0x1", "writeReg 0x600080b0=0x50d83aa1", "writeReg 0x6000809c=0x7d0", "writeReg 0x60008098=0xd0000102", "writeReg 0x600080b0=0x0"], [l for l in after if l.startswith("writeReg")])
+    check("no RTS restart after the watchdog reset", "RESET" not in (after[:after.index("LOSE dl")] if "LOSE dl" in after else after), after)
     check("no Next step while GSP32 hasn't started", "Next:" not in pg.inner_text("#board-status"), pg.inner_text("#board-status"))
     check("install connects with no_reset too", "main no_reset" in after and not any(l.startswith("reset ") for l in after), after)
     check("written", any(l.startswith("write at") for l in after))
@@ -310,7 +305,6 @@ with sync_playwright() as p:
     pg.evaluate("window.__wdtSilent = true"); n = len(log(pg)); install(pg)
     check("silent stub: install still finishes", wait_js(pg, "() => /Installed/.test(document.getElementById('board-status').innerText)", 25000), pg.inner_text("#board-status"))
     after = since(pg, n)
-    check("silent stub: the watchdogs line (connect goes on)", "[Could not turn off the board's watchdogs" in out(pg), out(pg)[-600:])
     check("silent stub: the watchdog line, then the RTS restart", "[The watchdog reset did not answer" in out(pg) and "RESET" in after, out(pg)[-400:])
     check("no page errors (silent stub)", not errors, errors)
     pg.close()

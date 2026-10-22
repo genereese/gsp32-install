@@ -1169,7 +1169,7 @@ function startReading() {
   const readPort = port;
   let lost = false;
   readDone = (async () => {
-    let errors = 0, empties = 0;
+    let errors = 0;
     while (reading && port === readPort && readableOf(readPort)) {
       try {
         reader = takeReader(readPort);
@@ -1199,10 +1199,8 @@ function startReading() {
         dropReader(readPort, reader);
         reader = null;
       }
-      // A stream that ends at once again and again would spin here: give the port a moment, then stop. Fix (S3 web
-      //  flash, Flasher Version 105): the pause grows (50 ms up to 1 s) while the stream keeps ending at once
-      empties = got ? 0 : empties + 1;
-      if (!got) await delay(Math.min(1000, 50 * 2 ** Math.min(5, empties - 1)));
+      // A stream that ends at once again and again would spin here: give the port a moment, then stop
+      if (!got) await delay(50);
       const still = readableOf(port);
       if (!got && reading && still && still.locked) break;
     }
@@ -1791,8 +1789,7 @@ async function probeBoardOnConnect(options = {}) {
       } else {
         appendConsole("[Could not read the board yet (" + why + "). Install can try again.]\n");
       }
-      // Fix (S3 web flash, Flasher Version 105): connectLoader already reset the link (a second close and reopen here,
-      //  of a port that may be moving, is gone)
+      await resetLink(link).catch(() => {});
       await setRunState().catch(() => {});
       return false;
     }
@@ -2266,9 +2263,6 @@ async function connectLoader(terminal) {
       loader.IS_STUB = true;
       appendConsole("[The flasher stub was still running: using it]\n");
     }
-    // Fix (S3 web flash, Flasher Version 105): as esptool's own Python does on the S3's USB-JTAG/serial port, the RTC
-    //  and super watchdogs are turned off after the connect (they can restart the board mid-write there)
-    if (usbPid(onPort) === USB_JTAG_SERIAL_PID && /ESP32-S3/.test(link.chip || "")) await disableS3Watchdogs(loader);
     if (rotation.name) {
       rememberReset(port, rotation.name);
       board.resetSeq = rotation.name;
@@ -2574,23 +2568,6 @@ function showNextStep() {
 const S3_RTC_OPTION1 = 0x6000812c, S3_FORCE_DOWNLOAD_BOOT = 0x1;
 const S3_WDTWPROTECT = 0x600080b0, S3_WDT_WKEY = 0x50d83aa1, S3_WDTCONFIG0 = 0x60008098, S3_WDTCONFIG1 = 0x6000809c;
 const LEFT_DOWNLOAD_MS = 1500;
-const S3_SWD_CONF = 0x600080b4, S3_SWD_WPROTECT = 0x600080b8, S3_SWD_WKEY = 0x8f1d312a, S3_SWD_AUTO_FEED = 1 << 31;
-// esptool's disable_watchdogs for the S3 (USB-JTAG/serial only). Best effort: each step time-limited, a failure only
-//  noted in the console
-async function disableS3Watchdogs(loader) {
-  const limit = (p) => withTimeout(p, 1500, "Turning off the watchdogs");
-  try {
-    await limit(loader.writeReg(S3_WDTWPROTECT, S3_WDT_WKEY));
-    await limit(loader.writeReg(S3_WDTCONFIG0, 0));
-    await limit(loader.writeReg(S3_WDTWPROTECT, 0));
-    const conf = await limit(loader.readReg(S3_SWD_CONF));
-    await limit(loader.writeReg(S3_SWD_WPROTECT, S3_SWD_WKEY));
-    await limit(loader.writeReg(S3_SWD_CONF, (conf | S3_SWD_AUTO_FEED) >>> 0));
-    await limit(loader.writeReg(S3_SWD_WPROTECT, 0));
-  } catch (err) {
-    appendConsole("[Could not turn off the board's watchdogs (" + (err && err.message ? err.message : err) + ")]\n");
-  }
-}
 const STILL_DOWNLOAD_TEXT = "[The board is still in download mode. Tap RST (not BOOT) to start GSP32, then pick the new port.]\n";
 async function watchdogReset(loader) {
   const reg = (addr, value, mask) => withTimeout(loader.writeReg(addr, value, mask), 1500, "Restarting the board");
