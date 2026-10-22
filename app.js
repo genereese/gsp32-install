@@ -130,6 +130,9 @@ let usbGuide = null;
 let usbExpect = null;
 let usbAttaching = false;
 let installConnecting = false;
+// Fix (S3 web flash, Flasher Version 105): the end of an install (after the write) runs; the watchdog reset can take
+//  the port away before it is done, and a port picked again waits for it (else its "unknown" board state came after)
+let installEnding = false;
 const FOLD_MS = 220;
 
 function motionOk() {
@@ -353,6 +356,7 @@ function trackBoard(line) {
     board.readyAt = Date.now();
     clearTimeout(otherTimer);
     endBooting();
+    if (nextStepPending) showNextStep();
   }
   // Version 43.1: only these lines open the door for Improv; the version is asked then, once
   if (/GSP32 Improv (Ready|Listening)/.test(line)) {
@@ -360,6 +364,7 @@ function trackBoard(line) {
     board.listening = true;
     board.readyAt = Date.now();
     askVersion();
+    if (nextStepPending && bootingNote === null) showNextStep();
   }
   if (/GSP32 Improv Off|No answer: starting without Wi-Fi|^Traceback|KeyboardInterrupt|^MicroPython v/.test(line)) board.listening = false;
   // Fix (verify): a corrupted app ("E (31) esp_image: invalid segment length 0x...", "Factory app partition is not
@@ -1452,6 +1457,7 @@ const USB_JTAG_SERIAL_PID = 0x1001;
 const USB_GUIDE_TITLE = {
   boot: "Hold BOOT, Tap RST, Release BOOT, Then Pick the Port Again",
   repick: "Pick the Port Again",
+  rst: "Tap RST to Start GSP32",
 };
 const USB_MOVED_TEXT = "\n[The board's USB port changed (native USB). Pick the port again (see the note above the console).]\n";
 const USB_NOT_READY_TEXT = "[Not in download mode yet. Hold BOOT, tap RST, release BOOT, then pick the port again.]\n";
@@ -1484,6 +1490,7 @@ function showUsbGuide(kind, resume) {
   $("usb-guide-title").textContent = USB_GUIDE_TITLE[kind];
   $("usb-guide-text").textContent = kind === "boot"
     ? "This page can't switch this board's own USB into download mode. In download mode it shows up as a new port."
+    : kind === "rst" ? "GSP32 is installed, but the board is still in download mode. Tap RST (not BOOT), then pick the new port."
     : resume === "installed" ? "GSP32 is installed. The board restarted on a new USB port: pick it to set up Wi-Fi."
     : "The board restarted on a new USB port: pick it to go on.";
   if (box.hidden || box.shutting) foldOpen(box);
@@ -1553,7 +1560,7 @@ async function attachUsbPort(picked) {
   const resume = usbGuide.resume;
   try {
     // A probe or connect still ending on the old port finishes first (it is time-limited)
-    for (let waited = 0; (probing || installConnecting) && waited < CONNECT_MS + 3000; waited += 100) await delay(100);
+    for (let waited = 0; (probing || installConnecting || installEnding) && waited < CONNECT_MS + 3000; waited += 100) await delay(100);
     if (port && port !== picked) await closePort();
     try {
       await openPicked(picked);
@@ -1585,6 +1592,7 @@ const USB_QUIET_MS = 4000;
 function afterInstallRepick(picked) {
   const at = Date.now(), heard = lines.length;
   board.kind = "gsp32";
+  if (nextStepPending) showNextStep();
   syncBoardUi();
   setTimeout(() => {
     if (port !== picked || !portOpen() || board.listening || board.kind !== "gsp32" || board.bootAt > at || lines.length > heard) return;
@@ -2321,6 +2329,8 @@ async function install() {
     return;
   }
   appendConsole("\n[Installing " + versionSelect.textContent + "]\n");
+  nextStepPending = false;
+  let watchdogDone = false, flashedPort = null;
   try {
     setProgress("Downloading the firmware...", 0, "Installing " + installName() + ": Downloading the Firmware...");
     await loadManifest();
@@ -2455,7 +2465,17 @@ async function install() {
         continue;
       }
       appendConsole("[Written in " + Math.round((Date.now() - started) / 1000) + " s, compressed; verified (MD5 matches)]\n");
-      await link.transport.disconnect();
+      installEnding = true;
+      // Fix (S3 web flash, Flasher Version 105): on the S3's USB-JTAG/serial port the page's RTS restart is only a
+      //  core reset, which keeps the board in download mode (BOOT is read again only by a system reset). A watchdog
+      //  reset through the stub is one (as esptool's own Python does it); the board then starts GSP32
+      flashedPort = installPort;
+      if (family === "ESP32-S3" && usbPid(port) === USB_JTAG_SERIAL_PID) {
+        usbExpect = { resume: "installed", until: Date.now() + 30000 };  // its port goes with the reset
+        watchdogDone = await watchdogReset(link.loader);
+      }
+      if (watchdogDone) await withTimeout(link.transport.disconnect(), 1000, "Closing the connection").catch(() => {});
+      else await link.transport.disconnect();
       stopLink(link);
       break;
     }
@@ -2481,18 +2501,27 @@ async function install() {
     try {
       fetch("https://gsp32-telemetry.genereese.workers.dev/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", mode: "cors", keepalive: true }).catch(() => {});
     } catch (err) {}
-    try {
-      await resetBoard();
-    } catch (err) {
-      if (!native) throw err;
+    if (!watchdogDone) {
+      try {
+        await resetBoard();
+      } catch (err) {
+        if (!native) throw err;
+      }
     }
     setStatus(installName() + " Installed", "ok");
-    // Version 75 (Gene): what to do next, so a newcomer knows the Set Up Wi-Fi button is the way to the Web UI
-    const next = document.createElement("span");
-    next.className = "status-more next-step";
-    next.append("Next: click ", Object.assign(document.createElement("b"), { textContent: "Set Up Wi-Fi" }),
-      " above to connect the board to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
-    boardStatus.append(" ", next);
+    // Version 75 (Gene): what to do next, so a newcomer knows the Set Up Wi-Fi button is the way to the Web UI.
+    //  Fix (S3 web flash, Flasher Version 105): only once GSP32 has started (its boot lines, or its new USB port
+    //  picked): a board left in download mode showed it while Set Up Wi-Fi could not work
+    nextStepPending = true;
+    // Fix (S3 web flash, Flasher Version 105): a USB-JTAG board still answering the ROM's SYNC after the restart did
+    //  not leave download mode: the guide says to tap RST (the new port then goes on as after any restart)
+    if (flashedPort === port && usbPid(port) === USB_JTAG_SERIAL_PID) {
+      await delay(LEFT_DOWNLOAD_MS);
+      if (port === flashedPort && portOpen() && !usbGuide && await answersSync(port)) {
+        appendConsole(STILL_DOWNLOAD_TEXT);
+        showUsbGuide("rst", "installed");
+      }
+    }
     startReading();
     setBusy(false);
     stopFlashGuard();
@@ -2509,8 +2538,52 @@ async function install() {
     if (err && err.plain) appendConsole("[The install did not finish: " + err.message + "]\n");
     showError(err && err.plain ? "The install did not finish. " + err.message : "The install did not finish: " + (err && err.message ? err.message : err), "prep");
     showActions(true);
+  } finally {
+    installEnding = false;
   }
   syncConsoleButtons();
+}
+
+// Fix (S3 web flash, Flasher Version 105): the line under "... Installed" once GSP32 runs (see install). It slides and
+//  fades in. Only while the status still says Installed (not over a later step's status)
+let nextStepPending = false;
+function showNextStep() {
+  nextStepPending = false;
+  if (boardStatus.querySelector(".next-step") || !/ Installed$/.test(boardStatus.textContent.trim())) return;
+  const next = document.createElement("span");
+  next.className = "status-more next-step";
+  next.append("Next: click ", Object.assign(document.createElement("b"), { textContent: "Set Up Wi-Fi" }),
+    " above to connect the board to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
+  boardStatus.append(" ", next);
+  try {
+    next.animate([{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "none" }], { duration: FOLD_MS, easing: "ease-out" });
+  } catch (err) {
+    // No animation
+  }
+}
+// Fix (S3 web flash, Flasher Version 105): esptool's watchdog_reset for the ESP32-S3 (esptool-js 0.5.7's own S3
+//  watchdog addresses are 4 bytes off, so they are not used). FORCE_DOWNLOAD_BOOT is cleared first (set when the
+//  board was sent into download mode by software), then the RTC watchdog fires a system reset in a few ms, which reads
+//  the BOOT pin again. Each write is time-limited; false when the stub did not take them (the page's restart then)
+const S3_RTC_OPTION1 = 0x6000812c, S3_FORCE_DOWNLOAD_BOOT = 0x1;
+const S3_WDTWPROTECT = 0x600080b0, S3_WDT_WKEY = 0x50d83aa1, S3_WDTCONFIG0 = 0x60008098, S3_WDTCONFIG1 = 0x6000809c;
+const LEFT_DOWNLOAD_MS = 1500;
+const STILL_DOWNLOAD_TEXT = "[The board is still in download mode. Tap RST (not BOOT) to start GSP32, then pick the new port.]\n";
+async function watchdogReset(loader) {
+  const reg = (addr, value, mask) => withTimeout(loader.writeReg(addr, value, mask), 1500, "Restarting the board");
+  try {
+    await reg(S3_RTC_OPTION1, 0, S3_FORCE_DOWNLOAD_BOOT).catch(() => {});
+    await reg(S3_WDTWPROTECT, S3_WDT_WKEY);
+    await reg(S3_WDTCONFIG1, 2000);
+    await reg(S3_WDTCONFIG0, (1 << 31) | (5 << 28) | (1 << 8) | 2);
+    // The reset may come before this answer
+    await reg(S3_WDTWPROTECT, 0).catch(() => {});
+    appendConsole("[Restarting the board (watchdog reset: leaves download mode)]\n");
+    return true;
+  } catch (err) {
+    appendConsole("[The watchdog reset did not answer (" + (err && err.message ? err.message : err) + "). Restarting the usual way.]\n");
+    return false;
+  }
 }
 
 // Improv Wi-Fi
