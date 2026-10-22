@@ -1455,14 +1455,6 @@ const USB_GUIDE_TITLE = {
 };
 const USB_MOVED_TEXT = "\n[The board's USB port changed (native USB). Pick the port again (see the note above the console).]\n";
 const USB_NOT_READY_TEXT = "[Not in download mode yet. Hold BOOT, tap RST, release BOOT, then pick the port again.]\n";
-// Fix (S3 web flash, Flasher Version 105): a native USB port other than the ROM's USB-JTAG/serial (303a:1001) is the
-//  board's own program (GSP32's TinyUSB on the T-Display-S3's COM12). No reset sequence or SYNC can reach the ROM through
-//  it: they only fill GSP32's input (its Improv listener stops at the first stray byte, then writes stall) and, on some
-//  systems, MicroPython's DTR/RTS reboot moves the port mid-read. The page sends neither and shows the guide at once
-const USB_APP_TEXT = "[GSP32's own USB port: the page can't switch it into download mode. Hold BOOT, tap RST, release BOOT, then pick the port again.]\n";
-function appUsbPort(onPort) {
-  return nativeUsb(onPort) && usbPid(onPort) !== USB_JTAG_SERIAL_PID;
-}
 function nativeUsb(onPort) {
   try {
     return !!onPort && typeof onPort.getInfo === "function" && onPort.getInfo().usbVendorId === NATIVE_USB_VID;
@@ -1758,13 +1750,6 @@ async function probeBoardOnConnect(options = {}) {
       keep = true;
       appendConsole(USB_NOT_READY_TEXT);
       showUsbGuide("boot", resume);
-      return false;
-    }
-    if (appUsbPort(probed)) {
-      keep = true;
-      board.downloadMode = false;
-      appendConsole(USB_APP_TEXT);
-      if (port === probed) showUsbGuide("boot", resume);
       return false;
     }
     try {
@@ -2333,7 +2318,6 @@ async function install() {
       const installPort = port;
       installConnecting = true;
       try {
-        if (appUsbPort(installPort) && !board.downloadMode) throw new Error("GSP32's own USB port can't be switched from the page");
         link = await connectLoader(terminal);
       } catch (err) {
         // Fix (S3 native USB): no second try for a native USB board: the page can't reset it into download mode, so
