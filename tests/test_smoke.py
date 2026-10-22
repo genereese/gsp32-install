@@ -19,7 +19,10 @@ tags = re.findall(r"\?v=([\w.-]+)", html)
 stable = re.search(r"Version (\d+(?:\.\d+)?)", versions[0]["label"]).group(1)
 check("footer names a Flasher Version", footer is not None)
 check("one cache tag on style.css, app.js and tour.js", len(tags) == 3 and len(set(tags)) == 1, str(tags))
-check("cache tag is <flasher>-fw<firmware>", bool(footer) and bool(tags) and tags[0] == "%s-fw%s" % (footer.group(1), stable), "%s vs %s-fw%s" % (tags[:1], footer and footer.group(1), stable))
+# Flasher Version 107: a listed Beta adds -b<beta> (as ?v=102-fw103-b105 did)
+betas = [re.search(r"Version (\d+(?:\.\d+)?)", e["label"]).group(1) for e in versions if e.get("channel") == "beta"]
+want = "%s-fw%s" % (footer.group(1) if footer else "?", stable) + "".join("-b" + x for x in betas)
+check("cache tag is <flasher>-fw<firmware>[-b<beta>]", bool(footer) and bool(tags) and tags[0] == want, "%s vs %s" % (tags[:1], want))
 for entry in versions:
     path = os.path.join(site, entry["manifest"])
     check("versions.json " + entry["version"] + ": manifest there", os.path.exists(path), entry["manifest"])

@@ -1,7 +1,13 @@
 [
   {
-    "version": "5272218",
+    "version": "2f543b7",
     "manifest": "manifest.json",
-    "label": "Version 107 (5272218), latest"
+    "label": "Version 106 (2f543b7), latest"
+  },
+  {
+    "version": "5272218",
+    "manifest": "manifest-beta.json",
+    "label": "Version 107 (5272218), beta",
+    "channel": "beta"
   }
 ]
