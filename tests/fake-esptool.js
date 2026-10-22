@@ -112,9 +112,10 @@ export class ESPLoader {
   async writeReg(addr, value, mask) {
     window.__log.push("writeReg 0x" + (addr >>> 0).toString(16) + "=0x" + (value >>> 0).toString(16) + (mask !== undefined ? "/0x" + (mask >>> 0).toString(16) : ""));
     if (window.__wdtSilent) return new Promise(() => {});
-    if ((addr >>> 0) === 0x60008098) this.__wdtArmed = true;
+    if ((addr >>> 0) === 0x60008098) this.__wdtArmed = value !== 0;
     if ((addr >>> 0) === 0x600080b0 && value === 0 && this.__wdtArmed && window.__onWdt) setTimeout(() => window.__onWdt(), 10);
   }
+  async readReg(addr) { window.__log.push("readReg 0x" + (addr >>> 0).toString(16)); if (window.__wdtSilent) return new Promise(() => {}); return 0; }
   async writeFlash(o) {
     window.__log.push("write at " + this.baudrate);
     if ((window.__failWriteAt || []).includes(this.baudrate)) {
