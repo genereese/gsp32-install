@@ -11,10 +11,10 @@ def check(name, ok, extra=""):
 
 js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
-check("cache-bust 107-fw106-b107", html.count("?v=107-fw106-b107") == 3)
+check("cache-bust 109-fw109", html.count("?v=109-fw109") == 3)
 check("probeBoardOnConnect present", "probeBoardOnConnect" in js and "Reading board info" in js)
 check("Install disabled when compatIssue", "board.compatIssue" in js and "install.disabled" in js)
-check("footer Flasher Version 107", "Flasher Version 107" in html)
+check("footer Flasher Version 109", "Flasher Version 109" in html)
 
 def connect_only(b, chip=None, flash_kb=None, usb=None):
     pg = b.new_page(viewport={"width": 1100, "height": 900})
@@ -117,8 +117,8 @@ with sync_playwright() as p:
     pg.click("#install-btn", force=True)
     pg.wait_for_timeout(300)
     if pg.is_visible("#erase-ok"): pg.check("#erase-ok")
-    # Version 107 Beta: Stable (default) + Beta listed, so Release shows; Stable has the C3 image
-    check("C3 on Stable (Beta listed): Release shown, Erase and Install is on", pg.evaluate("!document.querySelector('.release-field').hidden && !document.getElementById('start-install').disabled"))
+    # Version 106 (Gene): Stable is the only version (Release hidden); it has the C3 image
+    check("C3 on Stable (the only version): Release hidden, Erase and Install is on", pg.evaluate("document.querySelector('.release-field').hidden && !document.getElementById('start-install').disabled"))
     check("C3 on Stable: nothing written after the Install click", not any(l.startswith("files") for l in pg.evaluate("window.__log") if isinstance(l, str)))
     tel3 = pg.evaluate("window.__telemetry")
     check("C3: still one telemetry after Install click", len(tel3) == 1, str(tel3))
