@@ -955,144 +955,7 @@ function consumeSerial(chunk) {
 
 // Serial port: open once, reset lines to run, our reader; esptool-js borrows the port while flashing
 function portOpen() {
-  return !!(readableOf(port) && writableOf(port));
-}
-
-// Fix (S3 web flash, Flasher Version 105): Chromium's close() cancels the readable first and then throws when the
-//  writable is still locked (a write that never ends: a USB device that stopped taking data, like GSP32's TinyUSB port
-//  once its input buffer is full). The port then stays open without a readable while Chromium's device side still holds
-//  the old read pipe, and the next port.readable asks for a new one: Chromium kills the tab (RESULT_CODE_KILLED_BAD_
-//  MESSAGE, "Data pipe producer still open"). So every write has a time limit and aborts its writer when it runs out,
-//  every reader and writer the page takes is known so a close can release them first, a port closes only with both
-//  streams unlocked, and while it closes (or after a close that failed: a stuck port) readable and writable are never
-//  touched again; the page asks for an unplug instead
-const STUCK_TEXT = "\n[The USB connection got stuck. Unplug and replug the board, then click Get Started.]\n";
-const STUCK_STATUS = "Unplug and Replug the Board";
-const WRITE_MS = 4000;  // plus 1 ms per 5 bytes (115200 baud moves about 11)
-function portUsable(onPort) {
-  return !!onPort && !onPort.__gsp32Closing && !onPort.__gsp32Stuck;
-}
-function readableOf(onPort) {
-  try {
-    return portUsable(onPort) ? onPort.readable : null;
-  } catch (err) {
-    return null;
-  }
-}
-function writableOf(onPort) {
-  try {
-    return portUsable(onPort) ? onPort.writable : null;
-  } catch (err) {
-    return null;
-  }
-}
-function stuckError() {
-  const err = new Error("The USB connection got stuck. Unplug and replug the board, then click Get Started.");
-  err.code = "stuck";
-  err.plain = true;
-  return err;
-}
-// A reader the page takes (ours, esptool-js's, the SYNC check): known, so a close can let go of it first
-function takeReader(onPort) {
-  const stream = readableOf(onPort);
-  if (!stream) throw new Error("The port closed");
-  const taken = stream.getReader();
-  (onPort.__gsp32Readers || (onPort.__gsp32Readers = new Set())).add(taken);
-  return taken;
-}
-function dropReader(onPort, taken) {
-  if (!taken) return;
-  try {
-    taken.releaseLock();
-  } catch (err) {
-    // Released already, or a read still pending (cancel first)
-  }
-  if (onPort && onPort.__gsp32Readers) onPort.__gsp32Readers.delete(taken);
-}
-// One bounded write: a write that does not finish in time is aborted (Chromium stops it on its side too), so the
-//  writable is never left locked
-async function writeTo(onPort, bytes) {
-  const stream = writableOf(onPort);
-  if (!stream) throw new Error("not connected");
-  const writer = stream.getWriter();
-  const writers = onPort.__gsp32Writers || (onPort.__gsp32Writers = new Set());
-  writers.add(writer);
-  try {
-    await withTimeout(writer.write(bytes), WRITE_MS + Math.ceil(bytes.length / 5), "Writing to the board");
-  } catch (err) {
-    await withTimeout(writer.abort(err).catch(() => {}), 2000, "Stopping the write").catch(() => {});
-    throw err;
-  } finally {
-    writers.delete(writer);
-    try {
-      writer.releaseLock();
-    } catch (err) {
-      // Released already
-    }
-  }
-}
-// The port can't be used again on this page: say so once (unplug and replug), forget it, Get Started comes back
-function markStuck(stuck, quiet) {
-  if (!stuck || stuck.__gsp32Stuck) return;
-  stuck.__gsp32Stuck = true;
-  stuck.__gsp32Closing = false;
-  if (port === stuck) port = null;
-  reading = false;
-  board.listening = false;
-  if (!quiet) {
-    appendConsole(STUCK_TEXT);
-    hideUsbGuide();
-    setStatus(STUCK_STATUS, "error");
-  }
-  syncConsoleButtons();
-  showStartAgain();
-}
-// Close only with nothing locked: the page's readers cancelled and released, its writers aborted; a close that fails or
-//  hangs leaves the port stuck (never touched again). Resolves false then
-async function safeClose(onPort, quiet) {
-  if (!onPort) return true;
-  if (onPort.__gsp32Stuck) return false;
-  for (const taken of Array.from(onPort.__gsp32Readers || [])) {
-    await withTimeout(taken.cancel().catch(() => {}), 1000, "Releasing the port").catch(() => {});
-    dropReader(onPort, taken);
-  }
-  for (const writer of Array.from(onPort.__gsp32Writers || [])) {
-    await withTimeout(writer.abort().catch(() => {}), 1000, "Stopping the write").catch(() => {});
-    try {
-      writer.releaseLock();
-    } catch (err) {
-      // Released already
-    }
-    onPort.__gsp32Writers.delete(writer);
-  }
-  let locked = false, open = false;
-  try {
-    const readable = onPort.readable, writable = onPort.writable;
-    open = !!(readable || writable);
-    locked = !!((readable && readable.locked) || (writable && writable.locked));
-  } catch (err) {
-    open = true;
-  }
-  if (!open) {
-    // No streams (the device is gone): close() can't leave anything half-open, and Chromium lets go of the port
-    if (onPort.__gsp32Opened) await withTimeout(Promise.resolve().then(() => onPort.close()), 1000, "Closing the port").catch(() => {});
-    onPort.__gsp32Opened = false;
-    return true;
-  }
-  if (locked) {
-    markStuck(onPort, quiet);
-    return false;
-  }
-  onPort.__gsp32Closing = true;
-  try {
-    await withTimeout(Promise.resolve().then(() => onPort.close()), 3000, "Closing the port");
-  } catch (err) {
-    markStuck(onPort, quiet);
-    return false;
-  }
-  onPort.__gsp32Closing = false;
-  onPort.__gsp32Opened = false;
-  return true;
+  return !!(port && port.readable && port.writable);
 }
 
 function flasherWorking() {
@@ -1132,7 +995,7 @@ async function resetBoard() {
 //  event) means the board is really gone
 const RECOVERABLE_SERIAL = ["BreakError", "FramingError", "ParityError", "BufferOverrunError"];
 function serialRecoverable(err, onPort) {
-  if (!readableOf(onPort)) return false;
+  if (!onPort || !onPort.readable) return false;
   return true;  // with readable still there the port lives on, whatever the error (RECOVERABLE_SERIAL or other)
 }
 function serialErrorName(err) {
@@ -1148,7 +1011,7 @@ async function portLost(lost, message) {
   board.listening = false;
   if (message) appendConsole(message);
   await stopReading().catch(() => {});
-  await safeClose(lost, true).catch(() => {});
+  await lost.close().catch(() => {});
   syncConsoleButtons();
   showStartAgain();
 }
@@ -1165,9 +1028,9 @@ function startReading() {
   let lost = false;
   readDone = (async () => {
     let errors = 0;
-    while (reading && port === readPort && readableOf(readPort)) {
+    while (reading && port === readPort && readPort.readable) {
       try {
-        reader = takeReader(readPort);
+        reader = readPort.readable.getReader();
       } catch (err) {
         break;
       }
@@ -1191,15 +1054,18 @@ function startReading() {
           lost = true;
         }
       } finally {
-        dropReader(readPort, reader);
+        try {
+          reader.releaseLock();
+        } catch (err) {
+          // Already released when the device unplugs
+        }
         reader = null;
       }
       // A stream that ends at once again and again would spin here: give the port a moment, then stop
       if (!got) await delay(50);
-      const still = readableOf(port);
-      if (!got && reading && still && still.locked) break;
+      if (!got && reading && port && port.readable && port.readable.locked) break;
     }
-    if (reading && !lost && portUsable(readPort) && !readableOf(readPort)) lost = true;
+    if (reading && !lost && !readPort.readable) lost = true;
     reading = false;
     if (lost) {
       readDone = Promise.resolve();
@@ -1212,20 +1078,17 @@ function startReading() {
 
 async function stopReading() {
   reading = false;
-  // Bounded: on a stuck USB device Chromium's cancel can wait for a read that never ends
-  if (reader) await withTimeout(reader.cancel().catch(() => {}), 1000, "Releasing the port").catch(() => {});
-  await withTimeout(readDone, 1500, "Stopping the reader").catch(() => {});
+  if (reader) await reader.cancel().catch(() => {});
+  await readDone;
 }
 
 async function openPort(selected) {
   if (port === selected && portOpen()) return;
-  if (selected.__gsp32Stuck) throw stuckError();
   if (port && port !== selected) await closePort();
   // Still open from before (a lost state): close it first, or open() fails with "already open"
-  if (!(await safeClose(selected))) throw stuckError();
+  if (selected.readable || selected.writable) await selected.close().catch(() => {});
   selected.__gsp32Lost = false;
   await selected.open({ baudRate: FLASH_BAUD });
-  selected.__gsp32Opened = true;
   portBaud = FLASH_BAUD;
   port = selected;
   board.info = Object.assign({}, board.info || {});
@@ -1257,15 +1120,13 @@ async function openPicked(selected) {
   try {
     await openPort(selected);
   } catch (err) {
-    if (err && err.code === "stuck") throw err;
     // Fix (recover flow): a port Chromium still holds from before (a stale state) often opens after a close
     try {
-      if (!(await safeClose(selected))) throw stuckError();
+      await selected.close().catch(() => {});
       await delay(300);
       await openPort(selected);
       return;
     } catch (again) {
-      if (again && again.code === "stuck") throw again;
       // Fall through to the clear error
     }
     const fail = new Error("Could not open the port. Close other programs that use it (Arduino, Thonny, mpremote), unplug and replug the board, then click Get Started again.");
@@ -1283,14 +1144,19 @@ async function closePort() {
   } catch (err) {
     // The device may be gone already
   }
-  await safeClose(closing).catch(() => {});
+  await closing.close().catch(() => {});
   if (port === closing) port = null;
   syncConsoleButtons();
 }
 
 async function writeBytes(bytes) {
   if (!portOpen()) throw new Error("not connected");
-  await writeTo(port, bytes);
+  const writer = port.writable.getWriter();
+  try {
+    await writer.write(bytes);
+  } finally {
+    writer.releaseLock();
+  }
 }
 
 // Versions
@@ -1505,11 +1371,11 @@ function usbLost(lost, resume) {
 const SYNC_FRAME = new Uint8Array([0xc0, 0x00, 0x08, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x07, 0x12, 0x20]
   .concat(new Array(32).fill(0x55), [0xc0]));
 async function answersSync(onPort, ms = 400) {
-  if (!readableOf(onPort) || !writableOf(onPort)) return false;
-  const syncReader = takeReader(onPort);
+  if (!onPort || !onPort.readable || !onPort.writable) return false;
+  const syncReader = onPort.readable.getReader();
   let got = new Uint8Array(0);
   try {
-    await writeTo(onPort, SYNC_FRAME);
+    await writeBytes(SYNC_FRAME);
     const until = Date.now() + ms;
     while (Date.now() < until) {
       const result = await Promise.race([syncReader.read(), delay(until - Date.now()).then(() => null)]);
@@ -1523,7 +1389,11 @@ async function answersSync(onPort, ms = 400) {
     // No answer
   } finally {
     await withTimeout(syncReader.cancel(), 300, "Releasing the port").catch(() => {});
-    dropReader(onPort, syncReader);
+    try {
+      syncReader.releaseLock();
+    } catch (err) {
+      // Released already
+    }
   }
   return false;
 }
@@ -1715,7 +1585,6 @@ function reportBoardTelemetry(compatible) {
 //  Fix (S3 native USB): a board in download mode stays there for Install (a reset starts its program, on another port)
 async function releaseLoader(link, keep) {
   if (link && link.transport) await link.transport.disconnect().catch(() => {});
-  stopLink(link);
   await reopenPort(FLASH_BAUD).catch(() => {});
   if (keep || board.downloadMode) {
     await setRunState().catch(() => {});
@@ -1756,8 +1625,6 @@ async function probeBoardOnConnect(options = {}) {
       link = await connectLoader(terminal);
     } catch (err) {
       const why = err && err.message ? err.message : err;
-      // The port got stuck (said once already, see markStuck): nothing more to try here
-      if (err && err.code === "stuck") return false;
       if (nativeUsb(probed)) {
         // The page can't reset this board into download mode: BOOT and RST by hand, and the port again
         appendConsole("[Could not switch the board into download mode (" + why + ").]\n");
@@ -1970,10 +1837,8 @@ function setStatus(text, kind, ip) {
 let portBaud = FLASH_BAUD;
 async function reopenPort(baud) {
   if (!port || portBaud === baud) return;
-  const onPort = port;
-  if (!(await safeClose(onPort))) throw stuckError();
-  await onPort.open({ baudRate: baud });
-  onPort.__gsp32Opened = true;
+  await port.close();
+  await port.open({ baudRate: baud });
   portBaud = baud;
   await setRunState().catch(() => {});
 }
@@ -1991,7 +1856,6 @@ function withTimeout(promise, ms, what) {
 //  rate keeps the stream locked), then close the port and open it fresh at 115200. Each part is time-limited too.
 async function resetLink(link) {
   const transport = link && link.transport;
-  stopLink(link);
   if (transport && transport.reader) {
     await withTimeout(transport.reader.cancel(), 1000, "Releasing the port").catch(() => {});
     try {
@@ -2003,17 +1867,15 @@ async function resetLink(link) {
   }
   if (transport) transport.buffer = new Uint8Array(0);
   if (!port) return;
-  const onPort = port;
-  if (!(await safeClose(onPort))) throw stuckError();
-  await withTimeout(onPort.open({ baudRate: FLASH_BAUD }), 2000, "Opening the port");
-  onPort.__gsp32Opened = true;
+  await withTimeout(port.close(), 2000, "Closing the port").catch(() => {});
+  await withTimeout(port.open({ baudRate: FLASH_BAUD }), 2000, "Opening the port");
   portBaud = FLASH_BAUD;
   await setRunState().catch(() => {});
 }
 // Fix (false disconnect): esptool-js reads through this. A recoverable read error (port.readable still there) takes a
 //  fresh reader from the new stream and reads again, once per error; a real loss rejects as before
 function resilientReader(onPort) {
-  let inner = takeReader(onPort);
+  let inner = onPort.readable.getReader();
   const wrapper = {
     async read() {
       try {
@@ -2021,13 +1883,13 @@ function resilientReader(onPort) {
       } catch (err) {
         if (!serialRecoverable(err, onPort)) throw err;
         console.warn("Serial read error during connect/flash, reading on:", serialErrorName(err));
-        dropReader(onPort, inner);
-        inner = takeReader(onPort);
+        try { inner.releaseLock(); } catch (e) { /* released already */ }
+        inner = onPort.readable.getReader();
         return await inner.read();
       }
     },
     cancel(reason) { return inner.cancel(reason); },
-    releaseLock() { return dropReader(onPort, inner); },
+    releaseLock() { return inner.releaseLock(); },
     get closed() { return inner.closed; },
   };
   return wrapper;
@@ -2144,58 +2006,15 @@ function resetRotation(onPort) {
   };
   return rotation;
 }
-// Fix (S3 web flash, Flasher Version 105): esptool-js can't be stopped, so a connect that ran out of time used to go on
-//  in the background (resets, SYNC writes, readers) on the port the page was closing. esptool-js now gets a stand-in
-//  for the port that works only while its link is live; stopLink() ends it (no more signals, reads or writes)
-const STOPPED_TEXT = "The connection to the board was stopped";
-const DEAD_READER = {
-  read: () => Promise.reject(new Error(STOPPED_TEXT)),
-  cancel: () => Promise.resolve(),
-  releaseLock() {},
-  closed: Promise.resolve(),
-};
-function linkLive(link, onPort) {
-  return !!link && !link.aborted && port === onPort && portUsable(onPort);
-}
-function stopLink(link) {
-  if (!link || link.aborted) return;
-  link.aborted = true;
-  if (link.transport) {
-    link.transport.reader = DEAD_READER;
-    link.transport.buffer = new Uint8Array(0);
-  }
-}
-function loaderDevice(onPort, link) {
-  const stopped = () => Promise.reject(new Error(STOPPED_TEXT));
-  return {
-    getInfo: () => onPort.getInfo(),
-    get readable() { return linkLive(link, onPort) ? readableOf(onPort) : null; },
-    get writable() { return linkLive(link, onPort) ? writableOf(onPort) : null; },
-    setSignals: (signals) => (linkLive(link, onPort) ? onPort.setSignals(signals) : stopped()),
-    open: stopped,
-    close: stopped,
-  };
-}
 // A borrowed transport on the open port and a loader in the board's flasher stub at 115200
 async function connectLoader(terminal) {
-  if (!portOpen()) throw new Error("The port closed");
   await reopenPort(FLASH_BAUD);
-  const onPort = port;
-  const link = { transport: null, loader: null, chip: "", rotation: null, aborted: false };
-  const device = loaderDevice(onPort, link);
-  const transport = new Transport(device, false);
-  link.transport = transport;
+  const transport = new Transport(port, false);
   // The port is already open at 115200: esptool-js borrows its reader
   transport.connect = async function (baud) {
-    if (!linkLive(link, onPort)) throw new Error(STOPPED_TEXT);
     this.baudrate = baud;
     await reopenPort(baud);
-    this.reader = resilientReader(onPort);
-  };
-  // Every esptool-js write is bounded too (a write that never ends is aborted, see writeTo)
-  transport.write = async function (data) {
-    if (!linkLive(link, onPort)) throw new Error(STOPPED_TEXT);
-    await writeTo(onPort, typeof this.slipWriter === "function" ? this.slipWriter(data) : data);
+    this.reader = resilientReader(port);
   };
   transport.disconnect = async function () {
     if (this.reader) {
@@ -2213,15 +2032,15 @@ async function connectLoader(terminal) {
   transport.flushInput = async function () {
     await drainInput(this);
   };
-  const rotation = resetRotation(device);
+  const rotation = resetRotation(port);
   const loader = new ESPLoader({
     transport, baudrate: FLASH_BAUD, romBaudrate: FLASH_BAUD, terminal,
     resetConstructors: { classicReset: () => rotation, usbJTAGSerialReset: () => rotation },
   });
-  link.loader = loader;
-  link.rotation = rotation;
+  const link = { transport, loader, chip: "", rotation };
   // Fix (S3 native USB): a board already in download mode is synced without a reset (a reset would start its program)
   const mode = board.downloadMode ? "no_reset" : "default_reset";
+  const onPort = port;
   let lostTimer = null;
   const lost = new Promise((resolve, reject) => {
     lostTimer = setInterval(() => {
@@ -2241,10 +2060,8 @@ async function connectLoader(terminal) {
     syncBoardUi();
   } catch (err) {
     if (!link.chip) {
-      // The connect ran out of time (or the port went): end esptool-js's session before the port is reset
-      stopLink(link);
       if (rotation.tried.length) appendConsole("[Resets tried: " + rotation.tried.join(", ") + "]\n");
-      await resetLink(link).catch((again) => { if (again && again.code === "stuck") throw again; });
+      await resetLink(link).catch(() => {});
       throw err;
     }
     board.chip = link.chip;
@@ -2274,7 +2091,7 @@ async function drainInput(transport, quietMs = 100, maxMs = 500) {
   } catch (err) {
     // Released already
   }
-  transport.reader = transport.device && transport.device.readable ? resilientReader(port) : undefined;
+  transport.reader = port && port.readable ? resilientReader(port) : undefined;
   transport.buffer = new Uint8Array(0);
   return dropped;
 }
@@ -2332,13 +2149,11 @@ async function install() {
           guided.plain = true;
           throw guided;
         }
-        if (err && err.code === "stuck") throw err;
         // Version 61: one more try from a clean port, then a clear error with Retry
         appendConsole("[Connect did not answer (" + (err && err.message ? err.message : err) + "), trying once more]\n");
         try {
           link = await connectLoader(terminal);
         } catch (again) {
-          if (again && again.code === "stuck") throw again;
           throw new Error("The board did not answer. Unplug it, plug it back in and click Try Again. If it still does not answer, hold the BOOT button while you click Try Again.");
         }
       } finally {
@@ -2355,7 +2170,6 @@ async function install() {
       if (issue) {
         board.compatIssue = issue;
         await link.transport.disconnect();
-        stopLink(link);
         await reopenPort(FLASH_BAUD).catch(() => {});
         await setRunState().catch(() => {});
         startReading();
@@ -2426,12 +2240,11 @@ async function install() {
         appendConsole(mismatch
           ? "[The written image did not match (MD5 check). Writing it again (" + (attempt + 1) + " of " + WRITE_ATTEMPTS + ").]\n"
           : "[Write failed (" + raw + "). Connecting again and writing it again (" + (attempt + 1) + " of " + WRITE_ATTEMPTS + ").]\n");
-        await resetLink(link).catch((again) => { if (again && again.code === "stuck") throw again; });
+        await resetLink(link).catch(() => {});
         continue;
       }
       appendConsole("[Written in " + Math.round((Date.now() - started) / 1000) + " s, compressed; verified (MD5 matches)]\n");
       await link.transport.disconnect();
-      stopLink(link);
       break;
     }
     await reopenPort(FLASH_BAUD);
