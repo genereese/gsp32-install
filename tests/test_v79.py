@@ -14,7 +14,7 @@ fam = {}
 for b in m["builds"]: fam.setdefault(b["chipFamily"], b["parts"])  # Version 83: first S3 build is the 16 MB one
 s3_8 = {b["psramMb"]: os.path.getsize(os.path.join(site, b["parts"][0]["path"])) for b in m["builds"] if b.get("flashMb") == 8}
 check("V83: 8 MB S3 builds N8R8 + N8R2, 8 MB each", s3_8 == {8: 0x800000, 2: 0x800000}, str(s3_8))
-check("manifest: ESP32, ESP32-C3 and ESP32-S3 builds (Version 110)", sorted(fam) == ["ESP32", "ESP32-C3", "ESP32-S3"], str(sorted(fam)))
+check("manifest: ESP32, ESP32-C3 and ESP32-S3 builds (Version 111)", sorted(fam) == ["ESP32", "ESP32-C3", "ESP32-S3"], str(sorted(fam)))
 check("both at offset 0", all(len(p) == 1 and p[0]["offset"] == 0 for p in fam.values()))
 sz = {f: os.path.getsize(os.path.join(site, p[0]["path"])) for f, p in fam.items()}
 check("ESP32 and C3 images 4 MB, S3 image 16 MB", sz == {"ESP32": 0x400000, "ESP32-S3": 0x1000000, "ESP32-C3": 0x400000}, str(sz))
@@ -25,17 +25,17 @@ st = [e for e in v if e.get("channel", "stable") == "stable"]; bt = [e for e in 
 # Version 106 (Gene): Stable Version 106 is the only version listed: no Previous, no Beta (unlisted folders stay on disk)
 # Version 107 (Gene): the same with Version 107 (5272218); 106 is not kept as a Previous
 # Version 109 (Gene, Stable): Version 109 (d5e7f85) alone; 107 Beta and 106 are no longer listed
-# Version 110 (Gene, Stable): Version 110 (dbefb4e) alone
-check("versions.json: Stable Version 110 only, nothing else listed", len(v) == 1 and len(st) == 1 and st[0]["label"].startswith("Version 110 ") and st[0]["manifest"] == "manifest.json" and len(bt) == 0)
+# Version 111 (Gene, Stable): Version 111 (17dd26e) alone
+check("versions.json: Stable Version 111 only, nothing else listed", len(v) == 1 and len(st) == 1 and st[0]["label"].startswith("Version 111 ") and st[0]["manifest"] == "manifest.json" and len(bt) == 0)
 pv = [e for e in v if e.get("channel") == "previous"]
 check("versions.json: no Previous", len(pv) == 0)
 pm = json.load(open(os.path.join(site, "manifest-v99.json")))
 check("unlisted manifest-v99.json still points at firmware/v99 images that exist", pm["version"].startswith("Version 99 ") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v99/") for b in pm["builds"] for p in b["parts"]))
 sm = json.load(open(os.path.join(site, "manifest.json")))
-check("manifest.json: Version 110 with a C3 build", sm["version"].startswith("Version 110 ") and "ESP32-C3" in [b["chipFamily"] for b in sm["builds"]])
+check("manifest.json: Version 111 with a C3 build", sm["version"].startswith("Version 111 ") and "ESP32-C3" in [b["chipFamily"] for b in sm["builds"]])
 # Version 84: Version 84 stays (V85) as the single unlisted rollback (manifest-v84.json, firmware/v84/, all four images), not in versions.json
 bm = json.load(open(os.path.join(site, "manifest-beta.json")))
-check("unlisted manifest-beta.json: Version 110 (= Stable), firmware/beta images exist", bm["version"].startswith("Version 110 ") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/beta/") for b in bm["builds"] for p in b["parts"]))
+check("unlisted manifest-beta.json: Version 111 (= Stable), firmware/beta images exist", bm["version"].startswith("Version 111 ") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/beta/") for b in bm["builds"] for p in b["parts"]))
 rb = json.load(open(os.path.join(site, "manifest-v84.json")))
 check("rollback manifest-v84.json points at firmware/v84 images that exist", all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v84/") for b in rb["builds"] for p in b["parts"]))
 check("rollback not listed in versions.json", all(x["manifest"] != "manifest-v84.json" for x in v))
@@ -43,7 +43,7 @@ js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 110-fw110 everywhere", html.count("?v=110-fw110") == 3, str(html.count("?v=")))
+check("cache-bust 111-fw111 everywhere", html.count("?v=111-fw111") == 3, str(html.count("?v=")))
 check("no Compatible Boards card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
@@ -149,13 +149,13 @@ def check_tel(name, tel, expect_compatible, expect_chip_substr=None):
     if "browser" in body:
         check(name + ": browser enum", body["browser"] in ("chrome", "edge", "opera", "brave", "other"), body["browser"])
     if "flasher_version" in body:
-        check(name + ": flasher_version", body["flasher_version"] == "110", body["flasher_version"])
+        check(name + ": flasher_version", body["flasher_version"] == "111", body["flasher_version"])
 
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(); pg.goto("http://127.0.0.1:8789/index.html"); body = pg.inner_text("body")
     check("text names ESP32 and ESP32-S3", "ESP32 and ESP32-S3" in body)
-    check("footer Flasher Version 110", "Flasher Version 110" in pg.text_content(".flasher-version"))
+    check("footer Flasher Version 111", "Flasher Version 111" in pg.text_content(".flasher-version"))
     check("no Compatible Boards on page", "Compatible Boards" not in body); pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None)
@@ -211,7 +211,7 @@ with sync_playwright() as p:
     pg.click("#install-btn"); pg.wait_for_timeout(500); pg.check("#erase-ok")
     check("ESP32-C3 on Stable: Erase and Install is on", pg.evaluate("!document.getElementById('start-install').disabled"))
     hidden = pg.evaluate("document.getElementById('compat-notice').hidden || document.getElementById('compat-notice').shutting === true")
-    check("ESP32-C3 on Stable: no note, Version 110, Erase and Install on", hidden and pg.text_content("#version").strip() == "Version 110" and pg.evaluate("!document.getElementById('start-install').disabled"), str(hidden))
+    check("ESP32-C3 on Stable: no note, Version 111, Erase and Install on", hidden and pg.text_content("#version").strip() == "Version 111" and pg.evaluate("!document.getElementById('start-install').disabled"), str(hidden))
     startInstall(pg)
     w = [l for l in pg.evaluate("window.__log") if isinstance(l, str) and l.startswith("files")]
     check("ESP32-C3 on Stable gets the 4 MB C3 image at 0", w == ["files 1 size 4194304 at 0 eraseAll true"] and "[ESP32-C3 detected: installing its build]" in pg.inner_text("#console-out") and "[Image: ESP32-C3 4 MB (Super Mini)" in pg.inner_text("#console-out"), str(w))
