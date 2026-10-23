@@ -26,7 +26,8 @@ st = [e for e in v if e.get("channel", "stable") == "stable"]; bt = [e for e in 
 # Version 107 (Gene): the same with Version 107 (5272218); 106 is not kept as a Previous
 # Version 109 (Gene, Stable): Version 109 (d5e7f85) alone; 107 Beta and 106 are no longer listed
 # Version 111 (Gene, Stable): Version 111 (17dd26e) alone
-check("versions.json: Stable Version 111 only, nothing else listed", len(v) == 1 and len(st) == 1 and st[0]["label"].startswith("Version 111 ") and st[0]["manifest"] == "manifest.json" and len(bt) == 0)
+# Version 112 Beta (Gene, 2026-10-23): Stable Version 111 (default) + Beta Version 112 (c2c7e55, manifest-beta.json); no Previous
+check("versions.json: Stable Version 111 + Beta Version 112", len(v) == 2 and len(st) == 1 and st[0]["label"].startswith("Version 111 ") and st[0]["manifest"] == "manifest.json" and len(bt) == 1 and bt[0]["label"].startswith("Version 112 ") and bt[0]["manifest"] == "manifest-beta.json")
 pv = [e for e in v if e.get("channel") == "previous"]
 check("versions.json: no Previous", len(pv) == 0)
 pm = json.load(open(os.path.join(site, "manifest-v99.json")))
@@ -35,7 +36,7 @@ sm = json.load(open(os.path.join(site, "manifest.json")))
 check("manifest.json: Version 111 with a C3 build", sm["version"].startswith("Version 111 ") and "ESP32-C3" in [b["chipFamily"] for b in sm["builds"]])
 # Version 84: Version 84 stays (V85) as the single unlisted rollback (manifest-v84.json, firmware/v84/, all four images), not in versions.json
 bm = json.load(open(os.path.join(site, "manifest-beta.json")))
-check("unlisted manifest-beta.json: Version 111 (= Stable), firmware/beta images exist", bm["version"].startswith("Version 111 ") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/beta/") for b in bm["builds"] for p in b["parts"]))
+check("manifest-beta.json: Beta Version 112, firmware/beta images exist", bm["version"].startswith("Version 112 ") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/beta/") for b in bm["builds"] for p in b["parts"]))
 rb = json.load(open(os.path.join(site, "manifest-v84.json")))
 check("rollback manifest-v84.json points at firmware/v84 images that exist", all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v84/") for b in rb["builds"] for p in b["parts"]))
 check("rollback not listed in versions.json", all(x["manifest"] != "manifest-v84.json" for x in v))
@@ -43,7 +44,7 @@ js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 111-fw111 everywhere", html.count("?v=111-fw111") == 3, str(html.count("?v=")))
+check("cache-bust 112-fw111-b112 everywhere", html.count("?v=112-fw111-b112") == 3, str(html.count("?v=")))
 check("no Compatible Boards card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
@@ -149,13 +150,13 @@ def check_tel(name, tel, expect_compatible, expect_chip_substr=None):
     if "browser" in body:
         check(name + ": browser enum", body["browser"] in ("chrome", "edge", "opera", "brave", "other"), body["browser"])
     if "flasher_version" in body:
-        check(name + ": flasher_version", body["flasher_version"] == "111", body["flasher_version"])
+        check(name + ": flasher_version", body["flasher_version"] == "112", body["flasher_version"])
 
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(); pg.goto("http://127.0.0.1:8789/index.html"); body = pg.inner_text("body")
     check("text names ESP32 and ESP32-S3", "ESP32 and ESP32-S3" in body)
-    check("footer Flasher Version 111", "Flasher Version 111" in pg.text_content(".flasher-version"))
+    check("footer Flasher Version 112", "Flasher Version 112" in pg.text_content(".flasher-version"))
     check("no Compatible Boards on page", "Compatible Boards" not in body); pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None)
@@ -199,8 +200,8 @@ with sync_playwright() as p:
     # Version 99: Stable (the default) has a C3 image: no note. Version 103: so has the previous Stable (Version 99)
     check("ESP32-C3 on Stable: nothing written yet", not [l for l in log if l.startswith("files")], str(log))
     check("ESP32-C3 on Stable: no note", not notice, str(notice))
-    # Version 106 (Gene): Stable is the only version: Stable stays picked and the Release dropdown is hidden
-    check("ESP32-C3: Stable, the only version (Release hidden)", pg.input_value("#release-channel") == "stable" and pg.evaluate("document.querySelector('.release-field').hidden"))
+    # Version 112 Beta: Stable stays picked and the Release dropdown shows (Beta listed)
+    check("ESP32-C3: Stable picked, Release shown (Beta listed)", pg.input_value("#release-channel") == "stable" and not pg.evaluate("document.querySelector('.release-field').hidden"))
     check("ESP32-C3: no old clear-error string", "GSP32 runs on ESP32 and ESP32-S3 boards" not in pg.inner_text("body") and "Not Supported" not in (notice or {}).get("title", ""))
     check("ESP32-C3: Single Core in details", "Single Core" in details, details)
     check_tel("C3 telemetry", tel, True, "ESP32-C3")
