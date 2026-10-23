@@ -221,6 +221,8 @@ const WIFI_WAIT_MS = 20000;
 //  countdown with a slim bar shows it is still working instead of looking frozen
 const CHECK_WAIT_MS = 20000;
 let checkWaitTimer = null;
+// Flasher Version 110: after a native-USB install, how long "Checking for GSP32" may run before Tap RST / pick port
+let nativeHandoffTimer = null;
 function startCheckWait() {
   const box = $("check-wait");
   const started = Date.now();
@@ -233,12 +235,17 @@ function startCheckWait() {
   }
   tick();
   checkWaitTimer = setInterval(tick, 250);
+  // Flasher Version 110: Cancel only on native USB (the classic countdown is unchanged)
+  const cancel = $("check-wait-cancel");
+  if (cancel) cancel.hidden = !nativeUsb(port);
   setFolded(box, true);
   statusWait("check", true);
 }
 function stopCheckWait() {
   clearInterval(checkWaitTimer);
   checkWaitTimer = null;
+  const cancel = $("check-wait-cancel");
+  if (cancel) cancel.hidden = true;
   setFolded($("check-wait"), false);
   statusWait("check", false);
 }
@@ -355,7 +362,9 @@ function trackBoard(line) {
     }
     board.readyAt = Date.now();
     clearTimeout(otherTimer);
+    clearNativeHandoff();
     endBooting();
+    if (nativeUsb(port) && usbGuide && usbGuide.resume === "installed") hideUsbGuide();
     if (nextStepPending) showNextStep();
   }
   // Version 43.1: only these lines open the door for Improv; the version is asked then, once
@@ -364,6 +373,14 @@ function trackBoard(line) {
     board.listening = true;
     board.readyAt = Date.now();
     askVersion();
+    // Flasher Version 110: on native USB a listening line ends Checking even when the Ready line was missed
+    //  (that used to leave the countdown up, because the 20 s timer then saw the board as already ready)
+    if (nativeUsb(port)) {
+      clearTimeout(otherTimer);
+      clearNativeHandoff();
+      if (bootingNote !== null || checkWaitTimer) endBooting();
+      if (usbGuide && usbGuide.resume === "installed") hideUsbGuide();
+    }
     if (nextStepPending && bootingNote === null) showNextStep();
   }
   if (/GSP32 Improv Off|No answer: starting without Wi-Fi|^Traceback|KeyboardInterrupt|^MicroPython v/.test(line)) board.listening = false;
@@ -388,18 +405,27 @@ function trackBoard(line) {
     board.wifiFailed = false;
     clearTimeout(wifiTimer);
     clearTimeout(otherTimer);
-    startBooting();
-    // No GSP32 line within 20 s of a boot: some other firmware
-    otherTimer = setTimeout(() => {
-      if (board.readyAt < board.bootAt) {
-        board.kind = "other";
-        // Other firmware runs (an erased or half-written board would not boot it): no install to recover
-        if (flashNoteGet() && !busy && !flashing) flashNoteSet(null);
-        dropIncomplete();
-        endBooting();
-        syncBoardUi();
-      }
-    }, 20000);
+    // Flasher Version 110: the post-install guide is already the way on; a later ROM line must not bring Checking back
+    const handoff = nativeInstallHandoff();
+    const guideUp = handoff && usbGuide && usbGuide.resume === "installed";
+    if (!guideUp) startBooting();
+    // No GSP32 line within 20 s of a boot: some other firmware.
+    //  Flasher Version 110: after a native-USB install that window is the handoff (Tap RST / pick the new port), not
+    //  "No GSP32 Found", and it is short so Checking cannot sit there
+    if (handoff) {
+      if (!guideUp) armNativeHandoff();
+    } else {
+      otherTimer = setTimeout(() => {
+        if (board.readyAt < board.bootAt) {
+          board.kind = "other";
+          // Other firmware runs (an erased or half-written board would not boot it): no install to recover
+          if (flashNoteGet() && !busy && !flashing) flashNoteSet(null);
+          dropIncomplete();
+          endBooting();
+          syncBoardUi();
+        }
+      }, 20000);
+    }
   }
   // Version 37: a board with saved Wi-Fi says "Connecting to WiFi..." at boot; the Open button waits greyed until it
   //  connects (space kept, no jump), and after 20 s without Wi-Fi the note says so
@@ -564,8 +590,12 @@ function syncBoardUi() {
   }
   // Fix (S3 native USB): only setting up Wi-Fi needs GSP32 running, not download mode or the board's details: the
   //  guide offers it while the row's own Set Up Wi-Fi isn't there
+  // Flasher Version 110: the post-install guide (Tap RST / pick the new port) offers it the same way
   const instead = $("usb-guide-wifi");
-  if (instead) instead.hidden = !(usbGuide && usbGuide.kind === "boot" && usbGuide.resume === "probe") || (on && gsp32);
+  if (instead) {
+    const offer = !!(usbGuide && ((usbGuide.kind === "boot" && usbGuide.resume === "probe") || usbGuide.resume === "installed"));
+    instead.hidden = !offer || (on && gsp32);
+  }
   // Version 39: the green box folds away while installing and comes back when it ends (done, failed or disconnected)
   setFolded(state, !flashing);
 }
@@ -1109,7 +1139,11 @@ async function safeClose(onPort, quiet) {
 
 function flasherWorking() {
   const step = (wizard.hidden || wizard.shutting) ? "" : (wizard.querySelector(".step:not([hidden])") || {}).dataset?.step || "";
-  return busy || statusWaits.size > 0 || step === "flash" || step === "wifi";
+  let waiting = statusWaits.size > 0;
+  // Flasher Version 110: on native USB, Checking for GSP32 does not lock the console (wifi() works on the page).
+  //  A classic port still locks it, as in Flasher 104
+  if (waiting && nativeUsb(port) && statusWaits.size === 1 && statusWaits.has("check")) waiting = false;
+  return busy || waiting || step === "flash" || step === "wifi";
 }
 
 function syncConsoleButtons() {
@@ -1171,6 +1205,10 @@ async function portLostNative(lost, message) {
   reading = false;
   board.listening = false;
   if (message) appendConsole(message);
+  // Flasher Version 110: a port that left during Checking must not leave that countdown up
+  clearTimeout(otherTimer);
+  clearNativeHandoff();
+  if (bootingNote !== null || checkWaitTimer) endBooting();
   await stopReading().catch(() => {});
   await safeClose(lost, true).catch(() => {});
   syncConsoleButtons();
@@ -1659,16 +1697,16 @@ function usbPid(onPort) {
     return 0;
   }
 }
-function showUsbGuide(kind, resume) {
+function showUsbGuide(kind, resume, text) {
   usbGuide = { kind, resume };
   const box = $("usb-guide");
   if (!box) return;
   $("usb-guide-title").textContent = USB_GUIDE_TITLE[kind];
-  $("usb-guide-text").textContent = kind === "boot"
+  $("usb-guide-text").textContent = text || (kind === "boot"
     ? "This page can't switch this board's own USB into download mode. In download mode it shows up as a new port."
     : kind === "rst" ? "GSP32 is installed, but the board is still in download mode. Tap RST (not BOOT), then pick the new port."
     : resume === "installed" ? "GSP32 is installed. The board restarted on a new USB port: pick it to set up Wi-Fi."
-    : "The board restarted on a new USB port: pick it to go on.";
+    : "The board restarted on a new USB port: pick it to go on.");
   if (box.hidden || box.shutting) foldOpen(box);
   syncBoardUi();
 }
@@ -1696,13 +1734,13 @@ function usbLost(lost, resume) {
 const SYNC_FRAME = new Uint8Array([0xc0, 0x00, 0x08, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x07, 0x12, 0x20]
   .concat(new Array(32).fill(0x55), [0xc0]));
 // Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's answersSync; on any other port Flasher 104's, unchanged
-async function answersSync(onPort, ms = 400) {
-  return nativeUsb(onPort) ? answersSyncNative(onPort, ms) : answersSyncClassic(onPort, ms);
+async function answersSync(onPort, ms = 400, keepText = false) {
+  return nativeUsb(onPort) ? answersSyncNative(onPort, ms, keepText) : answersSyncClassic(onPort, ms);
 }
-async function answersSyncNative(onPort, ms = 400) {
+async function answersSyncNative(onPort, ms = 400, keepText = false) {
   if (!readableOf(onPort) || !writableOf(onPort)) return false;
   const syncReader = takeReader(onPort);
-  let got = new Uint8Array(0);
+  let got = new Uint8Array(0), saw = false;
   try {
     await writeTo(onPort, SYNC_FRAME);
     const until = Date.now() + ms;
@@ -1711,7 +1749,10 @@ async function answersSyncNative(onPort, ms = 400) {
       if (!result || result.done) break;
       got = concatBytes(got, result.value);
       for (let i = 0; i + 2 < got.length; i++) {
-        if (got[i] === 0xc0 && got[i + 1] === 0x01 && got[i + 2] === 0x08) return true;
+        if (got[i] === 0xc0 && got[i + 1] === 0x01 && got[i + 2] === 0x08) {
+          saw = true;
+          return true;
+        }
       }
     }
   } catch (err) {
@@ -1719,6 +1760,9 @@ async function answersSyncNative(onPort, ms = 400) {
   } finally {
     await withTimeout(syncReader.cancel(), 300, "Releasing the port").catch(() => {});
     dropReader(onPort, syncReader);
+    // Flasher Version 110: a boot log that arrived while we asked the ROM must not be thrown away, or GSP32's
+    //  lines are missed and Checking never finds the board
+    if (keepText && !saw && got.length) consumeSerial(got);
   }
   return false;
 }
@@ -1798,6 +1842,10 @@ async function attachUsbPort(picked) {
 const USB_QUIET_MS = 4000;
 function afterInstallRepick(picked) {
   const at = Date.now(), heard = lines.length;
+  clearTimeout(otherTimer);
+  clearNativeHandoff();
+  // Checking may have replaced the Installed line; put it back so the Next step can attach
+  if (bootingNote !== null || checkWaitTimer) endBooting();
   board.kind = "gsp32";
   if (nextStepPending) showNextStep();
   syncBoardUi();
@@ -2899,10 +2947,11 @@ async function install() {
     }
     // Fix (S3 web flash, Flasher Version 105): a USB-JTAG board still answering the ROM's SYNC after the restart did
     //  not leave download mode: the guide says to tap RST (the new port then goes on as after any restart)
-    if (flashedPort === port && nativeUsb(port) && usbPid(port) === USB_JTAG_SERIAL_PID) {
+    if (flashedPort === port && nativeUsb(port) && usbPid(port) === USB_JTAG_SERIAL_PID && board.kind !== "gsp32") {
       await delay(LEFT_DOWNLOAD_MS);
-      if (port === flashedPort && portOpen() && !usbGuide && await answersSync(port)) {
+      if (port === flashedPort && portOpen() && !usbGuide && board.kind !== "gsp32" && await answersSync(port, 400, true)) {
         appendConsole(STILL_DOWNLOAD_TEXT);
+        clearNativeHandoff();
         showUsbGuide("rst", "installed");
       }
     }
@@ -2912,6 +2961,8 @@ async function install() {
     closeWizard();
     showActions(true);
     syncActions();
+    // Flasher Version 110: GSP32 not seen quickly (and not already in the Tap RST guide) forces the guide
+    if (nextStepPending && board.kind !== "gsp32" && !(usbGuide && usbGuide.resume === "installed")) armNativeHandoff();
   } catch (err) {
     await reopenPort(FLASH_BAUD).catch(() => {});
     await setRunState().catch(() => {});
@@ -2970,6 +3021,63 @@ async function disableS3Watchdogs(loader) {
   }
 }
 const STILL_DOWNLOAD_TEXT = "[The board is still in download mode. Tap RST (not BOOT) to start GSP32, then pick the new port.]\n";
+const NATIVE_HANDOFF_MS = 6000;
+const NATIVE_MISSED_TEXT = "[GSP32 was not seen on this port. Tap RST (not BOOT) to start it, then pick the new port.]\n";
+const NATIVE_MISSED_GUIDE = "GSP32 is installed, but this page has not seen it yet. Tap RST (not BOOT), then pick the new port.";
+// True only in the gap after a verified native-USB install, before GSP32 is seen. Classic installs never enter it
+function nativeInstallHandoff() {
+  return !!(nativeUsb(port) && board.installed && nextStepPending && board.kind !== "gsp32" && board.kind !== "broken");
+}
+function clearNativeHandoff() {
+  clearTimeout(nativeHandoffTimer);
+  nativeHandoffTimer = null;
+}
+function armNativeHandoff() {
+  clearNativeHandoff();
+  if (!nativeInstallHandoff()) return;
+  nativeHandoffTimer = setTimeout(() => {
+    nativeHandoffTimer = null;
+    finishNativeHandoff();
+  }, NATIVE_HANDOFF_MS);
+}
+// Checking is over. Still in download mode, or GSP32 never showed: Tap RST, or pick the new port, then Next / Wi-Fi
+function finishNativeHandoff() {
+  if (board.kind === "gsp32" || board.kind === "broken") return;
+  if (!board.installed || !nextStepPending) return;
+  if (busy || flashing) {
+    armNativeHandoff();
+    return;
+  }
+  clearTimeout(otherTimer);
+  if (bootingNote !== null || checkWaitTimer) endBooting();
+  if (usbGuide && usbGuide.resume === "installed") return;
+  if (port && !nativeUsb(port)) return;
+  const open = portOpen();
+  const jtag = open && usbPid(port) === USB_JTAG_SERIAL_PID;
+  if (jtag) appendConsole(STILL_DOWNLOAD_TEXT);
+  else if (open) appendConsole(NATIVE_MISSED_TEXT);
+  showUsbGuide(open ? "rst" : "repick", "installed", open && !jtag ? NATIVE_MISSED_GUIDE : "");
+}
+// Flasher Version 110: Cancel on Checking for GSP32 (native USB). Post-install, that is the Tap RST / pick-port guide
+function cancelNativeCheck() {
+  if (!nativeUsb(port)) return;
+  if (board.installed && nextStepPending && board.kind !== "gsp32" && board.kind !== "broken") {
+    clearNativeHandoff();
+    finishNativeHandoff();
+    syncConsoleButtons();
+    return;
+  }
+  clearTimeout(otherTimer);
+  clearNativeHandoff();
+  if (board.kind !== "gsp32" && board.kind !== "broken" && board.readyAt < board.bootAt) {
+    board.kind = "other";
+    if (flashNoteGet() && !busy && !flashing) flashNoteSet(null);
+    dropIncomplete();
+  }
+  endBooting();
+  syncBoardUi();
+  syncConsoleButtons();
+}
 async function watchdogReset(loader) {
   const reg = (addr, value, mask) => withTimeout(loader.writeReg(addr, value, mask), 1500, "Restarting the board");
   try {
@@ -3535,6 +3643,7 @@ $("wifi-setup").addEventListener("click", () => {
 });
 // Fix (S3 native USB): the guide's buttons (Pick the Port Again opens the picker, so it needs this click)
 $("usb-guide-pick").addEventListener("click", guard(pickUsbAgain));
+$("check-wait-cancel").addEventListener("click", () => cancelNativeCheck());
 $("usb-guide-wifi").addEventListener("click", () => {
   if (busy || usbAttaching) return;
   hideUsbGuide();

@@ -30,6 +30,7 @@ test_v50, test_v80, test_v85). The runner fails a suite on a FAIL line or a non-
     python tests/test_s3_boardinfo.py     # S3 native USB (0x303A): BOOT/RST guide when the reset or the port fails, the port picked again (or taken when it comes back), read in download mode without a reset, install, restart onto GSP32's port, Wi-Fi without board info; other bridges unchanged
     python tests/test_s3_crashproof.py    # Flasher Version 105: a Chromium-like port (close order, locked streams, stalled writes): never the tab-killing new readable after a dropped close; writes bounded and aborted; esptool-js stopped after a connect timeout; a stuck port asks for an unplug
     python tests/test_v107_classic.py     # Flasher Version 107: the S3 fixes only on native USB (0x303A); on a classic port the REAL esptool-js against espemu.js (an ESP32 ROM + stub) makes the same port calls as Flasher 104, clean and with line faults; the Classic copies are 104's verbatim
+    python tests/test_v110.py             # Flasher Version 110: after a native-USB install, Checking cannot sit there (Tap RST / pick the new port, then Next / Set Up Wi-Fi); the console stays usable during that check (Cancel too); the post-install guide offers Set Up Wi-Fi Instead. A classic port still locks the console
 
 `mock.js` is a fake board on Web Serial (Improv answers, boot lines on an RTS reset; `window.__ets` also prints the
 ROM's `ets ...` line like a real ESP32), `fake-esptool.js` stands in for esptool-js. `espemu.js` (Flasher Version 107) is an ESP32 ROM and flasher stub behind a
