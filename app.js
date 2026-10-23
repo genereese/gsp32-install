@@ -590,8 +590,12 @@ function syncBoardUi() {
   }
   // Fix (S3 native USB): only setting up Wi-Fi needs GSP32 running, not download mode or the board's details: the
   //  guide offers it while the row's own Set Up Wi-Fi isn't there
+  // Flasher Version 110: the post-install guide (Tap RST / pick the new port) offers it the same way
   const instead = $("usb-guide-wifi");
-  if (instead) instead.hidden = !(usbGuide && usbGuide.kind === "boot" && usbGuide.resume === "probe") || (on && gsp32);
+  if (instead) {
+    const offer = !!(usbGuide && ((usbGuide.kind === "boot" && usbGuide.resume === "probe") || usbGuide.resume === "installed"));
+    instead.hidden = !offer || (on && gsp32);
+  }
   // Version 39: the green box folds away while installing and comes back when it ends (done, failed or disconnected)
   setFolded(state, !flashing);
 }
