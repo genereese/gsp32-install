@@ -275,8 +275,9 @@ button, .button { font-weight: var(--weight-normal); border-radius: var(--radius
 
 /* Version 42.1: the countdown while the page decides whether the board runs GSP32 (about 20 s), and the recovery
    offer for a half-finished install */
-.check-wait { margin: var(--space-2) 0 0; font-size: var(--text-sm); color: var(--muted); overflow: hidden; }
+.check-wait { position: relative; margin: var(--space-2) 0 0; font-size: var(--text-sm); color: var(--muted); overflow: hidden; }
 .check-wait .progress { height: 4px; margin: var(--space-1) 0 0; }
+#check-wait-cancel { position: absolute; right: 0; top: 0; font-size: var(--text-sm); }
 .check-wait .progress-bar { transition: width 1s linear; }
 .recover-note { margin: var(--space-3) 0 0; color: var(--danger); font-size: var(--text-sm); overflow: hidden; }
 

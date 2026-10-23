@@ -235,12 +235,17 @@ function startCheckWait() {
   }
   tick();
   checkWaitTimer = setInterval(tick, 250);
+  // Flasher Version 110: Cancel only on native USB (the classic countdown is unchanged)
+  const cancel = $("check-wait-cancel");
+  if (cancel) cancel.hidden = !nativeUsb(port);
   setFolded(box, true);
   statusWait("check", true);
 }
 function stopCheckWait() {
   clearInterval(checkWaitTimer);
   checkWaitTimer = null;
+  const cancel = $("check-wait-cancel");
+  if (cancel) cancel.hidden = true;
   setFolded($("check-wait"), false);
   statusWait("check", false);
 }
@@ -1130,7 +1135,11 @@ async function safeClose(onPort, quiet) {
 
 function flasherWorking() {
   const step = (wizard.hidden || wizard.shutting) ? "" : (wizard.querySelector(".step:not([hidden])") || {}).dataset?.step || "";
-  return busy || statusWaits.size > 0 || step === "flash" || step === "wifi";
+  let waiting = statusWaits.size > 0;
+  // Flasher Version 110: on native USB, Checking for GSP32 does not lock the console (wifi() works on the page).
+  //  A classic port still locks it, as in Flasher 104
+  if (waiting && nativeUsb(port) && statusWaits.size === 1 && statusWaits.has("check")) waiting = false;
+  return busy || waiting || step === "flash" || step === "wifi";
 }
 
 function syncConsoleButtons() {
@@ -3045,6 +3054,26 @@ function finishNativeHandoff() {
   else if (open) appendConsole(NATIVE_MISSED_TEXT);
   showUsbGuide(open ? "rst" : "repick", "installed", open && !jtag ? NATIVE_MISSED_GUIDE : "");
 }
+// Flasher Version 110: Cancel on Checking for GSP32 (native USB). Post-install, that is the Tap RST / pick-port guide
+function cancelNativeCheck() {
+  if (!nativeUsb(port)) return;
+  if (board.installed && nextStepPending && board.kind !== "gsp32" && board.kind !== "broken") {
+    clearNativeHandoff();
+    finishNativeHandoff();
+    syncConsoleButtons();
+    return;
+  }
+  clearTimeout(otherTimer);
+  clearNativeHandoff();
+  if (board.kind !== "gsp32" && board.kind !== "broken" && board.readyAt < board.bootAt) {
+    board.kind = "other";
+    if (flashNoteGet() && !busy && !flashing) flashNoteSet(null);
+    dropIncomplete();
+  }
+  endBooting();
+  syncBoardUi();
+  syncConsoleButtons();
+}
 async function watchdogReset(loader) {
   const reg = (addr, value, mask) => withTimeout(loader.writeReg(addr, value, mask), 1500, "Restarting the board");
   try {
@@ -3610,6 +3639,7 @@ $("wifi-setup").addEventListener("click", () => {
 });
 // Fix (S3 native USB): the guide's buttons (Pick the Port Again opens the picker, so it needs this click)
 $("usb-guide-pick").addEventListener("click", guard(pickUsbAgain));
+$("check-wait-cancel").addEventListener("click", () => cancelNativeCheck());
 $("usb-guide-wifi").addEventListener("click", () => {
   if (busy || usbAttaching) return;
   hideUsbGuide();
