@@ -5,9 +5,9 @@
     "label": "Version 111 (17dd26e), latest"
   },
   {
-    "version": "c2c7e55",
+    "version": "2443bae",
     "manifest": "manifest-beta.json",
-    "label": "Version 112 (c2c7e55), beta",
+    "label": "Version 113 (2443bae), beta",
     "channel": "beta"
   }
 ]
