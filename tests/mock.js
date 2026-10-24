@@ -33,6 +33,8 @@
   }
   let buf = [];
   function onWrite(bytes) {
+    // Flasher Version 114.2: esptool's SYNC frame (command 0x08) counted; __onSync: what a started board does with it
+    if (bytes[0] === 0xc0 && bytes[1] === 0x00 && bytes[2] === 0x08) { window.__syncs = (window.__syncs || 0) + 1; log.push("SYNC"); if (window.__onSync) window.__onSync(); return; }
     if (!buf.length && bytes[0] === 3) window.__ctrlc++;
     buf.push(...bytes);
     while (true) {

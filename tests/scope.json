@@ -58,6 +58,7 @@
   "test_v101",
   "test_v107_classic",
   "test_v110",
+  "test_v114_2_safemode",
   "test_v42",
   "test_v42_1",
   "test_v43_1",
@@ -134,6 +135,7 @@
   "test_version": 17,
   "test_visit": 18,
   "test_wifi_wait": 17,
-  "test_write_retry": 19
+  "test_write_retry": 19,
+  "test_v114_2_safemode": 27
  }
 }

@@ -349,6 +349,9 @@ function dropIncomplete() {
   }
 }
 function trackBoard(line) {
+  // Flasher Version 114.2: a prompt at the start of a line is the REPL too (it may come in one piece with the next text)
+  if (/^>>> /.test(line)) board.repl = true;
+  if (/soft reboot/.test(line)) board.repl = false;
   if (/GSP32 Improv Ready|Server listening on port|Web UI starts without Wi-Fi|Web UI running/.test(line)) {
     board.kind = "gsp32";
     bootTimes = [];
@@ -368,7 +371,9 @@ function trackBoard(line) {
     if (nextStepPending) showNextStep();
   }
   // Version 43.1: only these lines open the door for Improv; the version is asked then, once
-  if (/GSP32 Improv (Ready|Listening)/.test(line)) {
+  // Flasher Version 114.2 (Gene's C3, 114.1 in safe mode): once the REPL has the port, a later "Listening" from the
+  //  web UI is not true (the REPL eats the packets): Set Up Wi-Fi restarts the board first
+  if (/GSP32 Improv (Ready|Listening)/.test(line) && !board.repl) {
     board.kind = "gsp32";
     board.listening = true;
     board.readyAt = Date.now();
@@ -1734,18 +1739,41 @@ function usbLost(lost, resume) {
 const SYNC_FRAME = new Uint8Array([0xc0, 0x00, 0x08, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x07, 0x12, 0x20]
   .concat(new Array(32).fill(0x55), [0xc0]));
 // Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's answersSync; on any other port Flasher 104's, unchanged
-async function answersSync(onPort, ms = 400, keepText = false) {
-  return nativeUsb(onPort) ? answersSyncNative(onPort, ms, keepText) : answersSyncClassic(onPort, ms);
+async function answersSync(onPort, ms = 400, keepText = false, lookFirst = 0) {
+  return nativeUsb(onPort) ? answersSyncNative(onPort, ms, keepText, lookFirst) : answersSyncClassic(onPort, ms);
 }
-async function answersSyncNative(onPort, ms = 400, keepText = false) {
+// Flasher Version 114.2: what a started app prints (the ROM's flash boot line, the loader, MicroPython, GSP32); the
+//  ROM's download mode prints none of these
+export function appBooted(text) {
+  return /boot:0x[0-9a-f]+ \(SPI_FAST_FLASH_BOOT\)|^entry 0x|GSP32 Improv|Server listening on port|Web UI running|^MicroPython v|^>>> ?$/m.test(text);
+}
+async function answersSyncNative(onPort, ms = 400, keepText = false, lookFirst = 0) {
   if (!readableOf(onPort) || !writableOf(onPort)) return false;
   const syncReader = takeReader(onPort);
   let got = new Uint8Array(0), saw = false;
+  // Flasher Version 114.2: one read in flight at a time, kept across the look and the ask (a read given up on by a
+  //  timeout still takes the next bytes, so it must not be dropped: the ROM's answer would be lost)
+  let pending = null;
+  const nextRead = (left) => {
+    if (!pending) pending = syncReader.read();
+    return Promise.race([pending.then((result) => { pending = null; return result; }), delay(left).then(() => null)]);
+  };
   try {
+    // Flasher Version 114.2 (Gene's C3): look before asking. A board that already started never gets the SYNC frame
+    //  (it reached GSP32's console as typed bytes, and in safe mode the REPL took the port)
+    if (lookFirst) {
+      const until = Date.now() + lookFirst;
+      while (Date.now() < until) {
+        const result = await nextRead(until - Date.now());
+        if (!result || result.done) break;
+        got = concatBytes(got, result.value);
+      }
+      if (appBooted(new TextDecoder().decode(got))) return false;
+    }
     await writeTo(onPort, SYNC_FRAME);
     const until = Date.now() + ms;
     while (Date.now() < until) {
-      const result = await Promise.race([syncReader.read(), delay(until - Date.now()).then(() => null)]);
+      const result = await nextRead(until - Date.now());
       if (!result || result.done) break;
       got = concatBytes(got, result.value);
       for (let i = 0; i + 2 < got.length; i++) {
@@ -2949,7 +2977,7 @@ async function install() {
     //  not leave download mode: the guide says to tap RST (the new port then goes on as after any restart)
     if (flashedPort === port && nativeUsb(port) && usbPid(port) === USB_JTAG_SERIAL_PID && board.kind !== "gsp32") {
       await delay(LEFT_DOWNLOAD_MS);
-      if (port === flashedPort && portOpen() && !usbGuide && board.kind !== "gsp32" && await answersSync(port, 400, true)) {
+      if (port === flashedPort && portOpen() && !usbGuide && board.kind !== "gsp32" && await answersSync(port, 400, true, LOOK_FIRST_MS)) {
         appendConsole(STILL_DOWNLOAD_TEXT);
         clearNativeHandoff();
         showUsbGuide("rst", "installed");
@@ -3003,6 +3031,8 @@ function showNextStep() {
 const S3_RTC_OPTION1 = 0x6000812c, S3_FORCE_DOWNLOAD_BOOT = 0x1;
 const S3_WDTWPROTECT = 0x600080b0, S3_WDT_WKEY = 0x50d83aa1, S3_WDTCONFIG0 = 0x60008098, S3_WDTCONFIG1 = 0x6000809c;
 const LEFT_DOWNLOAD_MS = 1500;
+// Flasher Version 114.2: how long the post-install check reads the board's output before it asks the ROM
+const LOOK_FIRST_MS = 300;
 const S3_SWD_CONF = 0x600080b4, S3_SWD_WPROTECT = 0x600080b8, S3_SWD_WKEY = 0x8f1d312a, S3_SWD_AUTO_FEED = 1 << 31;
 // esptool's disable_watchdogs for the S3 (USB-JTAG/serial only). Best effort: each step time-limited, a failure only
 //  noted in the console
@@ -3280,7 +3310,24 @@ async function startWifi(fresh) {
       await waitListening(45000);
       if (!portOpen() && usbGuide) throw new Error("The board restarted on a new USB port. Pick it again (see the note above).");
     }
-    const state = board.listening ? await waitBoardReady(8000) : null;
+    let state = board.listening ? await waitBoardReady(8000) : null;
+    // Flasher Version 114.2 (Gene's C3): GSP32 that does not answer (its REPL had the port, or the listening ended) is
+    //  restarted once and asked again, instead of the user having to click Try Again
+    if (state === null && board.kind === "gsp32" && !board.oldFirmware && portOpen()) {
+      const native = nativeUsb(port);
+      wifiStatus.textContent = native ? "The board did not answer. Restarting it and trying once more... If nothing happens, tap RST on the board."
+        : "The board did not answer. Restarting it and trying once more...";
+      board.listening = false;
+      if (native) usbExpect = { resume: "wifi", until: Date.now() + 45000 };
+      try {
+        await resetBoard();
+      } catch (err) {
+        if (!native) throw err;
+      }
+      await waitListening(45000);
+      if (!portOpen() && usbGuide) throw new Error("The board restarted on a new USB port. Pick it again (see the note above).");
+      state = board.listening ? await waitBoardReady(8000) : null;
+    }
     if (state === null && board.oldFirmware) throw new Error("This board runs an older GSP32. Install Version 43.1 or newer to change Wi-Fi here.");
     if (state === null && board.kind === "other") throw new Error("This board does not run GSP32. Install GSP32 first to set up Wi-Fi.");
     if (state === null) throw new Error("The board did not answer. Check that GSP32 is installed, then try again.");
