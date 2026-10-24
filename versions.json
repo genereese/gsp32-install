@@ -1,13 +1,7 @@
 [
   {
-    "version": "17dd26e",
+    "version": "cd50242",
     "manifest": "manifest.json",
-    "label": "Version 111 (17dd26e), latest"
-  },
-  {
-    "version": "c28639a",
-    "manifest": "manifest-beta.json",
-    "label": "Version 114 (c28639a), beta",
-    "channel": "beta"
+    "label": "Version 114.1 (cd50242), latest"
   }
 ]
