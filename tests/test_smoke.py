@@ -1,4 +1,4 @@
-""" Flasher Version 114.2 (Gene): the quick smoke check for text and layout changes (tools/flasher_tests.py --smoke runs it
+""" Flasher Version 115 (Gene): the quick smoke check for text and layout changes (tools/flasher_tests.py --smoke runs it
 with test_v48, test_v50, test_v80 and test_v85): the page loads clean, the version list and its files, the gallery, the
 footer and the cache tag. The full suite stays the release check """
 import functools, http.server, json, os, re, sys, threading

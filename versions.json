@@ -3,5 +3,11 @@
     "version": "1a9c002",
     "manifest": "manifest.json",
     "label": "Version 114.2 (1a9c002), latest"
+  },
+  {
+    "version": "7eec233",
+    "manifest": "manifest-beta.json",
+    "label": "Version 115 (7eec233), beta",
+    "channel": "beta"
   }
 ]
