@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=115.1-fw114.2-b115-c117">
+  <link rel="stylesheet" href="style.css?v=115.2-fw114.2-b115-c118-c117">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -111,16 +111,17 @@
               <!-- Version 99 (Gene): the previous Stable stays one pick away -->
               <option value="previous" hidden disabled>Previous</option>
               <!-- GSP32-C Beta V117 (Gene): GSP32 rebuilt with its system side in C, a separate line; the GSP32 picks above
-                   are unchanged. Shown only when versions.json lists a "gspc-beta" entry (app.js) -->
-              <optgroup label="GSP32-C" id="gspc-group" hidden>
-                <option value="gspc-beta" hidden disabled>GSP32-C Beta</option>
-              </optgroup>
+                   are unchanged. Shown only when versions.json lists a "gspc-beta" entry (app.js).
+                   GSP32-C Beta V118 (Gene): app.js fills one option per listed GSP32-C Beta ("gspc-118", "gspc-117") -->
+              <optgroup label="GSP32-C" id="gspc-group" hidden></optgroup>
             </select>
           </label>
           <p class="version-line">Installs <b id="version">Loading...</b></p>
-          <p class="hint gspc-note" id="gspc-note" hidden>GSP32-C Beta has no web UI yet. After the install, set Wi-Fi at the
-            board's &gt;&gt;&gt; prompt (Thonny or any serial terminal): <code>import gsp</code>, then
-            <code>gsp.wifi('name', 'password')</code>. Choose Stable for the full GSP32 with its web UI.</p>
+          <p class="hint gspc-note" id="gspc-note" hidden>After the install, set Wi-Fi at the board's &gt;&gt;&gt; prompt
+            (Thonny or any serial terminal): <code>import gsp</code>, then <code>gsp.wifi('name', 'password')</code>.
+            From GSP32-C Beta V118 the board then has its own small page at <code>http://</code>its address (status, run,
+            stop, restart); the first visit sets its password. V117 has no web page. Choose Stable for the full GSP32
+            with its web UI.</p>
           <label class="warn-box warn-check" for="erase-ok">
             <input id="erase-ok" type="checkbox">
             <span>Installing <b>erases everything</b> on the board: your programs, files, and Wi-Fi settings. To keep your files, open Backup on the board first (Download Backup) and restore it after.<br><b>I Understand This Erases the Board.</b></span>
@@ -245,9 +246,9 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=115.1-fw114.2-b115-c117"></script>
+  <script type="module" src="app.js?v=115.2-fw114.2-b115-c118-c117"></script>
   <p class="security-note hint">GSP32 boards serve their web interface over plain HTTP (not encrypted). It's meant for your home network: never forward it to the internet.</p>
-  <p class="flasher-version hint">Flasher Version 115.1 · <a href="LICENSE.txt">License</a></p>
-  <script src="tour.js?v=115.1-fw114.2-b115-c117" defer></script>
+  <p class="flasher-version hint">Flasher Version 115.2 · <a href="LICENSE.txt">License</a></p>
+  <script src="tour.js?v=115.2-fw114.2-b115-c118-c117" defer></script>
 </body>
 </html>

@@ -61,7 +61,9 @@ const wizard = $("wizard");
 const versionSelect = $("version");
 const release_channel = $("release-channel");
 // Version 85: the versions.json entries of each channel (an entry without "channel" is Stable)
-let release_versions = { stable: null, beta: null, previous: null, "gspc-beta": null };
+let release_versions = { stable: null, beta: null, previous: null };
+// GSP32-C Beta V118 (Gene): every GSP32-C Beta in versions.json is its own pick ("gspc-118", "gspc-117", newest first)
+let gspc_channels = [];
 const eraseOk = $("erase-ok");
 let stable = null;
 const startInstall = $("start-install");
@@ -1549,9 +1551,18 @@ async function loadVersions() {
       beta: list.find((item) => (!item.prototype) && (item.channel === "beta")) || null,
       // Version 99 (Gene): the previous Stable as a fallback pick (Version 99 since Version 103 became Stable)
       previous: list.find((item) => (!item.prototype) && (item.channel === "previous")) || null,
-      // GSP32-C Beta V117 (Gene): the separate GSP32-C line
-      "gspc-beta": list.find((item) => (!item.prototype) && (item.channel === "gspc-beta")) || null,
     };
+    // GSP32-C Beta V117 (Gene): the separate GSP32-C line. V118 (Gene): each listed GSP32-C Beta is a separate pick,
+    //  keyed by its number, in versions.json order (newest first)
+    gspc_channels = [];
+    for (const item of list) {
+      if (item.prototype || item.channel !== "gspc-beta") continue;
+      const number = String(item.label || "").match(/GSP32-C Beta V(\d+(?:\.\d+)?)/);
+      const key = "gspc-" + (number ? number[1] : item.version);
+      if (release_versions[key]) continue;
+      release_versions[key] = item;
+      gspc_channels.push(key);
+    }
     stable = release_versions.stable;
     releaseChannelUpdate();
   } catch (err) {
@@ -1564,6 +1575,10 @@ async function loadVersions() {
 // GSP32-C Beta V117 (Gene): GSP32 or GSP32-C runs on the board (the install is done, no recovery, no handoff)
 function gspFound() {
   return board.kind === "gsp32" || board.kind === "gspc";
+}
+// GSP32-C Beta V118 (Gene): a GSP32-C pick ("gspc-118")
+function isGspc(channel) {
+  return String(channel || "").startsWith("gspc-");
 }
 // GSP32-C Beta V117 (Gene): "GSP32-C Beta V117" from a label like "GSP32-C Beta V117 (08999a5)"
 function gspcName(entry) {
@@ -1586,16 +1601,27 @@ function releaseChannelUpdate() {
   }
   // Version 106 (Gene): Stable is the only version listed: one choice is no choice, so the Release dropdown is hidden
   //  (the "Installs Version N" line stays); a Beta or a Previous in versions.json brings it back
-  // GSP32-C Beta V117 (Gene): its own group in the dropdown, named from versions.json ("GSP32-C Beta V117")
-  const gspc = release_versions["gspc-beta"];
-  const gspc_option = release_channel.querySelector('option[value="gspc-beta"]');
+  // GSP32-C Beta V117 (Gene): its own group in the dropdown, named from versions.json ("GSP32-C Beta V117").
+  //  V118 (Gene): one option per listed GSP32-C Beta, newest first, each installing its own manifest
+  const gspc = gspc_channels.length > 0;
   const gspc_group = $("gspc-group");
-  if (gspc_option) {
-    gspc_option.hidden = gspc_option.disabled = !gspc;
-    if (gspc_group) gspc_group.hidden = !gspc;
-    if (gspc) gspc_option.textContent = gspcName(gspc);
-    if ((release_channel.value === "gspc-beta") && !gspc) release_channel.value = "stable";
+  if (gspc_group) {
+    const want = gspc_channels.join(",");
+    if (gspc_group.dataset.keys !== want) {
+      const keep = release_channel.value;
+      gspc_group.textContent = "";
+      for (const key of gspc_channels) {
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = gspcName(release_versions[key]);
+        gspc_group.appendChild(option);
+      }
+      gspc_group.dataset.keys = want;
+      if (gspc_channels.includes(keep)) release_channel.value = keep;
+    }
+    gspc_group.hidden = !gspc;
   }
+  if (isGspc(release_channel.value) && !release_versions[release_channel.value]) release_channel.value = "stable";
   const release_field = release_channel.closest(".release-field");
   if (release_field) release_field.hidden = !(release_versions.beta || release_versions.previous || gspc);
   const channel = release_channel.value;
@@ -1603,9 +1629,9 @@ function releaseChannelUpdate() {
   if (picked !== latest) manifestCache = null;
   latest = picked;
   const gspc_note = $("gspc-note");
-  if (gspc_note) gspc_note.hidden = channel !== "gspc-beta";
+  if (gspc_note) gspc_note.hidden = !isGspc(channel);
   const number = latest ? String(latest.label || latest.version).match(/Version (\d+(?:\.\d+)?)/) : null;
-  versionSelect.textContent = (channel === "gspc-beta" && latest) ? gspcName(latest)
+  versionSelect.textContent = (isGspc(channel) && latest) ? gspcName(latest)
     : number ? "Version " + number[1] : latest ? String(latest.label || latest.version) : "No Version Found";
   versionsReady = !!latest;
   syncStart();
@@ -2221,7 +2247,7 @@ async function loadFirmware(family) {
 
 // "Version 30" for the status line (the picked build), "GSP32" when it has no number
 function installName() {
-  if (release_channel.value === "gspc-beta") return versionSelect.textContent;   // GSP32-C Beta V117 (Gene)
+  if (isGspc(release_channel.value)) return versionSelect.textContent;   // GSP32-C Beta V117/V118 (Gene)
   const picked = versionSelect.textContent.match(/Version \d+(?:\.\d+)?/);
   return picked ? picked[0] : "GSP32";
 }
