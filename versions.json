@@ -11,6 +11,13 @@
     "channel": "beta"
   },
   {
+    "version": "5cdd223",
+    "manifest": "manifest-gspc-v119.json",
+    "label": "GSP32-C Beta V119 (5cdd223)",
+    "channel": "gspc-beta",
+    "line": "GSP32-C"
+  },
+  {
     "version": "3350ec2",
     "manifest": "manifest-gspc-v118.json",
     "label": "GSP32-C Beta V118 (3350ec2)",
