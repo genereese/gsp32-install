@@ -9,5 +9,12 @@
     "manifest": "manifest-beta.json",
     "label": "Version 115 (7eec233), beta",
     "channel": "beta"
+  },
+  {
+    "version": "08999a5",
+    "manifest": "manifest-gspc-beta.json",
+    "label": "GSP32-C Beta V117 (08999a5)",
+    "channel": "gspc-beta",
+    "line": "GSP32-C"
   }
 ]

@@ -30,7 +30,10 @@ st = [e for e in v if e.get("channel", "stable") == "stable"]; bt = [e for e in 
 # Version 114.1 Stable (Gene, 2026-10-23): Version 114.1 (cd50242) alone; Beta 114 and Stable 111 no longer listed
 # Version 114.2 Stable (Gene, 2026-10-23 9:53 PM MT): Version 114.2 (1a9c002) alone
 # Version 115 Beta (Gene, 2026-10-24): Stable Version 114.2 (default) + Beta Version 115 (manifest-beta.json); no Previous
-check("versions.json: Stable Version 114.2 + Beta Version 115", len(v) == 2 and len(st) == 1 and st[0]["label"].startswith("Version 114.2 ") and st[0]["manifest"] == "manifest.json" and len(bt) == 1 and bt[0]["label"].startswith("Version 115 ") and bt[0]["manifest"] == "manifest-beta.json")
+# GSP32-C Beta V117 (Gene, 2026-10-25): plus one GSP32-C line entry (channel gspc-beta, manifest-gspc-beta.json)
+gc = [e for e in v if e.get("channel") == "gspc-beta"]
+check("versions.json: GSP32-C Beta V117 listed once, in its own line", len(gc) == 1 and gc[0]["label"].startswith("GSP32-C Beta V117 ") and gc[0]["manifest"] == "manifest-gspc-beta.json")
+check("versions.json: Stable Version 114.2 + Beta Version 115", len(v) - len(gc) == 2 and len(st) == 1 and st[0]["label"].startswith("Version 114.2 ") and st[0]["manifest"] == "manifest.json" and len(bt) == 1 and bt[0]["label"].startswith("Version 115 ") and bt[0]["manifest"] == "manifest-beta.json")
 pv = [e for e in v if e.get("channel") == "previous"]
 check("versions.json: no Previous", len(pv) == 0)
 pm = json.load(open(os.path.join(site, "manifest-v99.json")))
@@ -47,7 +50,7 @@ js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 115-fw114.2-b115 everywhere", html.count("?v=115-fw114.2-b115") == 3, str(html.count("?v=")))
+check("cache-bust 115.1-fw114.2-b115-c117 everywhere", html.count("?v=115.1-fw114.2-b115-c117") == 3, str(html.count("?v=")))
 check("no Compatible Boards card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
@@ -153,13 +156,13 @@ def check_tel(name, tel, expect_compatible, expect_chip_substr=None):
     if "browser" in body:
         check(name + ": browser enum", body["browser"] in ("chrome", "edge", "opera", "brave", "other"), body["browser"])
     if "flasher_version" in body:
-        check(name + ": flasher_version", body["flasher_version"] == "115", body["flasher_version"])
+        check(name + ": flasher_version", body["flasher_version"] == "115.1", body["flasher_version"])
 
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(); pg.goto("http://127.0.0.1:8789/index.html"); body = pg.inner_text("body")
     check("text names ESP32 and ESP32-S3", "ESP32 and ESP32-S3" in body)
-    check("footer Flasher Version 115", "Flasher Version 115" in pg.text_content(".flasher-version"))
+    check("footer Flasher Version 115.1", "Flasher Version 115.1" in pg.text_content(".flasher-version"))
     check("no Compatible Boards on page", "Compatible Boards" not in body); pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None)

@@ -61,7 +61,7 @@ const wizard = $("wizard");
 const versionSelect = $("version");
 const release_channel = $("release-channel");
 // Version 85: the versions.json entries of each channel (an entry without "channel" is Stable)
-let release_versions = { stable: null, beta: null, previous: null };
+let release_versions = { stable: null, beta: null, previous: null, "gspc-beta": null };
 const eraseOk = $("erase-ok");
 let stable = null;
 const startInstall = $("start-install");
@@ -317,7 +317,7 @@ function flashNoteSet(note) {
 // Only for a connected board whose MAC (read by the connect probe) is the one the note was written for, and not once
 //  it shows other firmware running (an Arduino sketch, say: plain Install GSP32)
 function flashNoteMatches() {
-  if (!portOpen() || !board.mac || board.kind === "other" || board.kind === "gsp32") return false;
+  if (!portOpen() || !board.mac || board.kind === "other" || gspFound()) return false;
   const note = flashNoteGet();
   return !!note && note.mac === board.mac;
 }
@@ -352,6 +352,25 @@ function trackBoard(line) {
   // Flasher Version 114.2: a prompt at the start of a line is the REPL too (it may come in one piece with the next text)
   if (/^>>> /.test(line)) board.repl = true;
   if (/soft reboot/.test(line)) board.repl = false;
+  // GSP32-C Beta V117 (Gene): GSP32-C prints "GSP32-C Beta V117 on <chip> ..." at start-up. It has no Improv or web UI
+  //  yet, so it is found here (not "No GSP32 Found"), and Wi-Fi is set at its prompt (the note says how)
+  const gspc = line.match(/GSP32-C Beta V(\d+(?:\.\d+)?) on /);
+  if (gspc) {
+    board.kind = "gspc";
+    board.gspcVersion = gspc[1];
+    board.readyAt = Date.now();
+    bootTimes = [];
+    if (flashNoteGet() && !busy && !flashing) {
+      flashNoteSet(null);
+      dropIncomplete();
+    }
+    clearTimeout(otherTimer);
+    clearNativeHandoff();
+    endBooting();
+    if (nativeUsb(port) && usbGuide && usbGuide.resume === "installed") hideUsbGuide();
+    nextStepPending = false;
+    syncBoardUi();
+  }
   if (/GSP32 Improv Ready|Server listening on port|Web UI starts without Wi-Fi|Web UI running/.test(line)) {
     board.kind = "gsp32";
     bootTimes = [];
@@ -562,6 +581,7 @@ function syncBoardUi() {
     : board.note ? board.note
     : broken ? "Incomplete Install Detected"
     : gsp32 ? (board.version ? "GSP32 Version " + board.version + " Found" : "GSP32 Found")
+    : board.kind === "gspc" ? "GSP32-C Beta V" + board.gspcVersion + " Found (set Wi-Fi at its prompt: gsp.wifi('name', 'password'))"
     : board.installed ? "Installed, Restarting..."
     : board.kind === "other" ? "No GSP32 Found" : "Checking the Board...";
   if (on && gsp32 && address && !board.note) {
@@ -1529,6 +1549,8 @@ async function loadVersions() {
       beta: list.find((item) => (!item.prototype) && (item.channel === "beta")) || null,
       // Version 99 (Gene): the previous Stable as a fallback pick (Version 99 since Version 103 became Stable)
       previous: list.find((item) => (!item.prototype) && (item.channel === "previous")) || null,
+      // GSP32-C Beta V117 (Gene): the separate GSP32-C line
+      "gspc-beta": list.find((item) => (!item.prototype) && (item.channel === "gspc-beta")) || null,
     };
     stable = release_versions.stable;
     releaseChannelUpdate();
@@ -1539,6 +1561,14 @@ async function loadVersions() {
   syncStart();
 }
 
+// GSP32-C Beta V117 (Gene): GSP32 or GSP32-C runs on the board (the install is done, no recovery, no handoff)
+function gspFound() {
+  return board.kind === "gsp32" || board.kind === "gspc";
+}
+// GSP32-C Beta V117 (Gene): "GSP32-C Beta V117" from a label like "GSP32-C Beta V117 (08999a5)"
+function gspcName(entry) {
+  return String(entry.label || entry.version).replace(/\s*\([0-9a-f]{7,}\)\s*$/, "");
+}
 // The Beta option is disabled when there is no beta; the pick sets the version (and manifest) to install
 function releaseChannelUpdate() {
   const beta_option = release_channel.querySelector('option[value="beta"]');
@@ -1556,14 +1586,27 @@ function releaseChannelUpdate() {
   }
   // Version 106 (Gene): Stable is the only version listed: one choice is no choice, so the Release dropdown is hidden
   //  (the "Installs Version N" line stays); a Beta or a Previous in versions.json brings it back
+  // GSP32-C Beta V117 (Gene): its own group in the dropdown, named from versions.json ("GSP32-C Beta V117")
+  const gspc = release_versions["gspc-beta"];
+  const gspc_option = release_channel.querySelector('option[value="gspc-beta"]');
+  const gspc_group = $("gspc-group");
+  if (gspc_option) {
+    gspc_option.hidden = gspc_option.disabled = !gspc;
+    if (gspc_group) gspc_group.hidden = !gspc;
+    if (gspc) gspc_option.textContent = gspcName(gspc);
+    if ((release_channel.value === "gspc-beta") && !gspc) release_channel.value = "stable";
+  }
   const release_field = release_channel.closest(".release-field");
-  if (release_field) release_field.hidden = !(release_versions.beta || release_versions.previous);
+  if (release_field) release_field.hidden = !(release_versions.beta || release_versions.previous || gspc);
   const channel = release_channel.value;
   const picked = release_versions[channel];
   if (picked !== latest) manifestCache = null;
   latest = picked;
+  const gspc_note = $("gspc-note");
+  if (gspc_note) gspc_note.hidden = channel !== "gspc-beta";
   const number = latest ? String(latest.label || latest.version).match(/Version (\d+(?:\.\d+)?)/) : null;
-  versionSelect.textContent = number ? "Version " + number[1] : latest ? String(latest.label || latest.version) : "No Version Found";
+  versionSelect.textContent = (channel === "gspc-beta" && latest) ? gspcName(latest)
+    : number ? "Version " + number[1] : latest ? String(latest.label || latest.version) : "No Version Found";
   versionsReady = !!latest;
   syncStart();
 }
@@ -2178,6 +2221,7 @@ async function loadFirmware(family) {
 
 // "Version 30" for the status line (the picked build), "GSP32" when it has no number
 function installName() {
+  if (release_channel.value === "gspc-beta") return versionSelect.textContent;   // GSP32-C Beta V117 (Gene)
   const picked = versionSelect.textContent.match(/Version \d+(?:\.\d+)?/);
   return picked ? picked[0] : "GSP32";
 }
@@ -2975,9 +3019,9 @@ async function install() {
     }
     // Fix (S3 web flash, Flasher Version 105): a USB-JTAG board still answering the ROM's SYNC after the restart did
     //  not leave download mode: the guide says to tap RST (the new port then goes on as after any restart)
-    if (flashedPort === port && nativeUsb(port) && usbPid(port) === USB_JTAG_SERIAL_PID && board.kind !== "gsp32") {
+    if (flashedPort === port && nativeUsb(port) && usbPid(port) === USB_JTAG_SERIAL_PID && !gspFound()) {
       await delay(LEFT_DOWNLOAD_MS);
-      if (port === flashedPort && portOpen() && !usbGuide && board.kind !== "gsp32" && await answersSync(port, 400, true, LOOK_FIRST_MS)) {
+      if (port === flashedPort && portOpen() && !usbGuide && !gspFound() && await answersSync(port, 400, true, LOOK_FIRST_MS)) {
         appendConsole(STILL_DOWNLOAD_TEXT);
         clearNativeHandoff();
         showUsbGuide("rst", "installed");
@@ -2990,7 +3034,7 @@ async function install() {
     showActions(true);
     syncActions();
     // Flasher Version 110: GSP32 not seen quickly (and not already in the Tap RST guide) forces the guide
-    if (nextStepPending && board.kind !== "gsp32" && !(usbGuide && usbGuide.resume === "installed")) armNativeHandoff();
+    if (nextStepPending && !gspFound() && !(usbGuide && usbGuide.resume === "installed")) armNativeHandoff();
   } catch (err) {
     await reopenPort(FLASH_BAUD).catch(() => {});
     await setRunState().catch(() => {});
@@ -3056,7 +3100,7 @@ const NATIVE_MISSED_TEXT = "[GSP32 was not seen on this port. Tap RST (not BOOT)
 const NATIVE_MISSED_GUIDE = "GSP32 is installed, but this page has not seen it yet. Tap RST (not BOOT), then pick the new port.";
 // True only in the gap after a verified native-USB install, before GSP32 is seen. Classic installs never enter it
 function nativeInstallHandoff() {
-  return !!(nativeUsb(port) && board.installed && nextStepPending && board.kind !== "gsp32" && board.kind !== "broken");
+  return !!(nativeUsb(port) && board.installed && nextStepPending && !gspFound() && board.kind !== "broken");
 }
 function clearNativeHandoff() {
   clearTimeout(nativeHandoffTimer);
@@ -3072,7 +3116,7 @@ function armNativeHandoff() {
 }
 // Checking is over. Still in download mode, or GSP32 never showed: Tap RST, or pick the new port, then Next / Wi-Fi
 function finishNativeHandoff() {
-  if (board.kind === "gsp32" || board.kind === "broken") return;
+  if (gspFound() || board.kind === "broken") return;
   if (!board.installed || !nextStepPending) return;
   if (busy || flashing) {
     armNativeHandoff();
@@ -3091,7 +3135,7 @@ function finishNativeHandoff() {
 // Flasher Version 110: Cancel on Checking for GSP32 (native USB). Post-install, that is the Tap RST / pick-port guide
 function cancelNativeCheck() {
   if (!nativeUsb(port)) return;
-  if (board.installed && nextStepPending && board.kind !== "gsp32" && board.kind !== "broken") {
+  if (board.installed && nextStepPending && !gspFound() && board.kind !== "broken") {
     clearNativeHandoff();
     finishNativeHandoff();
     syncConsoleButtons();
@@ -3099,7 +3143,7 @@ function cancelNativeCheck() {
   }
   clearTimeout(otherTimer);
   clearNativeHandoff();
-  if (board.kind !== "gsp32" && board.kind !== "broken" && board.readyAt < board.bootAt) {
+  if (!gspFound() && board.kind !== "broken" && board.readyAt < board.bootAt) {
     board.kind = "other";
     if (flashNoteGet() && !busy && !flashing) flashNoteSet(null);
     dropIncomplete();

@@ -22,6 +22,8 @@ check("one cache tag on style.css, app.js and tour.js", len(tags) == 3 and len(s
 # Flasher Version 107: a listed Beta adds -b<beta> (as ?v=102-fw103-b105 did)
 betas = [re.search(r"Version (\d+(?:\.\d+)?)", e["label"]).group(1) for e in versions if e.get("channel") == "beta"]
 want = "%s-fw%s" % (footer.group(1) if footer else "?", stable) + "".join("-b" + x for x in betas)
+# GSP32-C Beta V117 (Gene): a listed GSP32-C line adds -c<version> ("GSP32-C Beta V117" -> -c117)
+want += "".join("-c" + re.search(r"V(\d+(?:\.\d+)?)", e["label"]).group(1) for e in versions if e.get("channel") == "gspc-beta")
 check("cache tag is <flasher>-fw<firmware>[-b<beta>]", bool(footer) and bool(tags) and tags[0] == want, "%s vs %s" % (tags[:1], want))
 for entry in versions:
     path = os.path.join(site, entry["manifest"])
