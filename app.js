@@ -334,6 +334,12 @@ function writeImprov(packet) {
   return writeBytes(packet);
 }
 
+// Flasher Version 115.9 (GSP32-C Beta V125): GSP32-C from Beta V121 takes Improv Wi-Fi packets at any time (its console
+//  keeps them away from Python, even at the >>> prompt), so Set Up Wi-Fi works for it too. V117-V120 had no Improv
+function gspcImprov() {
+  return board.kind === "gspc" && Number(board.gspcVersion) >= 121;
+}
+
 // Asks the board for its Improv device info (version, chip): once per boot, only while it listens, no retries
 function askVersion() {
   if (board.version || board.asked > board.bootAt || !board.listening || !portOpen() || flashing) return;
@@ -354,12 +360,14 @@ function trackBoard(line) {
   // Flasher Version 114.2: a prompt at the start of a line is the REPL too (it may come in one piece with the next text)
   if (/^>>> /.test(line)) board.repl = true;
   if (/soft reboot/.test(line)) board.repl = false;
-  // GSP32-C Beta V117 (Gene): GSP32-C prints "GSP32-C Beta V117 on <chip> ..." at start-up. It has no Improv or web UI
-  //  yet, so it is found here (not "No GSP32 Found"), and Wi-Fi is set at its prompt (the note says how)
+  // GSP32-C Beta V117 (Gene): GSP32-C prints "GSP32-C Beta V117 on <chip> ..." at start-up. V117-V120 have no Improv,
+  //  so Wi-Fi is set at their prompt (the note says how). Flasher Version 115.9: V121 and newer listen for Improv from
+  //  this line on, so Set Up Wi-Fi is offered (and the Next step after an install)
   const gspc = line.match(/GSP32-C Beta V(\d+(?:\.\d+)?) on /);
   if (gspc) {
     board.kind = "gspc";
     board.gspcVersion = gspc[1];
+    board.listening = gspcImprov();
     board.readyAt = Date.now();
     bootTimes = [];
     if (flashNoteGet() && !busy && !flashing) {
@@ -370,6 +378,7 @@ function trackBoard(line) {
     clearNativeHandoff();
     endBooting();
     if (nativeUsb(port) && usbGuide && usbGuide.resume === "installed") hideUsbGuide();
+    if (gspcImprov() && nextStepPending) showNextStep();
     nextStepPending = false;
     syncBoardUi();
   }
@@ -409,7 +418,7 @@ function trackBoard(line) {
     }
     if (nextStepPending && bootingNote === null) showNextStep();
   }
-  if (/GSP32 Improv Off|No answer: starting without Wi-Fi|^Traceback|KeyboardInterrupt|^MicroPython v/.test(line)) board.listening = false;
+  if (/GSP32 Improv Off|No answer: starting without Wi-Fi|^Traceback|KeyboardInterrupt|^MicroPython v/.test(line) && !gspcImprov()) board.listening = false;
   // Fix (verify): a corrupted app ("E (31) esp_image: invalid segment length 0x...", "Factory app partition is not
   //  bootable", "No bootable app partitions") is a broken install too
   if (/invalid header|ota data partition invalid|checksum (error|failure)|image checksum|flash read err|E \(\d+\) esp_image|invalid segment length|partition is not bootable|No bootable app partitions/i.test(line)) {
@@ -533,18 +542,20 @@ function syncBoardUi() {
   const setup = $("wifi-setup"), web = $("console-webui"), install = $("install-btn");
   const on = portOpen();
   const gsp32 = board.kind === "gsp32";
+  // Flasher Version 115.9: GSP32-C from V121 sets up Wi-Fi here too (Improv), and gets the web UI button
+  const wifiCapable = gsp32 || gspcImprov();
   // Version 42.1: a half-finished install (boot loop, or the saved note of an install that never ended) offers Recover
   const broken = board.kind === "broken" || (!gsp32 && flashNoteMatches());
   // Version 92: a C3 with Stable picked can still open the install step, to choose Beta there
   install.disabled = !on || busy || !!(board.compatIssue && !board.compatIssue.betaOnly);
   install.textContent = broken ? RECOVER_LABEL : gsp32 ? "Reinstall GSP32" : "Install GSP32";
   // While installing, Wi-Fi and the web UI button are gone (not greyed); they come back after
-  setShown(setup, gsp32 && !flashing);
+  setShown(setup, wifiCapable && !flashing);
   setup.disabled = !on || busy;
-  const address = gsp32 && board.ip ? "http://" + board.ip + "/" : "";
+  const address = wifiCapable && board.ip ? "http://" + board.ip + "/" : "";
   web.href = address || "#";
   // Waiting for Wi-Fi (or it never came): shown greyed, not clickable; it fades to blue once the address is known
-  const waiting = gsp32 && !address && (board.wifiWait || board.wifiFailed);
+  const waiting = wifiCapable && !address && (board.wifiWait || board.wifiFailed);
   setShown(web, !!((address || waiting) && on && !flashing));
   web.classList.toggle("waiting", waiting);
   if (waiting) {
@@ -561,7 +572,7 @@ function syncBoardUi() {
   leave.disabled = !on || busy;
   // The next step is the solid blue button, the others light blue: Install on a board without GSP32, Set Up Wi-Fi
   //  once GSP32 runs, Open GSP32 Web UI once it is on Wi-Fi
-  const next = !gsp32 ? install : address ? web : setup;
+  const next = !wifiCapable ? install : address ? web : setup;
   for (const button of [install, setup, web]) {
     button.classList.toggle("primary", button === next);
     button.classList.toggle("secondary", button !== next);
@@ -583,10 +594,11 @@ function syncBoardUi() {
     : board.note ? board.note
     : broken ? "Incomplete Install Detected"
     : gsp32 ? (board.version ? "GSP32 Version " + board.version + " Found" : "GSP32 Found")
+    : gspcImprov() ? "GSP32-C Beta V" + board.gspcVersion + " Found"
     : board.kind === "gspc" ? "GSP32-C Beta V" + board.gspcVersion + " Found (set Wi-Fi at its prompt: gsp.wifi('name', 'password'))"
     : board.installed ? "Installed, Restarting..."
     : board.kind === "other" ? "No GSP32 Found" : "Checking the Board...";
-  if (on && gsp32 && address && !board.note) {
+  if (on && (gsp32 || gspcImprov()) && address && !board.note) {
     const link = document.createElement("a");
     link.href = address;
     link.target = "_blank";
@@ -965,7 +977,7 @@ function appendConsole(text) {
   partial = pieces.pop();
   if (/>>> ?$/.test(partial)) {
     board.repl = true;
-    board.listening = false;
+    if (!gspcImprov()) board.listening = false;
   }
   if (partial.length > 2000) {
     pieces.push(partial);
@@ -989,8 +1001,8 @@ function consumeSerial(chunk) {
     if (shown) appendConsole(shown);
   }
   for (const packet of taken.packets) {
-    // Any answer is GSP32; a provisioned state's result carries the board's address
-    board.kind = "gsp32";
+    // Any answer is GSP32 (or GSP32-C, which stays GSP32-C); a provisioned state's result carries the board's address
+    if (board.kind !== "gspc") board.kind = "gsp32";
     if (packet.type === 4) {
       const parsed = parseImprovResult(packet.data);
       const found = parsed.command === 2 && parsed.strings[0] && parsed.strings[0].match(/^http:\/\/([\d.]+)\//);
@@ -1001,6 +1013,12 @@ function consumeSerial(chunk) {
         const v = parsed.strings[1] || "";
         const n = v.match(/^(?:Version\s*)?(\d{2,}(?:\.\d+)?)$/i);
         if (n) board.version = n[1];
+        // Flasher Version 115.9: GSP32-C answers "GSP32-C", "Beta V125"
+        const c = parsed.strings[0] === "GSP32-C" && v.match(/^Beta V(\d+(?:\.\d+)?)$/);
+        if (c) {
+          board.kind = "gspc";
+          board.gspcVersion = c[1];
+        }
       }
     }
     // An answer means a session is running on the board (it answers, so it listens)
@@ -3383,7 +3401,7 @@ async function startWifi(fresh) {
     let state = board.listening ? await waitBoardReady(8000) : null;
     // Flasher Version 114.2 (Gene's C3): GSP32 that does not answer (its REPL had the port, or the listening ended) is
     //  restarted once and asked again, instead of the user having to click Try Again
-    if (state === null && board.kind === "gsp32" && !board.oldFirmware && portOpen()) {
+    if (state === null && (board.kind === "gsp32" || gspcImprov()) && !board.oldFirmware && portOpen()) {
       const native = nativeUsb(port);
       wifiStatus.textContent = native ? "The board did not answer. Restarting it and trying once more... If nothing happens, tap RST on the board."
         : "The board did not answer. Restarting it and trying once more...";
