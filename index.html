@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=115.4-fw114.2-b115-c120-c119-c118-c117">
+  <link rel="stylesheet" href="style.css?v=115.5-fw114.2-b115-c121-c120-c119-c118-c117">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -112,7 +112,7 @@
               <option value="previous" hidden disabled>Previous</option>
               <!-- GSP32-C Beta V117 (Gene): GSP32 rebuilt with its system side in C, a separate line; the GSP32 picks above
                    are unchanged. Shown only when versions.json lists a "gspc-beta" entry (app.js).
-                   GSP32-C Beta V118 (Gene): app.js fills one option per listed GSP32-C Beta ("gspc-120", "gspc-119", "gspc-118", "gspc-117") -->
+                   GSP32-C Beta V118 (Gene): app.js fills one option per listed GSP32-C Beta ("gspc-121", "gspc-120", "gspc-119", "gspc-118", "gspc-117") -->
               <optgroup label="GSP32-C" id="gspc-group" hidden></optgroup>
             </select>
           </label>
@@ -121,7 +121,8 @@
             (Thonny or any serial terminal): <code>import gsp</code>, then <code>gsp.wifi('name', 'password')</code>.
             From GSP32-C Beta V118 the board then has its own small page at <code>http://</code>its address (status, run,
             stop, restart); the first visit sets its password. From V119 it also serves live pages (values, graphs, buttons)
-            and a Console page; from V120 a file manager (Files: upload, edit, move, delete). V117 has no web page. Choose Stable for the full GSP32
+            and a Console page; from V120 a file manager (Files: upload, edit, move, delete); from V121 a Settings page, and Wi-Fi
+            can also be set with an Improv Wi-Fi serial tool. V117 has no web page. Choose Stable for the full GSP32
             with its web UI.</p>
           <label class="warn-box warn-check" for="erase-ok">
             <input id="erase-ok" type="checkbox">
@@ -247,9 +248,9 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=115.4-fw114.2-b115-c120-c119-c118-c117"></script>
+  <script type="module" src="app.js?v=115.5-fw114.2-b115-c121-c120-c119-c118-c117"></script>
   <p class="security-note hint">GSP32 boards serve their web interface over plain HTTP (not encrypted). It's meant for your home network: never forward it to the internet.</p>
-  <p class="flasher-version hint">Flasher Version 115.4 · <a href="LICENSE.txt">License</a></p>
-  <script src="tour.js?v=115.4-fw114.2-b115-c120-c119-c118-c117" defer></script>
+  <p class="flasher-version hint">Flasher Version 115.5 · <a href="LICENSE.txt">License</a></p>
+  <script src="tour.js?v=115.5-fw114.2-b115-c121-c120-c119-c118-c117" defer></script>
 </body>
 </html>
