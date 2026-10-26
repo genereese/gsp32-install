@@ -12,5 +12,5 @@ check("plain HTTP" in html and "home network" in html, "plain-HTTP home-network 
 rb = json.load(open(os.path.join(site, "manifest-v84.json")))
 paths = [p["path"] for b in rb["builds"] for p in b["parts"]]
 check(len(paths) == 4 and all(p.startswith("firmware/v84/") and os.path.exists(os.path.join(site, p)) for p in paths), "V84 rollback: 4 images %r" % paths)
-check(sorted(n for n in os.listdir(site) if n.startswith("manifest")) == ["manifest-beta.json", "manifest-gspc-beta.json", "manifest-gspc-v118.json", "manifest-gspc-v119.json", "manifest-gspc-v120.json", "manifest-gspc-v121.json", "manifest-v84.json", "manifest-v85.json", "manifest-v99.json", "manifest.json"] and os.listdir(os.path.join(site, "firmware")).count("v83") == 0, "single rollback")
+check(sorted(n for n in os.listdir(site) if n.startswith("manifest")) == ["manifest-beta.json", "manifest-gspc-beta.json", "manifest-gspc-v118.json", "manifest-gspc-v119.json", "manifest-gspc-v120.json", "manifest-gspc-v121.json", "manifest-gspc-v122.json", "manifest-v84.json", "manifest-v85.json", "manifest-v99.json", "manifest.json"] and os.listdir(os.path.join(site, "firmware")).count("v83") == 0, "single rollback")
 print("FAILS", fails); sys.exit(1 if fails else 0)
