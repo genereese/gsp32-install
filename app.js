@@ -67,6 +67,8 @@ let gspc_channels = [];
 const eraseOk = $("erase-ok");
 let stable = null;
 const startInstall = $("start-install");
+// Flasher Version 115.16 (GSP32-C Beta V127.3): Update keeps the device's files, settings, Wi-Fi and paired devices
+const startUpdate = $("start-update");
 const flashStatus = $("flash-status");
 const flashBar = $("flash-bar");
 const wifiStatus = $("wifi-status");
@@ -1726,14 +1728,31 @@ release_channel.addEventListener("change", () => recheckCompat());
 
 function syncStart() {
   startInstall.disabled = !versionsReady || !eraseOk.checked || !!(board.compatIssue && board.compatIssue.betaOnly);
+  syncUpdate();
   // Fix (recover flow): greyed Erase and Install says why
   const note = $("start-note");
   if (!note) return;
   note.textContent = !startInstall.disabled ? ""
     : !versionsReady ? "Could not load the version list. Check your internet connection, then reload the page."
     : board.compatIssue && board.compatIssue.betaOnly ? "Pick Stable or Beta under Release to install on this device."
+    : updateOffered() ? "Tick the box above to erase and install, or use Update (Keep Files) to keep what is on the device."
     : "Tick the box above to continue.";
   note.hidden = !note.textContent;
+}
+
+// Flasher Version 115.16 (GSP32-C Beta V127.3): Update (Keep Files) is offered for picks that say "update": true in
+//  versions.json (GSP32-C V127.3 on). It needs no tick: it never erases. It is refused on the device (nothing written)
+//  unless the device's partition table is the image's, see updateLayoutCheck
+function updateOffered() {
+  return !!(latest && latest.update === true && isGspc(latest.channel));
+}
+function syncUpdate() {
+  if (!startUpdate) return;
+  const offered = updateOffered();
+  startUpdate.hidden = !offered;
+  const hint = $("update-hint");
+  if (hint) hint.hidden = !offered;
+  startUpdate.disabled = !offered || !versionsReady || !!(board.compatIssue && board.compatIssue.betaOnly);
 }
 
 // Version 79: one manifest, one build per chip family ("ESP32", "ESP32-S3"), as esp-web-tools picks them. The
@@ -2917,8 +2936,55 @@ async function drainInputClassic(transport, quietMs = 100, maxMs = 500) {
   transport.buffer = new Uint8Array(0);
   return dropped;
 }
+// Flasher Version 115.16 (GSP32-C Beta V127.3): Update writes the same merged image in two pieces: the bootloader and
+//  partition table (image start to 0x9000) and the app (0x10000 on). NVS (paired devices, Wi-Fi) and phy_init
+//  (0x9000 to 0x10000) and the file system after the app are never written, and nothing is erased first
+const NVS_START = 0x9000, APP_START = 0x10000, TABLE_AT = 0x8000, TABLE_LEN = 0xC00;
+function updatePieces(files) {
+  const f = files[0];
+  const base = f.address;
+  if (files.length !== 1 || base > TABLE_AT || f.data.length <= APP_START - base) return null;
+  return [{ data: f.data.slice(0, NVS_START - base), address: base }, { data: f.data.slice(APP_START - base), address: APP_START }];
+}
+// The partition table's entries (0xAA50) and its MD5 entry (0xEBEB), up to the first other (0xFF) entry
+function tableEntries(bytes) {
+  const out = [];
+  for (let i = 0; i + 32 <= bytes.length; i += 32) {
+    const magic = (bytes[i] << 8) | bytes[i + 1];
+    if (magic !== 0xaa50 && magic !== 0xebeb) break;
+    out.push(Array.from(bytes.slice(i, i + 32)).join(","));
+  }
+  return out;
+}
+const UPDATE_REFUSED = "Update stopped before writing anything: this device's storage layout is not the one GSP32-C uses, so its files and paired devices could not be kept. Nothing on the device was changed. To install anyway, back up anything you need first, then tick the box and use Erase and Install.";
+// Reads the device's partition table (the flasher stub's read) and compares it with the image's. "" when they match,
+//  else the text to show. A read that fails or times out refuses too
+async function updateLayoutCheck(loader, files) {
+  const f = files[0];
+  const image = Uint8Array.from(f.data.slice(TABLE_AT - f.address, TABLE_AT - f.address + TABLE_LEN), (c) => c.charCodeAt(0));
+  const want = tableEntries(image);
+  let have;
+  try {
+    const got = await withTimeout(loader.readFlash(TABLE_AT, TABLE_LEN), 8000, "Reading the device's storage layout");
+    // the stub sends the read's MD5 after the data: taken here so the next command's answer is the next packet
+    if (loader.transport && typeof loader.transport.read === "function") {
+      try { await withTimeout(loader.transport.read(1500).next(), 2000, "Reading the check"); } catch (err) { /* none came */ }
+    }
+    have = tableEntries(got);
+  } catch (err) {
+    appendConsole("[Could not read the device's partition table (" + (err && err.message ? err.message : err) + ")]\n");
+    return "Update stopped before writing anything: the device's storage layout could not be read. Nothing on the device was changed. Click Update again, or back up anything you need and use Erase and Install.";
+  }
+  const same = want.length > 0 && have.length === want.length && have.every((e, i) => e === want[i]);
+  appendConsole(same ? "[Partition table matches the firmware's: files and paired devices are kept]\n"
+    : "[Partition table differs from the firmware's (" + have.length + " entries on the device, " + want.length + " in the firmware): Update refused]\n");
+  return same ? "" : UPDATE_REFUSED;
+}
+let installKeeps = false; // the last install was an Update (files, settings, Wi-Fi and pairings kept)
 // Step 2: port, then flash with esptool-js on the same open port
-async function install() {
+async function install(mode) {
+  const update = mode === "update" && updateOffered();
+  installKeeps = false;
   if (board.compatIssue) {
     showCompatNotice(board.compatIssue);
     syncBoardUi();
@@ -3029,14 +3095,31 @@ async function install() {
         appendConsole("[" + family + " detected: installing its build]\n");
         imageFor[family] = await loadFirmware(family);
       }
-      const files = imageFor[family];
+      let files = imageFor[family];
+      if (update) {
+        setProgress("Checking the device's storage layout...", 0, "Updating to " + installName() + ": Checking the Device...");
+        const pieces = updatePieces(files);
+        const refused = pieces ? await updateLayoutCheck(link.loader, files) : UPDATE_REFUSED;
+        if (refused) {
+          await link.transport.disconnect();
+          stopLink(link);
+          const plain = new Error(refused);
+          plain.refused = true;
+          throw plain;
+        }
+        files = pieces;
+        setProgress("Writing the firmware (your files and paired devices are kept)...", 0, "Updating to " + installName() + ": Writing...", true);
+      } else {
       // The whole chip is erased first: about 15 s for 4 MB, longer for an S3's 16 MB
       const eraseWords = family === "ESP32-S3" ? "about a minute" : "about 15 seconds";
       setProgress("Erasing the device (" + eraseWords + ")...", 0, "Installing " + installName() + ": Erasing the Device...", true);
+      }
       showBootNow(false); // in download mode now: BOOT can be let go
       let lastPercent = -1;
       const started = Date.now();
       const timeLeft = makeTimeLeft();
+      const sizes = files.map((f) => f.data.length);
+      const allSize = sizes.reduce((a, b) => a + b, 0) || 1;
       // Erasing starts now: from here an unfinished install leaves the board needing Recover/Install
       flashNoteSet({ mac: board.mac || "", version: pickedStart ? pickedStart[1] : "", startedAt: Date.now(), writing: true });
       try {
@@ -3045,14 +3128,16 @@ async function install() {
           flashSize: "keep",
           flashMode: "keep",
           flashFreq: "keep",
-          eraseAll: true,
+          eraseAll: !update,
           // Fix (verify): esptool-js checks each region after writing (the stub's flash MD5 against this one) and
           //  throws "MD5 of file does not match data in flash!" otherwise. Without it a corrupted write (line noise
           //  on Gene's Linux CP2102) was reported as installed and the board boot-looped
           calculateMD5Hash: (image) => md5Binary(image),
           compress: true,
           reportProgress: (index, written, total) => {
-            const percent = Math.floor((written / total) * 100);
+            // Flasher Version 115.16: Update writes two pieces; the percent is over both
+            const before = sizes.slice(0, index).reduce((a, b) => a + b, 0);
+            const percent = Math.floor(((before + (written / total) * sizes[index]) / allSize) * 100);
             if (percent === 100 && lastPercent !== 100) {
               lastPercent = 100;
               setProgress("Checking the written image...", 100, "Installing " + installName() + " (100%): Checking the Written Image...");
@@ -3109,6 +3194,7 @@ async function install() {
     const picked = versionSelect.textContent.match(/Version (\d+(?:\.\d+)?)/);
     board.version = picked ? picked[1] : "";
     board.installed = true;
+    installKeeps = update;
     flashNoteSet(null);
     bootTimes = [];
     appendConsole("[Installed. Restarting the device.]\n");
@@ -3137,8 +3223,7 @@ async function install() {
     else {
       const next = document.createElement("span");
       next.className = "status-more next-step";
-      next.append("Next: click ", Object.assign(document.createElement("b"), { textContent: "Set Up Wi-Fi" }),
-        " above to connect the device to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
+      nextStepText(next);
       boardStatus.append(" ", next);
     }
     // Fix (S3 web flash, Flasher Version 105): a USB-JTAG board still answering the ROM's SYNC after the restart did
@@ -3167,7 +3252,8 @@ async function install() {
     stopFlashGuard();
     // Fix (write retries): the plain text alone; the raw esptool text is in the console
     if (err && err.plain) appendConsole("[The install did not finish: " + err.message + "]\n");
-    showError(err && err.plain ? "The install did not finish. " + err.message : "The install did not finish: " + (err && err.message ? err.message : err), "prep");
+    if (err && err.refused) showError(err.message, "prep");
+    else showError(err && err.plain ? "The install did not finish. " + err.message : "The install did not finish: " + (err && err.message ? err.message : err), "prep");
     if (err && err.bootHint) showBootHint(true);
     showActions(true);
   } finally {
@@ -3188,13 +3274,21 @@ function handBackPort() {
 // Fix (S3 web flash, Flasher Version 105): the line under "... Installed" once GSP32 runs (see install). It slides and
 //  fades in. Only while the status still says Installed (not over a later step's status)
 let nextStepPending = false;
+// Flasher Version 115.16: after an Update the device keeps its Wi-Fi: no Set Up Wi-Fi step
+function nextStepText(next) {
+  if (installKeeps) {
+    next.append("Your files, settings, Wi-Fi and paired devices were kept: the device joins your network again by itself.");
+    return;
+  }
+  next.append("Next: click ", Object.assign(document.createElement("b"), { textContent: "Set Up Wi-Fi" }),
+    " above to connect the device to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
+}
 function showNextStep() {
   nextStepPending = false;
   if (boardStatus.querySelector(".next-step") || !/ Installed$/.test(boardStatus.textContent.trim())) return;
   const next = document.createElement("span");
   next.className = "status-more next-step";
-  next.append("Next: click ", Object.assign(document.createElement("b"), { textContent: "Set Up Wi-Fi" }),
-    " above to connect the device to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
+  nextStepText(next);
   boardStatus.append(" ", next);
   try {
     next.animate([{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "none" }], { duration: FOLD_MS, easing: "ease-out" });
@@ -3546,7 +3640,8 @@ async function startWifi(fresh) {
       if (!portOpen() && usbGuide) throw new Error("The device restarted on a new USB port. Pick it again (see the note above).");
       state = board.listening ? await waitBoardReady(8000) : null;
     }
-    if (state === null && gspcImprov()) throw Object.assign(new Error("The device did not answer Wi-Fi setup."), { fallback: true });
+    // Flasher Version 115.16 (V127.3): what to do next, not only what went wrong
+    if (state === null && gspcImprov()) throw Object.assign(new Error("The device did not answer Wi-Fi setup, even after a restart. Tap RST on the device, wait a few seconds and click Try Again, or set Wi-Fi in the console as shown below."), { fallback: true });
     if (state === null && board.oldFirmware) throw new Error("This device runs an older GSP32. Install Version 43.1 or newer to change Wi-Fi here.");
     if (state === null && board.kind === "other") throw new Error("This device does not run GSP32. Install GSP32 first to set up Wi-Fi.");
     if (state === null) throw new Error("The device did not answer. Check that GSP32 is installed, then try again.");
@@ -3678,7 +3773,8 @@ async function connectWifi() {
     setBusy(false);
     setFolded(wifiError, true);
     wifiError.textContent = err.code === "quiet"
-      ? "The device stopped listening for Wi-Fi setup. Click Scan Again, then try again."
+      // Flasher Version 115.16 (V127.3): says why and what Scan Again does
+      ? "The device stopped listening for Wi-Fi setup (it listens only for a short time after it starts). Click Scan Again: the flasher restarts it so it listens again, then pick your network and connect."
       : err.code === 3
       ? "Could not connect: the password may be wrong. Check it and try again."
       // Flasher Version 115.12: a wrong password often ends here too (no answer in time), so it is named first
@@ -3858,6 +3954,7 @@ $("install-btn").addEventListener("click", () => {
 });
 eraseOk.addEventListener("change", syncStart);
 startInstall.addEventListener("click", () => install());
+if (startUpdate) startUpdate.addEventListener("click", () => install("update"));
 $("copy-log").addEventListener("click", copyLog);
 $("error-retry").addEventListener("click", () => {
   if (retryStep === "wifi") startWifi(false);
