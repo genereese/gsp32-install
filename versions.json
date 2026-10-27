@@ -11,9 +11,9 @@
     "channel": "beta"
   },
   {
-    "version": "b068992",
+    "version": "410cf56",
     "manifest": "manifest-gspc-v126.json",
-    "label": "GSP32-C Beta V126 (b068992)",
+    "label": "GSP32-C Beta V126 (410cf56)",
     "channel": "gspc-beta",
     "line": "GSP32-C"
   },
