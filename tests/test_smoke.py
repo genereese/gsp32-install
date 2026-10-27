@@ -14,7 +14,7 @@ def check(name, ok, extra=""):
 
 html = open(os.path.join(site, "index.html"), encoding="utf-8").read()
 versions = json.load(open(os.path.join(site, "versions.json")))
-footer = re.search(r"Flasher Version (\d+(?:\.\d+)?)", html)
+footer = re.search(r'class="flasher-version[^"]*">Flasher Version (\d+(?:\.\d+)?)', html)
 tags = re.findall(r"\?v=([\w.-]+)", html)
 stable = re.search(r"Version (\d+(?:\.\d+)?)", versions[0]["label"]).group(1)
 check("footer names a Flasher Version", footer is not None)
