@@ -810,6 +810,7 @@ function browserBlocked() {
 
 // Wizard steps: inline in the board card; the current step replaces the last one and the box changes height smoothly
 function showStep(name) {
+  if (name === "prep") syncHoldBootTip();
   const wasHidden = wizard.hidden;
   const before = wasHidden ? 0 : wizard.offsetHeight;
   for (const step of wizard.querySelectorAll(".step")) step.hidden = step.dataset.step !== name;
@@ -871,6 +872,68 @@ function showBootHint(on) {
     return;
   }
   setFolded(hint, true);
+}
+// Flasher Version 115.17 (Gene's ESP32): a classic device that needed BOOT held is remembered in this browser, so the
+//  next Install shows the hold-BOOT tip before it starts (the flasher still tries the automatic reset first). Web
+//  Serial gives no USB serial number, so the key is the USB bridge (VID:PID) plus the MACs read from it once an
+//  install got through; a device whose MAC is known and not on the list does not get the tip. "Forget" clears it
+const HOLD_BOOT_KEY = "gsp32HoldBoot";
+function holdBootAll() {
+  try {
+    const all = JSON.parse(localStorage.getItem(HOLD_BOOT_KEY) || "{}");
+    return all && typeof all === "object" ? all : {};
+  } catch (err) {
+    return {};
+  }
+}
+function holdBootSave(all) {
+  try {
+    if (Object.keys(all).length) localStorage.setItem(HOLD_BOOT_KEY, JSON.stringify(all));
+    else localStorage.removeItem(HOLD_BOOT_KEY);
+  } catch (err) {
+    // No storage: the tip is just not remembered
+  }
+}
+function holdBootEntry(onPort, mac) {
+  if (!onPort || nativeUsb(onPort)) return null;
+  const entry = holdBootAll()[resetBridgeKey(onPort)];
+  if (!entry) return null;
+  const macs = Array.isArray(entry.macs) ? entry.macs : [];
+  if (mac && macs.length && !macs.includes(String(mac).toLowerCase())) return null;
+  return entry;
+}
+function rememberHoldBoot(onPort, mac, quiet) {
+  if (!onPort || nativeUsb(onPort)) return;
+  const all = holdBootAll();
+  const key = resetBridgeKey(onPort);
+  const entry = all[key] && typeof all[key] === "object" ? all[key] : {};
+  const macs = Array.isArray(entry.macs) ? entry.macs : [];
+  if (mac && !macs.includes(String(mac).toLowerCase())) macs.push(String(mac).toLowerCase());
+  all[key] = { macs, at: Date.now() };
+  holdBootSave(all);
+  if (!quiet) appendConsole("[This device needed BOOT held: the flasher will remind you next time]\n");
+}
+function forgetHoldBoot(onPort, mac) {
+  const all = holdBootAll();
+  const key = resetBridgeKey(onPort);
+  const entry = all[key];
+  if (!entry) return;
+  const macs = Array.isArray(entry.macs) ? entry.macs : [];
+  const one = mac && String(mac).toLowerCase();
+  if (one && macs.length > 1 && macs.includes(one)) all[key] = { macs: macs.filter((m) => m !== one), at: entry.at };
+  else delete all[key];
+  holdBootSave(all);
+}
+// The tip in the Install step: shown at once (no fold) when the step opens for a remembered device
+function syncHoldBootTip() {
+  const tip = $("boot-remembered");
+  if (!tip) return;
+  const on = !!(portOpen() && holdBootEntry(port, board.mac));
+  tip.hidden = !on;
+  if (on) {
+    const which = $("boot-remembered-which");
+    if (which) which.textContent = board.mac ? " (MAC " + board.mac.toUpperCase() + ")" : "";
+  }
 }
 function showError(message, retry) {
   showBootHint(false);
@@ -2600,6 +2663,15 @@ const DEFAULT_RESET_DELAY = 50;
 const EXTRA_RESET_DELAY = 550;
 const RESET_KEY = "gsp32ResetSeq";
 const USB_JTAG_PID = 0x1001;
+// Flasher Version 115.17 (Gene's ESP32, CP2102): a gentler, longer reset for Silicon Labs CP210x bridges (VID 0x10C4).
+//  EN is held low longer (a slow supply or a big EN capacitor has time to settle), the step to download mode is one
+//  setSignals like tight, and GPIO 0 stays low a full second after EN rises (a slow-rising EN is sampled while it is
+//  still low). It takes the USB-JTAG slot in the rotation (that sequence is for native USB chips, not a CP210x): about
+//  0.75 s more than the USB-JTAG sequence it replaces, twice in a failing connect's seven attempts (about 1.5 s), inside
+//  the same connect time limit (CONNECT_MS), so the connect functions themselves are unchanged
+const CP210X_VID = 0x10c4;
+const GENTLE_EN_LOW_MS = 300;
+const GENTLE_IO0_HOLD_MS = 700;
 const RESET_SEQUENCES = {
   // esptool's UnixTightReset, one setSignals per step
   async tight(p, resetDelay) {
@@ -2642,7 +2714,21 @@ const RESET_SEQUENCES = {
     await setRTS(false);
     await setDTR(false);
   },
+  // Flasher Version 115.17: CP210x only (see GENTLE_EN_LOW_MS)
+  async gentle(p) {
+    await p.setSignals({ dataTerminalReady: false, requestToSend: false });
+    await delay(50);
+    await p.setSignals({ dataTerminalReady: false, requestToSend: true }); // EN low (reset), GPIO 0 high
+    await delay(GENTLE_EN_LOW_MS);
+    await p.setSignals({ dataTerminalReady: true, requestToSend: false }); // GPIO 0 low, EN high
+    await delay(GENTLE_IO0_HOLD_MS);
+    await p.setSignals({ dataTerminalReady: false, requestToSend: false });
+  },
 };
+function cp210x(onPort) {
+  const info = (onPort && onPort.getInfo && onPort.getInfo()) || {};
+  return info.usbVendorId === CP210X_VID;
+}
 function isLinuxBrowser() {
   const plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
   if (/android/i.test(plat + " " + navigator.userAgent)) return false;
@@ -2674,8 +2760,10 @@ function resetOrder(onPort, linux = isLinuxBrowser(), remembered = rememberedRes
   let first = "classic";
   if (info.usbProductId === USB_JTAG_PID) first = "usbJtag";
   else if (linux) first = "tight";
+  // Flasher Version 115.17: a CP210x gets the gentle reset in the USB-JTAG slot
+  const third = cp210x(onPort) ? "gentle" : "usbJtag";
   if (RESET_SEQUENCES[remembered]) first = remembered;
-  return [first].concat(["classic", "tight", "usbJtag"].filter((n) => n !== first));
+  return [first].concat(["classic", "tight", third].filter((n) => n !== first));
 }
 // esptool-js asks its resetConstructors for its sequences and cycles through them, one per connect attempt; every
 //  one it gets is this same rotation, so attempt N runs order[N % 3] whatever esptool-js would have picked
@@ -2690,7 +2778,7 @@ function resetRotation(onPort) {
       const i = rotation.count++;
       rotation.name = order[i % order.length];
       const resetDelay = i < order.length ? DEFAULT_RESET_DELAY : EXTRA_RESET_DELAY;
-      rotation.tried.push(rotation.name + " " + resetDelay);
+      rotation.tried.push(rotation.name === "gentle" ? "gentle " + (GENTLE_EN_LOW_MS + "/" + GENTLE_IO0_HOLD_MS) : rotation.name + " " + resetDelay);
       await RESET_SEQUENCES[rotation.name](onPort, resetDelay);
     },
   };
@@ -3053,8 +3141,12 @@ async function install(mode) {
         setProgress("Connecting to the device (holding BOOT)...", 0, "Installing " + installName() + ": Connecting to the Device...");
         try {
           link = await connectLoader(terminal);
+          // Flasher Version 115.17: the automatic reset failed and the try with BOOT held got through: remembered
+          if (!nativeUsb(installPort)) rememberHoldBoot(installPort, board.mac);
         } catch (again) {
           if (again && again.code === "stuck") throw again;
+          // Flasher Version 115.17: remembered, so the next Install shows the hold-BOOT tip up front
+          if (!nativeUsb(installPort)) rememberHoldBoot(installPort, board.mac);
           // Flasher Version 115.10 (Gene's ESP32): no reset style put it into download mode (a weak auto-reset keeps
           //  starting its program): the hold-BOOT note folds in under the error (see showBootHint)
           throw Object.assign(new Error("The device did not answer. Unplug it, plug it back in and click Try Again. If it still does not answer, hold the BOOT button while you click Try Again."),
@@ -3064,6 +3156,10 @@ async function install(mode) {
         installConnecting = false;
       }
       board.leftRunning = false;
+      // Flasher Version 115.17: a remembered device with no MAC on file yet that got through (BOOT held, as the tip
+      //  asked) adds its MAC, so another device on the same kind of USB bridge whose MAC is known later does not get it
+      const heldEntry = board.mac ? holdBootEntry(installPort, "") : null;
+      if (heldEntry && !(heldEntry.macs || []).length) rememberHoldBoot(installPort, board.mac, true);
       const chip = link.chip || board.chip || "";
       await readBoardExtras(link);
       syncBoardUi();
@@ -3956,6 +4052,12 @@ eraseOk.addEventListener("change", syncStart);
 startInstall.addEventListener("click", () => install());
 if (startUpdate) startUpdate.addEventListener("click", () => install("update"));
 $("copy-log").addEventListener("click", copyLog);
+// Flasher Version 115.17: the device installs without BOOT now: stop showing the tip for it
+$("boot-forget").addEventListener("click", () => {
+  forgetHoldBoot(port, board.mac);
+  appendConsole("[The hold-BOOT reminder for this device was cleared]\n");
+  setFolded($("boot-remembered"), false);
+});
 $("error-retry").addEventListener("click", () => {
   if (retryStep === "wifi") startWifi(false);
   else showStep(retryStep);

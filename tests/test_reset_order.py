@@ -2,6 +2,8 @@
 #  step, like esptool's UnixTightReset), elsewhere classic first (esptool-js's own, as before), USB-JTAG first for a
 #  native USB chip; then classic, tight, USB-JTAG in turn, 50 ms the first round and 550 ms after. What worked is
 #  remembered per USB bridge and tried first next time
+# Flasher Version 115.17: on a CP210x (VID 0x10C4) the gentle reset (EN low 300 ms, GPIO 0 held low 700 ms after) takes the
+#  USB-JTAG slot; other bridges keep tight, classic, USB-JTAG
 import os, http.server, threading, functools
 from playwright.sync_api import sync_playwright
 # Flasher Version 115.10: a classic board is not probed on a plain connect any more (Gene: it restarted the board); these
@@ -51,13 +53,24 @@ with sync_playwright() as p:
     stored = pg.evaluate("localStorage.getItem('gsp32ResetSeq')")
     check("what worked is remembered per USB bridge", stored == '{"10c4:ea60":"classic"}', str(stored))
     check("no page errors", not errors, str(errors))
-    # 2. Same browser next time: classic (remembered) first, then tight, USB-JTAG
-    pg.evaluate("window.__resetWorks = 'usbJtag'")
+    # 2. Same browser next time: classic (remembered) first, then tight, then the third (Flasher 115.17: on a CP210x the
+    #  gentle reset takes the USB-JTAG slot)
+    pg.evaluate("window.__resetWorks = 'gentle'")
     pg.evaluate("localStorage.setItem('gsp32ResetSeq', JSON.stringify({'10c4:ea60': 'classic'}))")
-    pg.reload(); pg.wait_for_timeout(300); pg.evaluate("window.__resetWorks = 'usbJtag'")
+    pg.reload(); pg.wait_for_timeout(300); pg.evaluate("window.__resetWorks = 'gentle'")
     connect(pg)
-    check("remembered classic first, then tight, USB-JTAG", resets(pg) == ["classic", "tight", "usbJtag"], str(resets(pg)))
-    check("remembered now USB-JTAG", pg.evaluate("localStorage.getItem('gsp32ResetSeq')") == '{"10c4:ea60":"usbJtag"}')
+    check("CP210x: remembered classic first, then tight, gentle", resets(pg) == ["classic", "tight", "gentle"], str(resets(pg)))
+    check("CP210x: remembered now gentle", pg.evaluate("localStorage.getItem('gsp32ResetSeq')") == '{"10c4:ea60":"gentle"}')
+    sig = [l for l in pg.evaluate("window.__log") if l.startswith("signals")]
+    gentle = ["signals dtr=false rts=false", "signals dtr=false rts=true", "signals dtr=true rts=false", "signals dtr=false rts=false"]
+    check("gentle: idle, EN low, straight to download in one setSignals, idle", any(sig[k:k + 4] == gentle for k in range(len(sig))), str(sig[-8:]))
+    pg.close()
+    # 2b. Another bridge (CH340, 0x1A86): the USB-JTAG sequence keeps its slot, no gentle reset
+    pg, errors = page(b, plat("Linux x86_64") + "window.__usb = { usbVendorId: 0x1a86, usbProductId: 0x7523 }; window.__resetWorks = 'usbJtag';")
+    pg.evaluate("localStorage.setItem('gsp32ResetSeq', JSON.stringify({'1a86:7523': 'classic'}))")
+    connect(pg)
+    check("CH340: remembered classic first, then tight, USB-JTAG", resets(pg) == ["classic", "tight", "usbJtag"], str(resets(pg)))
+    check("CH340: remembered now USB-JTAG", pg.evaluate("localStorage.getItem('gsp32ResetSeq')") == '{"10c4:ea60":"classic","1a86:7523":"usbJtag"}' or pg.evaluate("JSON.parse(localStorage.getItem('gsp32ResetSeq'))['1a86:7523']") == "usbJtag")
     pg.close()
     # 3. Windows (keeps what worked there): classic first, then tight, USB-JTAG
     pg, errors = page(b, plat("Win32") + "window.__resetWorks = 'tight';")
@@ -72,12 +85,17 @@ with sync_playwright() as p:
     connect(pg)
     check("USB-JTAG chip: USB-JTAG first", resets(pg) == ["usbJtag"], str(resets(pg)))
     pg.close()
-    # 5. Nothing works: every attempt rotates tight, classic, USB-JTAG; 50 ms the first round, 550 ms after
+    # 5. Nothing works: every attempt rotates tight, classic, gentle (CP210x); 50 ms the first round, 550 ms after
     pg, errors = page(b, plat("Linux x86_64") + "window.__resetWorks = 'none';")
     connect(pg, "Resets tried", 30000); pg.wait_for_timeout(8000)
     r = resets(pg)
-    check("7 attempts in rotation", r[:7] == ["tight", "classic", "usbJtag", "tight", "classic", "usbJtag", "tight"], str(r))
-    check("console names them with esptool's delays", "[Resets tried: tight 50, classic 50, usbJtag 50, tight 550, classic 550, usbJtag 550, tight 550]" in out(pg), out(pg)[-400:])
+    check("7 attempts in rotation", r[:7] == ["tight", "classic", "gentle", "tight", "classic", "gentle", "tight"], str(r))
+    check("console names them with esptool's delays", "[Resets tried: tight 50, classic 50, gentle 300/700, tight 550, classic 550, gentle 300/700, tight 550]" in out(pg), out(pg)[-400:])
+    pg.close()
+    # 5b. Another bridge, nothing works: tight, classic, USB-JTAG as before (no gentle reset)
+    pg, errors = page(b, plat("Linux x86_64") + "window.__usb = { usbVendorId: 0x1a86, usbProductId: 0x7523 }; window.__resetWorks = 'none';")
+    connect(pg, "Resets tried", 30000); pg.wait_for_timeout(8000)
+    check("CH340: rotation unchanged", "[Resets tried: tight 50, classic 50, usbJtag 50, tight 550, classic 550, usbJtag 550, tight 550]" in out(pg), out(pg)[-400:])
     check("failure: still connected, Install can try again", pg.evaluate("!document.getElementById('disconnect').disabled && !document.getElementById('install-btn').disabled"))
     check("no page errors (failure)", not errors, str(errors)); pg.close()
     # 6. The real esptool-js 0.5.7 (the mock board never answers its sync): it runs our rotation, one per attempt
@@ -86,7 +104,7 @@ with sync_playwright() as p:
     errors = []; pg.on("pageerror", lambda e: errors.append(str(e)))
     pg.goto("http://127.0.0.1:8794/index.html"); pg.wait_for_timeout(300)
     connect(pg, "Resets tried", 40000)
-    check("real esptool-js: rotation tight, classic, USB-JTAG", "[Resets tried: tight 50, classic 50, usbJtag 50" in out(pg), [l for l in out(pg).splitlines() if "Resets" in l])
+    check("real esptool-js: rotation tight, classic, gentle (CP210x)", "[Resets tried: tight 50, classic 50, gentle 300/700" in out(pg), [l for l in out(pg).splitlines() if "Resets" in l])
     check("no page errors (real esptool-js)", not errors, str(errors)); pg.close()
     b.close()
 print("FAILURES:", fails)
