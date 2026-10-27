@@ -9,15 +9,15 @@ const HEADER = [0x49, 0x4d, 0x50, 0x52, 0x4f, 0x56];
 const MAX_LINES = 2000;
 const FLASH_BAUD = 115200;
 // Fix (verify): an install is reported only once the flash verifies; two mismatches end with this
-const VERIFY_FAILED_TEXT = "The image on the board did not match what was sent (checked " + 3 + " times), so it is not installed. " +
-  "This is usually the USB cable or port: try another data cable, plug the board straight into the computer (no hub), then click Try Again. " +
+const VERIFY_FAILED_TEXT = "The image on the device did not match what was sent (checked " + 3 + " times), so it is not installed. " +
+  "This is usually the USB cable or port: try another data cable, plug the device straight into the computer (no hub), then click Try Again. " +
   "The flasher already writes at 115200, the slowest standard speed.";
 // Fix (write retries): a write that breaks on line noise ("Invalid head of packet (0xff): Possible serial noise or
 //  corruption", timeouts, a stopped transfer) or fails its MD5 check is written again from a fresh connect (reset
 //  rotation, sync, stub), up to WRITE_ATTEMPTS writes in all. The raw esptool text stays in the console; the last
 //  failure is said plainly
 const WRITE_ATTEMPTS = 3;
-const GARBLED_TEXT = "The connection to the board kept getting garbled. Try a different (short) USB cable, plugged straight into the computer.";
+const GARBLED_TEXT = "The connection to the device kept getting garbled. Try a different (short) USB cable, plugged straight into the computer.";
 const NOISE_ERROR = /Invalid head of packet|serial noise|corruption|Timeout|timed out|took longer than|Packet content transfer stopped|Invalid response|invalid packet|Failed to (read|write)|Unexpected|checksum|SLIP/i;
 function writeFailureText(err) {
   const raw = err && err.message ? err.message : String(err);
@@ -188,21 +188,21 @@ function foldShut(element, done) {
   setTimeout(finish, FOLD_MS + 150);
 }
 
-// A boot banner (the board restarted, e.g. Windows resets it when the port opens): "Board Booting Up..." until GSP32
+// A boot banner (the board restarted, e.g. Windows resets it when the port opens): "Device Booting Up..." until GSP32
 //  says it is ready (or 20 s pass: other firmware). Not while esptool works
 //  Version 42.1 (Gene): the button row stays put while booting, so a board stuck restarting can always be reinstalled
 let bootingNote = null;
 function startBooting() {
   if (busy || flashing) return;
   // Version 43.2 (Gene): the status is kept as nodes, not text, so "Wi-Fi Connected!" comes back with its second line
-  //  and its link (as text both were lost: "Connected!Your board..." with a plain address)
+  //  and its link (as text both were lost: "Connected!Your device..." with a plain address)
   if (bootingNote === null) {
     bootingNote = boardStatus.hidden ? "" : {
       nodes: Array.from(boardStatus.childNodes, (node) => node.cloneNode(true)),
       kind: boardStatus.className.replace(/\b(board-status|waiting|filling|erasing)\b/g, "").trim(),
     };
   }
-  setStatus("Board Booting Up...");
+  setStatus("Device Booting Up...");
   startCheckWait();
 }
 function endBooting() {
@@ -297,7 +297,7 @@ function markBroken() {
 //  esptool read and writing: true. An install whose connect failed wrote nothing and leaves no note. Older notes
 //  (saved at "Installing", before any connect) are stale: dropped on load
 const FLASH_NOTE_KEY = "gsp32.flash";
-const INCOMPLETE_TEXT = "Incomplete Install Detected. Click Recover/Install GSP32 to erase the board and install again.";
+const INCOMPLETE_TEXT = "Incomplete Install Detected. Click Recover/Install GSP32 to erase the device and install again.";
 const RECOVER_LABEL = "Recover/Install GSP32";
 function flashNoteGet() {
   try {
@@ -585,7 +585,7 @@ function syncBoardUi() {
     button.classList.toggle("secondary", button !== next);
   }
   web.title = waiting ? (board.wifiFailed ? "Wi-Fi Didn't Connect" : "Waiting for Wi-Fi...") : address ? "Open " + address + (board.name ? " (also http://" + board.name + "/)" : "") : "";
-  $("board-chip").textContent = (board.chip || "ESP32 Board").replace(/\s*\(revision[^)]*\)/i, "");
+  $("board-chip").textContent = (board.chip || "ESP32 Device").replace(/\s*\(revision[^)]*\)/i, "");
   const mac = $("board-mac");
   mac.textContent = board.mac ? "MAC " + board.mac.toUpperCase() : "";
   setShown(mac, !!board.mac);
@@ -605,7 +605,7 @@ function syncBoardUi() {
     : board.kind === "gspc" ? "GSP32-C Beta V" + board.gspcVersion + " Found (set Wi-Fi at its prompt: gsp.wifi('name', 'password'))"
     : board.installed ? "Installed, Restarting..."
     : board.kind === "other" ? "No GSP32 Found"
-    : quiet ? "Board Connected (Left Running)" : "Checking the Board...";
+    : quiet ? "Device Connected (Left Running)" : "Checking the Device...";
   if (on && (gsp32 || gspcImprov()) && address && !board.note) {
     const link = document.createElement("a");
     link.href = address;
@@ -628,9 +628,9 @@ function syncBoardUi() {
   if (note) {
     let why = "";
     if (!on && usbGuide) why = "Not connected. Pick the port again (see the note below).";
-    else if (!on) why = "Not connected. Click Get Started above to connect the board.";
-    else if (install.disabled && board.compatIssue && !board.compatIssue.betaOnly) why = "Install is off: this board is not supported (see the note below).";
-    else if (install.disabled && probing) why = "Reading the board first. This takes a few seconds.";
+    else if (!on) why = "Not connected. Click Get Started above to connect the device.";
+    else if (install.disabled && board.compatIssue && !board.compatIssue.betaOnly) why = "Install is off: this device is not supported (see the note below).";
+    else if (install.disabled && probing) why = "Reading the device first. This takes a few seconds.";
     // Other busy steps (installing, Wi-Fi setup, restarts) show their own progress below the buttons
     note.textContent = why;
     setShown(note, !!why && !flashing);
@@ -916,8 +916,8 @@ function maskWifi(text) {
 function consoleText(all) {
   const shown = all ? lines : lines.slice(-DOM_LINES);
   let text = maskWifi(shown.join("\n") + (partial ? (shown.length ? "\n" : "") + partial : ""));
-  if (gate.hidden) text += (text ? "\n" : "") + "[Board output isn't readable at 115200 (other firmware?): " + gate.bytes + " bytes hidden]";
-  if (mutedLines) text += (text ? "\n" : "") + "[The board keeps restarting" + (board.noBootable ? " (no bootable firmware)" : "") + ": " + mutedLines + " lines of its restart output hidden. Click " + RECOVER_LABEL + ".]";
+  if (gate.hidden) text += (text ? "\n" : "") + "[Device output isn't readable at 115200 (other firmware?): " + gate.bytes + " bytes hidden]";
+  if (mutedLines) text += (text ? "\n" : "") + "[The device keeps restarting" + (board.noBootable ? " (no bootable firmware)" : "") + ": " + mutedLines + " lines of its restart output hidden. Click " + RECOVER_LABEL + ".]";
   return text;
 }
 function paintConsoleNow() {
@@ -1087,8 +1087,8 @@ function portOpenClassic() {
 //  every reader and writer the page takes is known so a close can release them first, a port closes only with both
 //  streams unlocked, and while it closes (or after a close that failed: a stuck port) readable and writable are never
 //  touched again; the page asks for an unplug instead
-const STUCK_TEXT = "\n[The USB connection got stuck. Unplug and replug the board, then click Get Started.]\n";
-const STUCK_STATUS = "Unplug and Replug the Board";
+const STUCK_TEXT = "\n[The USB connection got stuck. Unplug and replug the device, then click Get Started.]\n";
+const STUCK_STATUS = "Unplug and Replug the Device";
 const WRITE_MS = 4000;  // plus 1 ms per 5 bytes (115200 baud moves about 11)
 function portUsable(onPort) {
   return !!onPort && !onPort.__gsp32Closing && !onPort.__gsp32Stuck;
@@ -1108,7 +1108,7 @@ function writableOf(onPort) {
   }
 }
 function stuckError() {
-  const err = new Error("The USB connection got stuck. Unplug and replug the board, then click Get Started.");
+  const err = new Error("The USB connection got stuck. Unplug and replug the device, then click Get Started.");
   err.code = "stuck";
   err.plain = true;
   return err;
@@ -1139,7 +1139,7 @@ async function writeTo(onPort, bytes) {
   const writers = onPort.__gsp32Writers || (onPort.__gsp32Writers = new Set());
   writers.add(writer);
   try {
-    await withTimeout(writer.write(bytes), WRITE_MS + Math.ceil(bytes.length / 5), "Writing to the board");
+    await withTimeout(writer.write(bytes), WRITE_MS + Math.ceil(bytes.length / 5), "Writing to the device");
   } catch (err) {
     await withTimeout(writer.abort(err).catch(() => {}), 2000, "Stopping the write").catch(() => {});
     throw err;
@@ -1298,7 +1298,7 @@ function serialRecoverableClassic(err, onPort) {
 function serialErrorName(err) {
   return (err && (err.name || err.message)) || "error";
 }
-const DISCONNECT_TEXT = "\n[The board disconnected. Plug it in and click Get Started.]\n";
+const DISCONNECT_TEXT = "\n[The device disconnected. Plug it in and click Get Started.]\n";
 // A real loss: close the port (so Chromium lets go of it), say so once, and bring Get Started back
 // Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's portLost; on any other port Flasher 104's, unchanged
 async function portLost(lost, message) {
@@ -1551,7 +1551,7 @@ async function openPickedNative(selected) {
       if (again && again.code === "stuck") throw again;
       // Fall through to the clear error
     }
-    const fail = new Error("Could not open the port. Close other programs that use it (Arduino, Thonny, mpremote), unplug and replug the board, then click Get Started again.");
+    const fail = new Error("Could not open the port. Close other programs that use it (Arduino, Thonny, mpremote), unplug and replug the device, then click Get Started again.");
     fail.code = "open";
     throw fail;
   }
@@ -1569,7 +1569,7 @@ async function openPickedClassic(selected) {
     } catch (again) {
       // Fall through to the clear error
     }
-    const fail = new Error("Could not open the port. Close other programs that use it (Arduino, Thonny, mpremote), unplug and replug the board, then click Get Started again.");
+    const fail = new Error("Could not open the port. Close other programs that use it (Arduino, Thonny, mpremote), unplug and replug the device, then click Get Started again.");
     fail.code = "open";
     throw fail;
   }
@@ -1731,7 +1731,7 @@ function syncStart() {
   if (!note) return;
   note.textContent = !startInstall.disabled ? ""
     : !versionsReady ? "Could not load the version list. Check your internet connection, then reload the page."
-    : board.compatIssue && board.compatIssue.betaOnly ? "Pick Stable or Beta under Release to install on this board."
+    : board.compatIssue && board.compatIssue.betaOnly ? "Pick Stable or Beta under Release to install on this device."
     : "Tick the box above to continue.";
   note.hidden = !note.textContent;
 }
@@ -1806,16 +1806,16 @@ function showCompatNotice(issue) {
     appendConsole("[ESP32-C3: not in the previous release]\n");
     return;
   }
-  title.textContent = "This Board Is Not Supported";
+  title.textContent = "This Device Is Not Supported";
   if (issue.oldRevision) {
-    text.textContent = "This board is " + chip + ". GSP32 needs an ESP32-C3 of revision v0.3 or newer. Nothing was installed.";
+    text.textContent = "This device is " + chip + ". GSP32 needs an ESP32-C3 of revision v0.3 or newer. Nothing was installed.";
     if (box.hidden || box.shutting) foldOpen(box);
     appendConsole("[Not supported: " + chip + "]\n");
     return;
   }
   text.textContent = flash
-    ? ("This board is " + chip + " with " + flash + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 8 MB flash (PSRAM recommended). Nothing was installed.")
-    : ("This board is " + chip + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 8 MB flash (PSRAM recommended). Nothing was installed.");
+    ? ("This device is " + chip + " with " + flash + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 8 MB flash (PSRAM recommended). Nothing was installed.")
+    : ("This device is " + chip + ". GSP32 needs a classic ESP32 with at least 4 MB flash, or an ESP32-S3 with at least 8 MB flash (PSRAM recommended). Nothing was installed.");
   if (box.hidden || box.shutting) foldOpen(box);
   appendConsole("[Not supported: " + chip + (flash ? ", " + flash : "") + "]\n");
 }
@@ -1832,7 +1832,7 @@ const USB_GUIDE_TITLE = {
   repick: "Pick the Port Again",
   rst: "Tap RST to Start GSP32",
 };
-const USB_MOVED_TEXT = "\n[The board's USB port changed (native USB). Pick the port again (see the note above the console).]\n";
+const USB_MOVED_TEXT = "\n[The device's USB port changed (native USB). Pick the port again (see the note above the console).]\n";
 const USB_NOT_READY_TEXT = "[Not in download mode yet. Hold BOOT, tap RST, release BOOT, then pick the port again.]\n";
 // Fix (S3 web flash, Flasher Version 105): a native USB port other than the ROM's USB-JTAG/serial (303a:1001) is the
 //  board's own program (GSP32's TinyUSB on the T-Display-S3's COM12). No reset sequence or SYNC can reach the ROM through
@@ -1862,10 +1862,10 @@ function showUsbGuide(kind, resume, text) {
   if (!box) return;
   $("usb-guide-title").textContent = USB_GUIDE_TITLE[kind];
   $("usb-guide-text").textContent = text || (kind === "boot"
-    ? "This page can't switch this board's own USB into download mode. In download mode it shows up as a new port."
-    : kind === "rst" ? "GSP32 is installed, but the board is still in download mode. Tap RST (not BOOT), then pick the new port."
-    : resume === "installed" ? "GSP32 is installed. The board restarted on a new USB port: pick it to set up Wi-Fi."
-    : "The board restarted on a new USB port: pick it to go on.");
+    ? "This page can't switch this device's own USB into download mode. In download mode it shows up as a new port."
+    : kind === "rst" ? "GSP32 is installed, but the device is still in download mode. Tap RST (not BOOT), then pick the new port."
+    : resume === "installed" ? "GSP32 is installed. The device restarted on a new USB port: pick it to set up Wi-Fi."
+    : "The device restarted on a new USB port: pick it to go on.");
   if (box.hidden || box.shutting) foldOpen(box);
   syncBoardUi();
 }
@@ -2200,7 +2200,7 @@ async function probeBoardOnConnect(options = {}) {
   hideCompatNotice();
   setBusy(true);
   syncConsoleButtons();
-  appendConsole("\n[Reading board info...]\n");
+  appendConsole("\n[Reading device info...]\n");
   const terminal = { clean() {}, writeLine() {}, write() {} };
   let link = null, keep = false, ok = false;
   try {
@@ -2210,7 +2210,7 @@ async function probeBoardOnConnect(options = {}) {
     //  BOOT and RST); a board in it is read without a reset and left there for Install
     if (nativeUsb(probed) && usbPid(probed) === USB_JTAG_SERIAL_PID) {
       board.downloadMode = await answersSync(probed);
-      if (board.downloadMode) appendConsole("[Download mode: reading the board without a reset]\n");
+      if (board.downloadMode) appendConsole("[Download mode: reading the device without a reset]\n");
     }
     if (options.guided && !board.downloadMode) {
       keep = true;
@@ -2233,11 +2233,11 @@ async function probeBoardOnConnect(options = {}) {
       if (err && err.code === "stuck") return false;
       if (nativeUsb(probed)) {
         // The page can't reset this board into download mode: BOOT and RST by hand, and the port again
-        appendConsole("[Could not switch the board into download mode (" + why + ").]\n");
+        appendConsole("[Could not switch the device into download mode (" + why + ").]\n");
         board.downloadMode = false;
         if (port === probed) showUsbGuide("boot", resume);
       } else {
-        appendConsole("[Could not read the board yet (" + why + "). Install can try again.]\n");
+        appendConsole("[Could not read the device yet (" + why + "). Install can try again.]\n");
       }
       // Fix (S3 web flash, Flasher Version 105): connectLoader already reset the link (a second close and reopen here,
       //  of a port that may be moving, is gone). Flasher Version 107: native USB only; other ports as in 104
@@ -2255,9 +2255,9 @@ async function probeBoardOnConnect(options = {}) {
     syncBoardUi();
     if (issue) {
       showCompatNotice(issue);
-      if (!issue.betaOnly) appendConsole("[This board is not supported for GSP32. Install is disabled.]\n");
+      if (!issue.betaOnly) appendConsole("[This device is not supported for GSP32. Install is disabled.]\n");
     } else if (chip) {
-      appendConsole("[Board: " + chipShort(chip) + (flashKb ? ", " + flashLabel(flashKb) : "") + "]\n");
+      appendConsole("[Device: " + chipShort(chip) + (flashKb ? ", " + flashLabel(flashKb) : "") + "]\n");
     }
     // Fix (recover flow): Incomplete Install only for this board (its MAC is the one an unfinished install wrote to)
     if (flashNoteMatches()) setStatus(INCOMPLETE_TEXT, "error");
@@ -2270,7 +2270,7 @@ async function probeBoardOnConnect(options = {}) {
     await releaseLoader(link, keep).catch(() => {});
     probing = false;
     // The port did not come back after the probe (closed, reopen failed): say so and bring Get Started back
-    if (port && !portOpen()) await portLost(port, "\n[The port closed while reading the board. Click Get Started to connect again.]\n");
+    if (port && !portOpen()) await portLost(port, "\n[The port closed while reading the device. Click Get Started to connect again.]\n");
     else startReading();
     setBusy(false);
     syncBoardUi();
@@ -2680,7 +2680,7 @@ function resetRotation(onPort) {
 // Fix (S3 web flash, Flasher Version 105): esptool-js can't be stopped, so a connect that ran out of time used to go on
 //  in the background (resets, SYNC writes, readers) on the port the page was closing. esptool-js now gets a stand-in
 //  for the port that works only while its link is live; stopLink() ends it (no more signals, reads or writes)
-const STOPPED_TEXT = "The connection to the board was stopped";
+const STOPPED_TEXT = "The connection to the device was stopped";
 const DEAD_READER = {
   read: () => Promise.reject(new Error(STOPPED_TEXT)),
   cancel: () => Promise.resolve(),
@@ -2766,7 +2766,7 @@ async function connectLoaderNative(terminal) {
     }, 200);
   });
   try {
-    link.chip = await withTimeout(Promise.race([loader.main(mode), lost]), CONNECT_MS, "Connecting to the board")
+    link.chip = await withTimeout(Promise.race([loader.main(mode), lost]), CONNECT_MS, "Connecting to the device")
       .finally(() => clearInterval(lostTimer));
     // Fix (S3 web flash, Flasher Version 105): a board read in download mode keeps the flasher stub running (no reset
     //  in between), and esptool-js 0.5.7 then says "Stub is already running" without taking itself for the stub
@@ -2843,7 +2843,7 @@ async function connectLoaderClassic(terminal) {
     }, 200);
   });
   try {
-    link.chip = await withTimeout(Promise.race([loader.main(mode), lost]), CONNECT_MS, "Connecting to the board")
+    link.chip = await withTimeout(Promise.race([loader.main(mode), lost]), CONNECT_MS, "Connecting to the device")
       .finally(() => clearInterval(lostTimer));
     if (rotation.name) {
       rememberReset(port, rotation.name);
@@ -2931,7 +2931,7 @@ async function install() {
   syncConsoleButtons();
   if (!portOpen()) {
     stopFlashGuard();
-    showError("The board is not connected. Click Get Started, then try again.", "prep");
+    showError("The device is not connected. Click Get Started, then try again.", "prep");
     showActions(true);
     return;
   }
@@ -2954,7 +2954,7 @@ async function install() {
     // Version 64: connect and write at 115200, always the full image. A write error (the occasional
     //  "Invalid head of packet (0xff)") gets one fresh connect and a second full try before it is shown
     for (let attempt = 1; ; attempt++) {
-      setProgress("Connecting to the board...", 0, "Installing " + installName() + ": Connecting to the Board...");
+      setProgress("Connecting to the device...", 0, "Installing " + installName() + ": Connecting to the Device...");
       let link;
       const installPort = port;
       installConnecting = true;
@@ -2966,7 +2966,7 @@ async function install() {
         //  the guide asks for BOOT and RST by hand and the port again, and the install goes on from there
         if (nativeUsb(installPort)) {
           installConnecting = false;
-          appendConsole("[Could not switch the board into download mode (" + (err && err.message ? err.message : err) + ").]\n");
+          appendConsole("[Could not switch the device into download mode (" + (err && err.message ? err.message : err) + ").]\n");
           board.downloadMode = false;
           board.note = "";
           showUsbGuide("boot", "install");
@@ -2981,17 +2981,17 @@ async function install() {
         //  try waits a moment so BOOT can be pressed before its resets
         board.leftRunning = false;
         showBootNow(true);
-        setProgress("Hold BOOT on the board now: trying once more...", 0, "Installing " + installName() + ": Hold BOOT Now...");
-        appendConsole("[Hold BOOT on the board now (keep holding until Erasing the board shows)]\n");
+        setProgress("Hold BOOT on the device now: trying once more...", 0, "Installing " + installName() + ": Hold BOOT Now...");
+        appendConsole("[Hold BOOT on the device now (keep holding until Erasing the device shows)]\n");
         await delay(BOOT_NOW_MS);
-        setProgress("Connecting to the board (holding BOOT)...", 0, "Installing " + installName() + ": Connecting to the Board...");
+        setProgress("Connecting to the device (holding BOOT)...", 0, "Installing " + installName() + ": Connecting to the Device...");
         try {
           link = await connectLoader(terminal);
         } catch (again) {
           if (again && again.code === "stuck") throw again;
           // Flasher Version 115.10 (Gene's ESP32): no reset style put it into download mode (a weak auto-reset keeps
           //  starting its program): the hold-BOOT note folds in under the error (see showBootHint)
-          throw Object.assign(new Error("The board did not answer. Unplug it, plug it back in and click Try Again. If it still does not answer, hold the BOOT button while you click Try Again."),
+          throw Object.assign(new Error("The device did not answer. Unplug it, plug it back in and click Try Again. If it still does not answer, hold the BOOT button while you click Try Again."),
             { bootHint: !nativeUsb(installPort) });
         }
       } finally {
@@ -3032,7 +3032,7 @@ async function install() {
       const files = imageFor[family];
       // The whole chip is erased first: about 15 s for 4 MB, longer for an S3's 16 MB
       const eraseWords = family === "ESP32-S3" ? "about a minute" : "about 15 seconds";
-      setProgress("Erasing the board (" + eraseWords + ")...", 0, "Installing " + installName() + ": Erasing the Board...", true);
+      setProgress("Erasing the device (" + eraseWords + ")...", 0, "Installing " + installName() + ": Erasing the Device...", true);
       showBootNow(false); // in download mode now: BOOT can be let go
       let lastPercent = -1;
       const started = Date.now();
@@ -3100,7 +3100,7 @@ async function install() {
       break;
     }
     await reopenPort(FLASH_BAUD);
-    setProgress("Restarting the board...", 100, "Installing " + installName() + " (100%): Restarting the Board...");
+    setProgress("Restarting the device...", 100, "Installing " + installName() + " (100%): Restarting the Device...");
     // Detect again from the new boot: the buttons follow what the fresh firmware prints
     board.kind = "unknown";
     board.noBootable = false;
@@ -3111,7 +3111,7 @@ async function install() {
     board.installed = true;
     flashNoteSet(null);
     bootTimes = [];
-    appendConsole("[Installed. Restarting the board.]\n");
+    appendConsole("[Installed. Restarting the device.]\n");
     // Fix (S3 native USB): the restart starts GSP32 on its own USB port; the old one goes (see usbLossResume)
     const native = nativeUsb(port);
     if (native) usbExpect = { resume: "installed", until: Date.now() + 30000 };
@@ -3138,7 +3138,7 @@ async function install() {
       const next = document.createElement("span");
       next.className = "status-more next-step";
       next.append("Next: click ", Object.assign(document.createElement("b"), { textContent: "Set Up Wi-Fi" }),
-        " above to connect the board to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
+        " above to connect the device to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
       boardStatus.append(" ", next);
     }
     // Fix (S3 web flash, Flasher Version 105): a USB-JTAG board still answering the ROM's SYNC after the restart did
@@ -3194,7 +3194,7 @@ function showNextStep() {
   const next = document.createElement("span");
   next.className = "status-more next-step";
   next.append("Next: click ", Object.assign(document.createElement("b"), { textContent: "Set Up Wi-Fi" }),
-    " above to connect the board to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
+    " above to connect the device to your Wi-Fi network. Then you can open the GSP32 Web UI from any browser on that network.");
   boardStatus.append(" ", next);
   try {
     next.animate([{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "none" }], { duration: FOLD_MS, easing: "ease-out" });
@@ -3225,10 +3225,10 @@ async function disableS3Watchdogs(loader) {
     await limit(loader.writeReg(S3_SWD_CONF, (conf | S3_SWD_AUTO_FEED) >>> 0));
     await limit(loader.writeReg(S3_SWD_WPROTECT, 0));
   } catch (err) {
-    appendConsole("[Could not turn off the board's watchdogs (" + (err && err.message ? err.message : err) + ")]\n");
+    appendConsole("[Could not turn off the device's watchdogs (" + (err && err.message ? err.message : err) + ")]\n");
   }
 }
-const STILL_DOWNLOAD_TEXT = "[The board is still in download mode. Tap RST (not BOOT) to start GSP32, then pick the new port.]\n";
+const STILL_DOWNLOAD_TEXT = "[The device is still in download mode. Tap RST (not BOOT) to start GSP32, then pick the new port.]\n";
 const NATIVE_HANDOFF_MS = 6000;
 const NATIVE_MISSED_TEXT = "[GSP32 was not seen on this port. Tap RST (not BOOT) to start it, then pick the new port.]\n";
 const NATIVE_MISSED_GUIDE = "GSP32 is installed, but this page has not seen it yet. Tap RST (not BOOT), then pick the new port.";
@@ -3287,7 +3287,7 @@ function cancelNativeCheck() {
   syncConsoleButtons();
 }
 async function watchdogReset(loader) {
-  const reg = (addr, value, mask) => withTimeout(loader.writeReg(addr, value, mask), 1500, "Restarting the board");
+  const reg = (addr, value, mask) => withTimeout(loader.writeReg(addr, value, mask), 1500, "Restarting the device");
   try {
     await reg(S3_RTC_OPTION1, 0, S3_FORCE_DOWNLOAD_BOOT).catch(() => {});
     await reg(S3_WDTWPROTECT, S3_WDT_WKEY);
@@ -3295,7 +3295,7 @@ async function watchdogReset(loader) {
     await reg(S3_WDTCONFIG0, (1 << 31) | (5 << 28) | (1 << 8) | 2);
     // The reset may come before this answer
     await reg(S3_WDTWPROTECT, 0).catch(() => {});
-    appendConsole("[Restarting the board (watchdog reset: leaves download mode)]\n");
+    appendConsole("[Restarting the device (watchdog reset: leaves download mode)]\n");
     return true;
   } catch (err) {
     appendConsole("[The watchdog reset did not answer (" + (err && err.message ? err.message : err) + "). Restarting the usual way.]\n");
@@ -3505,7 +3505,7 @@ async function startWifi(fresh) {
   syncWifiConnect();
   try {
     if (!portOpen()) await pickPort();
-    wifiStatus.textContent = "Waiting for the board to start...";
+    wifiStatus.textContent = "Waiting for the device to start...";
     // Never Ctrl-C, never typed at the prompt: Improv goes out only while GSP32 says it listens (see writeImprov).
     //  A board on Wi-Fi listens for 30 s after a boot, so one that is not listening is restarted first
     if (!board.listening) {
@@ -3513,8 +3513,8 @@ async function startWifi(fresh) {
         // Fix (S3 native USB): the page's restart may do nothing on a native USB board (then RST does it), and a
         //  restart may move it to a new port (the guide asks for it)
         const native = nativeUsb(port);
-        wifiStatus.textContent = native ? "Restarting the board so GSP32 listens for Wi-Fi setup... If nothing happens, tap RST on the board."
-          : "Restarting the board so GSP32 listens for Wi-Fi setup...";
+        wifiStatus.textContent = native ? "Restarting the device so GSP32 listens for Wi-Fi setup... If nothing happens, tap RST on the device."
+          : "Restarting the device so GSP32 listens for Wi-Fi setup...";
         if (native) usbExpect = { resume: "wifi", until: Date.now() + 45000 };
         try {
           await resetBoard();
@@ -3523,7 +3523,7 @@ async function startWifi(fresh) {
         }
       }
       await waitListening(45000);
-      if (!portOpen() && usbGuide) throw new Error("The board restarted on a new USB port. Pick it again (see the note above).");
+      if (!portOpen() && usbGuide) throw new Error("The device restarted on a new USB port. Pick it again (see the note above).");
     }
     // Flasher Version 115.10 (Gene's ESP32): GSP32-C's main.py in the foreground keeps Improv (and the console) from
     //  the board's Python until Ctrl-C: it is stopped first, and the >>> prompt waited for (see stopMainPy)
@@ -3533,8 +3533,8 @@ async function startWifi(fresh) {
     //  restarted once and asked again, instead of the user having to click Try Again
     if (state === null && (board.kind === "gsp32" || gspcImprov()) && !board.oldFirmware && portOpen()) {
       const native = nativeUsb(port);
-      wifiStatus.textContent = native ? "The board did not answer. Restarting it and trying once more... If nothing happens, tap RST on the board."
-        : "The board did not answer. Restarting it and trying once more...";
+      wifiStatus.textContent = native ? "The device did not answer. Restarting it and trying once more... If nothing happens, tap RST on the device."
+        : "The device did not answer. Restarting it and trying once more...";
       board.listening = false;
       if (native) usbExpect = { resume: "wifi", until: Date.now() + 45000 };
       try {
@@ -3543,13 +3543,13 @@ async function startWifi(fresh) {
         if (!native) throw err;
       }
       await waitListening(45000);
-      if (!portOpen() && usbGuide) throw new Error("The board restarted on a new USB port. Pick it again (see the note above).");
+      if (!portOpen() && usbGuide) throw new Error("The device restarted on a new USB port. Pick it again (see the note above).");
       state = board.listening ? await waitBoardReady(8000) : null;
     }
-    if (state === null && gspcImprov()) throw Object.assign(new Error("The board did not answer Wi-Fi setup."), { fallback: true });
-    if (state === null && board.oldFirmware) throw new Error("This board runs an older GSP32. Install Version 43.1 or newer to change Wi-Fi here.");
-    if (state === null && board.kind === "other") throw new Error("This board does not run GSP32. Install GSP32 first to set up Wi-Fi.");
-    if (state === null) throw new Error("The board did not answer. Check that GSP32 is installed, then try again.");
+    if (state === null && gspcImprov()) throw Object.assign(new Error("The device did not answer Wi-Fi setup."), { fallback: true });
+    if (state === null && board.oldFirmware) throw new Error("This device runs an older GSP32. Install Version 43.1 or newer to change Wi-Fi here.");
+    if (state === null && board.kind === "other") throw new Error("This device does not run GSP32. Install GSP32 first to set up Wi-Fi.");
+    if (state === null) throw new Error("The device did not answer. Check that GSP32 is installed, then try again.");
     await scanForWifi();
     keepSession(true);
   } catch (err) {
@@ -3567,17 +3567,17 @@ async function startWifi(fresh) {
 // Flasher Version 115.10 (Gene's ESP32): Ctrl-C (twice at most) until GSP32-C shows its >>> prompt; no prompt is an
 //  error with the console way (see showWifiFallback)
 async function stopMainPy() {
-  wifiStatus.textContent = "Stopping main.py (Ctrl-C) so the board takes Wi-Fi setup...";
-  appendConsole("\n[Set Up Wi-Fi: Ctrl-C stops main.py so the board takes Wi-Fi setup]\n");
+  wifiStatus.textContent = "Stopping main.py (Ctrl-C) so the device takes Wi-Fi setup...";
+  appendConsole("\n[Set Up Wi-Fi: Ctrl-C stops main.py so the device takes Wi-Fi setup]\n");
   for (let i = 0; i < 2 && !board.repl; i++) {
     await writeBytes(new Uint8Array([0x03]));
     const end = Date.now() + 1500;
     while (!board.repl && Date.now() < end && portOpen()) await delay(100);
   }
   if (!board.repl) {
-    throw Object.assign(new Error("main.py did not stop (no >>> prompt after Ctrl-C), so the board can't take Wi-Fi setup."), { fallback: true });
+    throw Object.assign(new Error("main.py did not stop (no >>> prompt after Ctrl-C), so the device can't take Wi-Fi setup."), { fallback: true });
   }
-  wifiStatus.textContent = "main.py stopped. Asking the board...";
+  wifiStatus.textContent = "main.py stopped. Asking the device...";
 }
 
 // Flasher Version 115.10 (Gene's ESP32): the console way to set Wi-Fi, under the Wi-Fi step when the list is empty or
@@ -3621,7 +3621,7 @@ async function scanForWifi() {
   //  older answer the scan with an empty list until a network is set: their Wi-Fi radio is off until then)
   const empty = board.kind === "gspc"
     ? "No networks found (GSP32-C lists networks once Wi-Fi was set). Type your network name, then click Connect."
-    : "No networks found. Type your network name, or move the board closer to the router and click Scan Again.";
+    : "No networks found. Type your network name, or move the device closer to the router and click Scan Again.";
   wifiStatus.textContent = networks.length ? "Pick your network, then click Connect." : empty;
   if (!networks.length) showWifiFallback(true);
   syncWifiConnect();
@@ -3678,11 +3678,11 @@ async function connectWifi() {
     setBusy(false);
     setFolded(wifiError, true);
     wifiError.textContent = err.code === "quiet"
-      ? "The board stopped listening for Wi-Fi setup. Click Scan Again, then try again."
+      ? "The device stopped listening for Wi-Fi setup. Click Scan Again, then try again."
       : err.code === 3
       ? "Could not connect: the password may be wrong. Check it and try again."
       // Flasher Version 115.12: a wrong password often ends here too (no answer in time), so it is named first
-      : "Could not connect. Check the password and try again. If it is right, move the board closer to the router.";
+      : "Could not connect. Check the password and try again. If it is right, move the device closer to the router.";
     wifiStatus.textContent = "Pick your network, then click Connect.";
     setStatus(wifiError.textContent, "error");
     modalWait("");
@@ -3725,7 +3725,7 @@ function finishWifi(url) {
   setFolded(wifiWait, false);
   const ip = url ? new URL(url).hostname : "";
   if (!ip) {
-    showError("The board did not report its address. The console below shows what it printed.", "prep");
+    showError("The device did not report its address. The console below shows what it printed.", "prep");
     return;
   }
   board.ip = ip;
@@ -3739,7 +3739,7 @@ function finishWifi(url) {
   link.target = "_blank";
   link.rel = "noopener";
   link.textContent = "http://" + ip + "/";
-  ready.append("Your board is ready. Open ", link, " in a browser on the same network to use GSP32, or click Open Web UI.");
+  ready.append("Your device is ready. Open ", link, " in a browser on the same network to use GSP32, or click Open Web UI.");
   // Version 43.2 (Gene): a space after "Wi-Fi Connected!" (copied or read aloud, the lines no longer run together)
   boardStatus.append(" ", ready);
   onImprov = null;
@@ -3932,7 +3932,7 @@ connectBtn.addEventListener("click", guard(async () => {
   }
   await probeBoardOnConnect({ guided, resume: "probe" });
 }));
-const PLAIN_CONNECT_TEXT = "\n[Connected. The board keeps running (no restart); its chip and flash are read when you click Install.]\n";
+const PLAIN_CONNECT_TEXT = "\n[Connected. The device keeps running (no restart); its chip and flash are read when you click Install.]\n";
 function showStartError(text) {
   const line = $("start-error");
   if (!line) return;

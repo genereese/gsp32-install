@@ -106,7 +106,7 @@ with sync_playwright() as p:
     pg.wait_for_timeout(500)
     check("unplug: Checking is gone", pg.evaluate("document.getElementById('check-wait').hidden"))
     check("unplug: Set Up Wi-Fi Instead", shown(pg, "#usb-guide-wifi") and pg.inner_text("#usb-guide-wifi").strip() == "Set Up Wi-Fi Instead")
-    check("unplug: not the plain disconnect line", "USB port changed" in pg.inner_text("#console-out") and "The board disconnected" not in pg.inner_text("#console-out"))
+    check("unplug: not the plain disconnect line", "USB port changed" in pg.inner_text("#console-out") and "The device disconnected" not in pg.inner_text("#console-out"))
     check("unplug: no page errors", not errors, errors)
     pg.close()
 

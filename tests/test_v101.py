@@ -49,9 +49,9 @@ with sync_playwright() as p:
     pg.click("#board-disconnect"); pg.wait_for_timeout(1200)
     after = pg.evaluate("window.__log")[n:]
     closes = [l for l in after if l.startswith("close")]
-    check("click: the port closes once, the board left running (DTR and RTS off)", closes == ["close dtr=false rts=false"], after)
+    check("click: the port closes once, the device left running (DTR and RTS off)", closes == ["close dtr=false rts=false"], after)
     check("no reset into the bootloader on the way out", not any("rts=true" in l for l in after), after)
-    check("the board card and console fold away, Get Started back", not shown(pg, "#console") and not shown(pg, "#console-card") and shown(pg, "#connect") and pg.evaluate("!document.getElementById('connect').disabled"))
+    check("the device card and console fold away, Get Started back", not shown(pg, "#console") and not shown(pg, "#console-card") and shown(pg, "#connect") and pg.evaluate("!document.getElementById('connect').disabled"))
     check("no error in the console log", "Something went wrong" not in pg.inner_text("#console-out"))
     pg.click("#connect"); pg.wait_for_timeout(1200)
     check("Get Started connects again (the row's Disconnect back)", shown(pg, "#board-disconnect"))

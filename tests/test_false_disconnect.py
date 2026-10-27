@@ -10,7 +10,7 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 fails = 0
 def check(name, ok, extra=""):
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, extra)
-DISC = "The board disconnected"
+DISC = "The device disconnected"
 def page(b, init=""):
     pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js")
     pg.add_init_script("window.__ver = '47'; window.__ets = true;" + init)
@@ -27,7 +27,7 @@ with sync_playwright() as p:
     # 1. Noise while the console reads (an Arduino sketch, a reset): reading goes on
     pg, errors = page(b)
     pg.click("#connect"); pg.wait_for_timeout(4500)
-    check("connected (115.10: no probe, the board left running)", pg.evaluate("!document.getElementById('disconnect').disabled") and "keeps running" in out(pg), out(pg)[-200:])
+    check("connected (115.10: no probe, the device left running)", pg.evaluate("!document.getElementById('disconnect').disabled") and "keeps running" in out(pg), out(pg)[-200:])
     for name in ("FramingError", "BreakError", "ParityError", "BufferOverrunError"):
         pg.evaluate("n => window.__serialError(n)", name); pg.wait_for_timeout(150)
         pg.evaluate("n => window.__say('after ' + n + '\\r\\n')", name); pg.wait_for_timeout(250)

@@ -23,11 +23,11 @@ with sync_playwright() as p:
     sr = pg.locator(".steps-row").bounding_box(); cb = pg.locator("#connect").bounding_box()
     check("steps and Get Started centered", abs((sr["x"] + sr["width"] / 2) - 640) < 30 and abs((cb["x"] + cb["width"] / 2) - (sr["x"] + sr["width"] / 2)) < 4 and cb["y"] - (sr["y"] + sr["height"]) >= 20, str((sr, cb)))
     check("no dialog, one Get Started button, steps row", pg.locator("dialog[open]").count() == 0 and pg.inner_text("#connect") == "Get Started"
-          and "1. Plug In Your Board" in pg.inner_text(".steps-row"))  # V50: the compact hero drops the browser line (the browser card still warns)
-    check("board card hidden at first", not pg.is_visible("#console"))
+          and "1. Plug In Your Device" in pg.inner_text(".steps-row"))  # V50: the compact hero drops the browser line (the browser card still warns)
+    check("device card hidden at first", not pg.is_visible("#console"))
     hb = pg.locator("#installer .hint").bounding_box()
     check("V50: Get Started just below the steps", cb["y"] - (sr["y"] + sr["height"]) >= 16, str(cb["y"] - sr["y"] - sr["height"]))
-    check("Don't See Your Board? link under Get Started, checklist folded", pg.is_visible("#no-board") and not pg.is_visible("#board-help")
+    check("Don't See Your Device? link under Get Started, checklist folded", pg.is_visible("#no-board") and not pg.is_visible("#board-help")
           and pg.locator("#no-board").bounding_box()["y"] > pg.locator("#connect").bounding_box()["y"])
     pg.click("#no-board"); pg.wait_for_timeout(400)
     t = pg.inner_text("#board-help")
@@ -45,15 +45,15 @@ with sync_playwright() as p:
     pg.wait_for_function("() => document.getElementById('installer').hidden || getComputedStyle(document.getElementById('installer')).display === 'none'", timeout=5000)
     pg.wait_for_timeout(800)
     check("steps fold away, card open with console", not pg.is_visible("#installer") and pg.is_visible("#console") and pg.is_visible("#console-out"))
-    check("board card and console are two separate cards", pg.evaluate("(() => { const a = document.getElementById('console'), c = document.getElementById('console-card'); return a.classList.contains('card') && c.classList.contains('card') && !a.contains(c) && c.contains(document.getElementById('console-out')) && !a.contains(document.getElementById('console-out')); })()"))
+    check("device card and console are two separate cards", pg.evaluate("(() => { const a = document.getElementById('console'), c = document.getElementById('console-card'); return a.classList.contains('card') && c.classList.contains('card') && !a.contains(c) && c.contains(document.getElementById('console-out')) && !a.contains(document.getElementById('console-out')); })()"))
     def fill():
         return pg.evaluate("[Math.round(innerHeight - document.getElementById('console-card').getBoundingClientRect().bottom - scrollY), document.getElementById('console-out').offsetHeight]")
     # Flasher Version 105: 600 ms to settle after a resize (200 ms was too short with eight suites at once on the box)
     f1 = fill(); pg.set_viewport_size({"width": 1280, "height": 700}); pg.wait_for_timeout(600); f2 = fill(); pg.set_viewport_size({"width": 1280, "height": 380}); pg.wait_for_timeout(600); f3 = fill()
     pg.set_viewport_size({"width": 1280, "height": 900}); pg.wait_for_timeout(200)
     check("console fills the window height, resizes, at least 200px", 8 <= f1[0] <= 24 and 8 <= f2[0] <= 24 and f2[1] < f1[1] and f3[1] == 200, str((f1, f2, f3)))
-    check("115.10 connect: no probe (no restart): plain board name, USB bridge known, no RESET",
-          pg.inner_text("#board-chip") == "ESP32 Board" and "CP2102" in pg.inner_text("#board-details") and "RESET" not in pg.evaluate("window.__log"),
+    check("115.10 connect: no probe (no restart): plain device name, USB bridge known, no RESET",
+          pg.inner_text("#board-chip") == "ESP32 Device" and "CP2102" in pg.inner_text("#board-details") and "RESET" not in pg.evaluate("window.__log"),
           pg.inner_text("#board-chip") + " | " + pg.inner_text("#board-details"))
     # After probe the board is reset to run; mock GSP32 firmware boots — Install stays available
     pg.wait_for_timeout(800)
@@ -109,7 +109,7 @@ with sync_playwright() as p:
           and pg.evaluate("getComputedStyle(document.getElementById('board-mac')).textTransform") == "uppercase", pg.inner_text("#board-chip") + " / " + pg.inner_text("#board-mac"))
     # Version 43.1: the version is known from the install, so nothing is asked; nothing ever reaches a board that is not listening
     # Flasher Version 104: three-digit versions (106) count too
-    check("V43.1: version known after install, no Improv to a quiet board", re.search(r"Version (4[3-9]|[5-9][0-9]|[1-9][0-9]{2})", pg.inner_text("#board-state")) is not None and pg.evaluate("window.__badPk") == 0, pg.inner_text("#board-state"))
+    check("V43.1: version known after install, no Improv to a quiet device", re.search(r"Version (4[3-9]|[5-9][0-9]|[1-9][0-9]{2})", pg.inner_text("#board-state")) is not None and pg.evaluate("window.__badPk") == 0, pg.inner_text("#board-state"))
     pg.screenshot(path=shots + "/03-choice.png")
     pg.click("#wifi-setup"); pg.wait_for_timeout(600)
     check("Wi-Fi wizard scrolled into view", pg.evaluate("(() => { const r = document.getElementById('wizard').getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; })()"))
@@ -119,7 +119,7 @@ with sync_playwright() as p:
     pg.wait_for_function("document.getElementById('wizard').hidden", timeout=30000); pg.wait_for_timeout(400)
     pg.screenshot(path=shots + "/04-done.png")
     check("V39: status line: Wi-Fi Connected! + ready text with the address as a link", pg.inner_text("#board-status").startswith("Wi-Fi Connected!")
-          and "Your board is ready. Open http://192.168.2.77/ in a browser on the same network to use GSP32, or click Open Web UI." in pg.inner_text("#board-status")
+          and "Your device is ready. Open http://192.168.2.77/ in a browser on the same network to use GSP32, or click Open Web UI." in pg.inner_text("#board-status")
           and pg.get_attribute("#board-status a", "href") == "http://192.168.2.77/", pg.inner_text("#board-status"))
     st = pg.locator("#board-state a")
     check("badge address is a link", st.count() == 1 and st.get_attribute("href") == "http://192.168.2.77/" and "Web UI: http://192.168.2.77/" in pg.inner_text("#board-state .web-line"), pg.inner_text("#board-state"))
@@ -187,14 +187,14 @@ with sync_playwright() as p:
     check("V42.1: red warning text directly under the progress bar, slim", f.is_visible("#flash-warn") and 0 <= wb["y"] - (pb["y"] + pb["height"]) <= 8
           and wb["height"] <= 24 and f.inner_text("#flash-warn") == "Changing Tabs Could Cause the Install to Fail", str((pb, wb)))
     check("V38: page title and text folded away with the steps", not f.is_visible("#page-head"))
-    check("V39: green board box folded away while installing", not f.is_visible("#board-state"))
+    check("V39: green device box folded away while installing", not f.is_visible("#board-state"))
     check("V42.1 warning: red text, no fill or border, centered", f.evaluate("(() => { const c = getComputedStyle(document.getElementById('flash-warn')); return [c.backgroundColor, c.color, c.borderTopWidth, c.textAlign]; })()") == ["rgba(0, 0, 0, 0)", "rgb(198, 40, 40)", "0px", "center"])
     check("during install: Wi-Fi and Web UI buttons hidden (not greyed)", not f.is_visible("#wifi-setup") and not f.is_visible("#console-webui"))
     check("old inline warning gone", f.locator(".danger-note").count() == 0 and f.inner_text("body").count("Changing Tabs Could") == 1)
     f.screenshot(path=shots + "/08-banner.png")
     f.wait_for_function("document.getElementById('wizard').hidden", timeout=20000); f.wait_for_timeout(500)
     check("warning slides away after flash", not f.is_visible("#flash-warn"))
-    f.wait_for_timeout(800); check("V39: green board box back after the install", f.is_visible("#board-state"))
+    f.wait_for_timeout(800); check("V39: green device box back after the install", f.is_visible("#board-state"))
     f.wait_for_timeout(1000); check("Set Up Wi-Fi back after the install", f.is_visible("#wifi-setup"))
     k = b.new_page(viewport={"width": 1280, "height": 900}); k.add_init_script(path=here + "/mock.js")
     k.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
@@ -208,7 +208,7 @@ with sync_playwright() as p:
     mid = (k.inner_text("#board-status") if k.is_visible("#board-status") else "", k.is_visible("#install-btn"))
     k.wait_for_timeout(2500)
     end = (k.is_visible("#board-status"), k.is_visible("#install-btn"), k.is_visible("#wifi-setup"))
-    check("boot banner: 'Board Booting Up...', buttons stay (V42.1), status gone at the ready marker", mid == ("Board Booting Up...", True) and end == (False, True, True), str((mid, end)))
+    check("boot banner: 'Board Booting Up...', buttons stay (V42.1), status gone at the ready marker", mid == ("Device Booting Up...", True) and end == (False, True, True), str((mid, end)))
     m = b.new_page(viewport={"width": 390, "height": 800}, is_mobile=True, user_agent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile")
     m.goto(U); check("mobile blocked", m.is_visible("#browser-block")); m.screenshot(path=shots + "/07-mobile.png")
     b.close()

@@ -56,7 +56,7 @@ with sync_playwright() as p:
     check("three mismatches: not reported as installed", "Installed" not in pg.inner_text("#board-status") and "[Installed" not in out(pg))
     check("three mismatches: clear error (cable, port)", "did not match what was sent" in body and "cable" in body and "port" in body, pg.inner_text("#error-text") if pg.is_visible("#error-text") else "")
     note = pg.evaluate("JSON.parse(localStorage.getItem('gsp32.flash'))")
-    check("three mismatches: the install note stays (board needs Recover)", bool(note) and note.get("writing") is True)
+    check("three mismatches: the install note stays (device needs Recover)", bool(note) and note.get("writing") is True)
     pg.click("[data-step=error] [data-action=close]"); pg.wait_for_timeout(600)
     check("three mismatches: Recover/Install GSP32 offered", pg.inner_text("#install-btn") == "Recover/Install GSP32", pg.inner_text("#install-btn"))
     check("no page errors (a3)", not errors, str(errors)); pg.close()

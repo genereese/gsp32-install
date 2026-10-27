@@ -107,14 +107,14 @@ with sync_playwright() as p:
         check(name + ": no page errors", not old["errors"] and not new["errors"], (old["errors"], new["errors"]))
         if name.startswith("clean, seed 1") or name == "clean install, seed 1":
             sig = [t for t in new["connect"] if "ignal" in str(t)]
-            check("115.10 connect: no DTR/RTS set, no board-info probe (the board keeps running)",
-                  not sig and "Reading board info" not in new["connect_console"] and "keeps running" in new["connect_console"], (sig[:6], new["connect_console"][:300]))
+            check("115.10 connect: no DTR/RTS set, no board-info probe (the device keeps running)",
+                  not sig and "Reading device info" not in new["connect_console"] and "keeps running" in new["connect_console"], (sig[:6], new["connect_console"][:300]))
         if name.startswith("clean"):
             check(name + ": installed and verified", "Installed" in new["status"] and "verified (MD5 matches)" in new["console"], new["status"])
     # The gate: 105's bounded write only on native USB
     slow = {"faults": {"slowWrite": 8, "slowMs": 9000}}
     native = run(b, APP_NOW, usb=NATIVE, **slow)
-    check("0x303A port: the 9 s write is bounded and aborted (Flasher 105's fix runs)", "Writing to the board took longer than" in native["console"] and "writer.abort" in native["trace"], native["console"][-400:])
+    check("0x303A port: the 9 s write is bounded and aborted (Flasher 105's fix runs)", "Writing to the device took longer than" in native["console"] and "writer.abort" in native["trace"], native["console"][-400:])
     classic = run(b, APP_NOW, **slow)
     check("classic port: the same write is waited for, as in 104 (no abort)", "took longer" not in classic["console"] and "writer.abort" not in classic["trace"] and "Installed" in classic["status"], classic["console"][-300:])
     b.close()

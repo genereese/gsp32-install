@@ -30,7 +30,7 @@ with sync_playwright() as p:
     check("wizard after the status line, countdown and warning", pg.evaluate("""(() => { const w = document.getElementById('wizard');
       return ['board-status', 'check-wait', 'flash-warn'].every(id => document.getElementById(id).compareDocumentPosition(w) & Node.DOCUMENT_POSITION_FOLLOWING); })()"""))
     pg.click("#connect"); pg.wait_for_timeout(100); boot(pg); pg.wait_for_timeout(1500)
-    check("board check (Checking for GSP32... N s): status pulses", pg.evaluate(PULSE) == "erase-pulse", pg.evaluate(PULSE))
+    check("device check (Checking for GSP32... N s): status pulses", pg.evaluate(PULSE) == "erase-pulse", pg.evaluate(PULSE))
     pg.wait_for_timeout(2500)
     pg.wait_for_selector("#wifi-setup:not([hidden])", timeout=8000)
     pg.evaluate(SEEN); pg.click("#wifi-setup")
@@ -43,13 +43,13 @@ with sync_playwright() as p:
     check("connecting: status pulses", pg.evaluate(PULSE) == "erase-pulse", pg.evaluate(PULSE))
     pg.wait_for_function("document.getElementById('wizard').hidden", timeout=30000); pg.wait_for_timeout(300)
     text = pg.evaluate("document.getElementById('board-status').textContent")
-    check("connected: space after 'Wi-Fi Connected!'", text.startswith("Wi-Fi Connected! Your board"), text[:40])
+    check("connected: space after 'Wi-Fi Connected!'", text.startswith("Wi-Fi Connected! Your device"), text[:40])
     link = pg.evaluate("(() => { const a = document.querySelector('#board-status a'); return a && [a.href, a.target, a.rel, a.textContent]; })()")
     check("connected: address is a link, new tab", link == ["http://192.168.2.77/", "_blank", "noopener", "http://192.168.2.77/"], link)
     check("connected: no pulse", not pg.evaluate(PULSE))
     boot(pg); pg.wait_for_timeout(5000)
     link2 = pg.evaluate("(() => { const a = document.querySelector('#board-status a'); return a && a.href; })()")
-    check("after a board restart: link and space kept", link2 == "http://192.168.2.77/" and "Connected! Your" in pg.evaluate("document.getElementById('board-status').textContent"), link2)
+    check("after a device restart: link and space kept", link2 == "http://192.168.2.77/" and "Connected! Your" in pg.evaluate("document.getElementById('board-status').textContent"), link2)
     pg.close()
 
     # 3. Older firmware (no Listening line) on a board with Wi-Fi: named promptly, not 'did not answer'
@@ -60,7 +60,7 @@ with sync_playwright() as p:
     pg.wait_for_function("document.getElementById('board-status').textContent.includes('older GSP32')", timeout=25000)
     took = time.time() - started
     status = pg.inner_text("#board-status")
-    check("old firmware: says so within 20 s", took < 20 and status == "This board runs an older GSP32. Install Version 43.1 or newer to change Wi-Fi here.", "%.1f s %s" % (took, status))
+    check("old firmware: says so within 20 s", took < 20 and status == "This device runs an older GSP32. Install Version 43.1 or newer to change Wi-Fi here.", "%.1f s %s" % (took, status))
     check("old firmware: nothing sent to it", pg.evaluate("window.__pk") == 0, pg.evaluate("window.__pk"))
     pg.close()
 

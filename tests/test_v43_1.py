@@ -30,8 +30,8 @@ with sync_playwright() as p:
     pg.wait_for_timeout(8000)
     # Version 81: the connect probe (Version 80) resets the board; it then boots and says "GSP32 Improv Ready", so one
     #  version request is fine. Still never a bare Ctrl-C, and Improv only once the board listens
-    check("running board: no Ctrl-C byte, at most the one Improv version ask in 8 s", pg.evaluate("window.__ctrlc") == 0 and pg.evaluate("window.__pk") <= 1 and pg.evaluate("window.__badPk") == 0, pg.evaluate("[window.__pk, window.__ctrlc, window.__badPk]"))
-    check("running board: still GSP32 Found", "GSP32" in pg.inner_text("#board-state"), pg.inner_text("#board-state"))
+    check("running device: no Ctrl-C byte, at most the one Improv version ask in 8 s", pg.evaluate("window.__ctrlc") == 0 and pg.evaluate("window.__pk") <= 1 and pg.evaluate("window.__badPk") == 0, pg.evaluate("[window.__pk, window.__ctrlc, window.__badPk]"))
+    check("running device: still GSP32 Found", "GSP32" in pg.inner_text("#board-state"), pg.inner_text("#board-state"))
     pg.close()
 
     # 2. A boot with the listening line: the version is asked exactly once, the board answers, no retries
@@ -61,12 +61,12 @@ with sync_playwright() as p:
     pg.wait_for_selector("#wifi-setup:not([hidden])", timeout=5000)
     pg.click("#wifi-setup")
     pg.wait_for_selector("#wifi-list li", timeout=30000)
-    check("change Wi-Fi: board restarted first", resets(pg) == before + 1, resets(pg) - before)
+    check("change Wi-Fi: device restarted first", resets(pg) == before + 1, resets(pg) - before)
     check("change Wi-Fi: networks listed", pg.locator("#wifi-list li").count() == 2, pg.inner_text("#wifi-status"))
     pg.click("#wifi-list li:first-child label"); pg.click("#wifi-connect"); pg.fill("#wifi-password", SECRET); pg.click("#wifi-modal-connect")
     pg.wait_for_function("document.getElementById('wizard').hidden", timeout=30000); pg.wait_for_timeout(300)
     check("change Wi-Fi: Wi-Fi Connected!", pg.inner_text("#board-status").startswith("Wi-Fi Connected!"), pg.inner_text("#board-status"))
-    check("change Wi-Fi: no packet reached a quiet board", pg.evaluate("window.__badPk") == 0, pg.evaluate("window.__badPk"))
+    check("change Wi-Fi: no packet reached a quiet device", pg.evaluate("window.__badPk") == 0, pg.evaluate("window.__badPk"))
     check("change Wi-Fi: password not in the console", SECRET not in pg.inner_text("#console-out"))
     pg.close()
 
@@ -82,7 +82,7 @@ with sync_playwright() as p:
     pg.click("#wifi-list li:first-child label"); pg.click("#wifi-connect"); pg.fill("#wifi-password", SECRET); pg.click("#wifi-modal-connect")
     pg.wait_for_timeout(4000)
     check("session gone: nothing sent after Off", pg.evaluate("window.__pk") == pk and SECRET not in (pg.evaluate("window.__badBytes") or ""), pg.evaluate("[window.__pk, %d]" % pk))
-    check("session gone: says the board stopped listening", "stopped listening" in pg.inner_text("#wifi-error"), pg.inner_text("#wifi-error"))
+    check("session gone: says the device stopped listening", "stopped listening" in pg.inner_text("#wifi-error"), pg.inner_text("#wifi-error"))
     check("session gone: password not in the console", SECRET not in pg.inner_text("#console-out"))
     pg.close()
 

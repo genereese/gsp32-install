@@ -11,7 +11,7 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 fails = 0
 def check(name, ok, extra=""):
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, extra)
-GARBLED = "The connection to the board kept getting garbled. Try a different (short) USB cable, plugged straight into the computer."
+GARBLED = "The connection to the device kept getting garbled. Try a different (short) USB cable, plugged straight into the computer."
 RAW = "Invalid head of packet (0xff): Possible serial noise or corruption."
 SLOW_MANIFEST = "const f0 = window.fetch; window.fetch = (u, o) => (window.__slowManifest && /manifest/.test(String(u))) ? new Promise(r => setTimeout(r, 1500)).then(() => f0(u, o)) : f0(u, o);"
 def page(b, init=""):

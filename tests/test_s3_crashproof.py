@@ -4,7 +4,7 @@
 #  mock port here behaves like Chromium's (close() order, locked streams, a write that never ends once the device stops
 #  taking data, a close that never ends with a write in flight) and counts a new readable asked for in that state as
 #  the crash. Checked: the stalled connect (esptool-js going on in the background), a write that stalls mid-install, and
-#  Get Started on the stuck port: never the crash, writes bounded, esptool-js stopped, "Unplug and Replug the Board"
+#  Get Started on the stuck port: never the crash, writes bounded, esptool-js stopped, "Unplug and Replug the Device"
 import os, http.server, threading, functools, time
 from playwright.sync_api import sync_playwright
 here = os.path.dirname(os.path.abspath(__file__)); site = os.path.dirname(here)
@@ -16,7 +16,7 @@ APP = os.environ.get("APP_JS")  # another app.js to check against (the crash its
 fails = 0
 def check(name, ok, extra=""):
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, "" if ok else str(extra)[:600])
-STUCK = "The USB connection got stuck. Unplug and replug the board, then click Get Started."
+STUCK = "The USB connection got stuck. Unplug and replug the device, then click Get Started."
 # Chromium-like port on top of mock.js's board
 CHROMIUM = """(() => {
   const p = window.__port;
@@ -86,7 +86,7 @@ with sync_playwright() as p:
     #    port with its input full): the connect runs out of time while esptool-js still writes in the background
     pg, errors = page(b, "window.__syncWrites = true; window.__stallAfter = 300;")
     t0 = time.time(); pg.click("#connect")
-    done = wait_js(pg, "() => document.getElementById('console-out').innerText.includes('Could not read the board yet') || document.getElementById('console-out').innerText.includes('got stuck') || window.__badMessage > 0", 30000)
+    done = wait_js(pg, "() => document.getElementById('console-out').innerText.includes('Could not read the device yet') || document.getElementById('console-out').innerText.includes('got stuck') || window.__badMessage > 0", 30000)
     check("1. the connect ends within its time limit", done and time.time() - t0 < 20, round(time.time() - t0, 1))
     stop_writes = js(pg, "window.__writes"); stop_log = len(js(pg, "window.__log"))
     wait_js(pg, "() => document.getElementById('console-out').innerText.includes('stuck') || window.__badMessage > 0", 12000)
@@ -97,7 +97,7 @@ with sync_playwright() as p:
     check("1. esptool-js stopped: nothing written after the time limit", js(pg, "window.__writes") == stop_writes, (stop_writes, js(pg, "window.__writes")))
     check("1. esptool-js stopped: its writes fail at once", not [l for l in log[stop_log:] if l == "sync write"], log[stop_log:][-6:])
     check("1. the stuck port: Unplug and Replug, once", out(pg).count(STUCK) == 1, out(pg)[-400:])
-    check("1. status says Unplug and Replug the Board", "Unplug and Replug the Board" in pg.inner_text("#board-status"), pg.inner_text("#board-status"))
+    check("1. status says Unplug and Replug the Device", "Unplug and Replug the Device" in pg.inner_text("#board-status"), pg.inner_text("#board-status"))
     check("1. Get Started is back", start_visible(pg))
     check("1. no page errors", not errors, errors)
     gets = js(pg, "window.__readableGets")
@@ -117,7 +117,7 @@ with sync_playwright() as p:
     pg.wait_for_timeout(1500)
     log = js(pg, "window.__log")
     check("3. the write stalled", "write stalls" in log, log[-10:])
-    check("3. the write ran out of time (bounded)", "Writing to the board took longer than" in out(pg), out(pg)[-500:])
+    check("3. the write ran out of time (bounded)", "Writing to the device took longer than" in out(pg), out(pg)[-500:])
     check("3. never the crash", js(pg, "window.__badMessage") == 0 and "ABORT CLOSE" not in log, log[-10:])
     check("3. the install stops with the unplug line", STUCK in out(pg) and "Installed" not in pg.inner_text("#board-status"), out(pg)[-300:])
     check("3. Get Started is back", start_visible(pg))

@@ -38,10 +38,10 @@ with sync_playwright() as p:
     pg.wait_for_function("document.getElementById('wizard').hidden", timeout=30000); pg.wait_for_timeout(300)
     check("V125: Wi-Fi Connected! with the address", pg.inner_text("#board-status").startswith("Wi-Fi Connected!") and "192.168.2.77" in pg.inner_text("#board-status"),
           pg.inner_text("#board-status"))
-    check("V125: Open Web UI goes to the board", pg.get_attribute("#console-webui", "href") == "http://192.168.2.77/" and pg.is_visible("#console-webui"),
+    check("V125: Open Web UI goes to the device", pg.get_attribute("#console-webui", "href") == "http://192.168.2.77/" and pg.is_visible("#console-webui"),
           pg.get_attribute("#console-webui", "href"))
     check("V125: still GSP32-C (an Improv answer doesn't make it GSP32)", "GSP32-C Beta V125" in pg.inner_text("#board-state"), pg.inner_text("#board-state"))
-    check("V125: every packet reached a listening board", pg.evaluate("window.__badPk") == 0, pg.evaluate("window.__badPk"))
+    check("V125: every packet reached a listening device", pg.evaluate("window.__badPk") == 0, pg.evaluate("window.__badPk"))
     check("V125: password not in the console", SECRET not in pg.inner_text("#console-out"))
     pg.close()
     # 2. GSP32-C V120 (no Improv): the prompt hint, no Set Up Wi-Fi, nothing sent

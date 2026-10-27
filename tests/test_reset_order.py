@@ -27,7 +27,7 @@ def page(b, init=""):
     return pg, errors
 def out(pg): return pg.inner_text("#console-out")
 def resets(pg): return [l[6:] for l in pg.evaluate("window.__log") if l.startswith("reset ")]
-def connect(pg, wait_for="Board:", ms=15000):
+def connect(pg, wait_for="Device:", ms=15000):
     pg.click("#connect")
     try: pg.wait_for_function("t => document.getElementById('console-out').innerText.includes(t)", arg=wait_for, timeout=ms)
     except Exception: pass
@@ -40,7 +40,7 @@ with sync_playwright() as p:
     pg, errors = page(b, plat("Linux x86_64") + "window.__resetWorks = 'classic';")
     connect(pg)
     check("Linux: tight first, then classic", resets(pg) == ["tight", "classic"], str(resets(pg)))
-    check("Linux: connected", "Board:" in out(pg), out(pg)[-160:])
+    check("Linux: connected", "Device:" in out(pg), out(pg)[-160:])
     log = pg.evaluate("window.__log")
     sig = [l for l in log if l.startswith("signals")]
     # tight: reset (DTR off, RTS on) straight to download (DTR on, RTS off) in one setSignals, no state in between

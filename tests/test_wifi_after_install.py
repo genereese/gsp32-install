@@ -24,7 +24,7 @@ fails = 0
 def check(name, ok, extra=""):
     # The mock board prints MicroPython's KeyboardInterrupt traceback (after Ctrl-C); echoed console text must not read
     #  as this suite's own Python traceback to tools/flasher_tests.py
-    extra = str(extra).replace("Traceback (most recent call last)", "Traceback (board output)")
+    extra = str(extra).replace("Traceback (most recent call last)", "Traceback (device output)")
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, extra); sys.stdout.flush()
 # What Gene's ESP32 printed after the install (V125, first boot, nothing saved): ROM lines, the first-boot setup, the
 #  GSP32-C line, the no-Wi-Fi line and main.py, no >>> prompt (main.py runs). Third item: whether it takes Improv
@@ -78,8 +78,8 @@ with sync_playwright() as p:
     c = console_ok(pg)
     check("install done: console box takes typing (not Busy ...)", not c["dis"] and not c["send"] and c["ph"] != "Busy ...", c)
     check("install done: Set Up Wi-Fi shown and enabled", pg.is_visible("#wifi-setup") and pg.is_enabled("#wifi-setup"))
-    check("install done: the page writes to the port again (typed text reaches the board)", typed_reaches_board(pg, "print('hi')"))
-    check("install done: the page reads the port again (board text shows)", board_text_shows(pg, "board-says-hello-1"))
+    check("install done: the page writes to the port again (typed text reaches the device)", typed_reaches_board(pg, "print('hi')"))
+    check("install done: the page reads the port again (device text shows)", board_text_shows(pg, "board-says-hello-1"))
     # Set Up Wi-Fi: visible at once, then the empty scan is no dead end
     pg.click("#wifi-setup"); pg.wait_for_timeout(150)
     ws = pg.inner_text("#board-status")
@@ -97,22 +97,22 @@ with sync_playwright() as p:
           pg.inner_text("#wifi-note"))
     check("Set Up Wi-Fi: Ctrl-C sent first (main.py ran in the foreground)", pg.evaluate("window.__ctrl1 || 0") >= 1 and "[Set Up Wi-Fi: Ctrl-C stops main.py" in pg.inner_text("#console-out"),
           pg.evaluate("window.__ctrl1 || 0"))
-    check("Set Up Wi-Fi: Improv reached the board only after the prompt", pg.evaluate("window.__mainPy") is False and ">>>" in pg.inner_text("#console-out"))
-    check("empty scan: gsp.wifi(...) typed in the console reaches the board", typed_reaches_board(pg, "import gsp; gsp.wifi('HomeNet', 'x')"))
+    check("Set Up Wi-Fi: Improv reached the device only after the prompt", pg.evaluate("window.__mainPy") is False and ">>>" in pg.inner_text("#console-out"))
+    check("empty scan: gsp.wifi(...) typed in the console reaches the device", typed_reaches_board(pg, "import gsp; gsp.wifi('HomeNet', 'x')"))
     # The REPL echoes the line: the password is shown as dots (console and Copy Log); the board's own hint stays
     pg.evaluate("window.__say(%s)" % json.dumps(">>> import gsp; gsp.wifi('HomeNet', '%s')\r\n" % SECRET)); pg.wait_for_timeout(400)
     out = pg.inner_text("#console-out")
     check("echoed gsp.wifi(...): password masked in the console", SECRET not in out and "gsp.wifi('HomeNet', '\u2022" in out, out[-300:])
-    check("echoed gsp.wifi(...): the board's hint gsp.wifi('name', 'password') kept", "gsp.wifi('name', 'password')" in out)
+    check("echoed gsp.wifi(...): the device's hint gsp.wifi('name', 'password') kept", "gsp.wifi('name', 'password')" in out)
     pg.fill("#wifi-name", "HomeNet")
     check("typed name: Connect enabled", pg.is_enabled("#wifi-connect"))
     pg.click("#wifi-connect"); pg.fill("#wifi-password", SECRET); pg.click("#wifi-modal-connect")
     pg.wait_for_function("document.getElementById('wizard').hidden", timeout=30000); pg.wait_for_timeout(300)
     st = pg.inner_text("#board-status")
     check("typed name: Wi-Fi Connected! with the address", st.startswith("Wi-Fi Connected!") and "192.168.2.77" in st, st)
-    check("typed name: the board got that name", pg.evaluate("window.__wifiSet") == "HomeNet", pg.evaluate("window.__wifiSet"))
+    check("typed name: the device got that name", pg.evaluate("window.__wifiSet") == "HomeNet", pg.evaluate("window.__wifiSet"))
     check("typed name: password not in the console", SECRET not in pg.inner_text("#console-out"))
-    # 115.12 (Gene's ESP32, real board): after Wi-Fi Connected! the console takes typing and Ctrl-C again (the wait's
+    # 115.12 (Gene's ESP32, real device): after Wi-Fi Connected! the console takes typing and Ctrl-C again (the wait's
     #  "wifi" reason was left behind, so the box said "Busy ..." until the page was reloaded)
     pg.wait_for_timeout(500)
     ci = pg.evaluate("({dis: document.getElementById('console-in').disabled, ph: document.getElementById('console-in').placeholder, cc: document.getElementById('ctrl-c').disabled})")
@@ -133,7 +133,7 @@ with sync_playwright() as p:
     check("no answer: Try Again offered", pg.is_visible("#wifi-rescan") and pg.inner_text("#wifi-rescan") == "Try Again")
     c = console_ok(pg)
     check("no answer: console box usable", not c["dis"] and c["ph"] != "Busy ...", c)
-    check("no answer: typed text reaches the board", typed_reaches_board(pg, "gsp.wifi('a', 'b')"))
+    check("no answer: typed text reaches the device", typed_reaches_board(pg, "gsp.wifi('a', 'b')"))
     check("flow 2: no page errors", not pg.__errors, pg.__errors)
     pg.close()
 
@@ -168,14 +168,14 @@ with sync_playwright() as p:
     pg.wait_for_timeout(700)
     h1 = pg.evaluate("document.getElementById('boot-hint').getBoundingClientRect().height")
     hint = pg.inner_text("#boot-hint")
-    check("connect failed: error says the board did not answer", "did not answer" in pg.inner_text("#board-status"), pg.inner_text("#board-status"))
+    check("connect failed: error says the device did not answer", "did not answer" in pg.inner_text("#board-status"), pg.inner_text("#board-status"))
     check("connect failed: Resets tried listed in the console", "[Resets tried:" in pg.inner_text("#console-out"))
     check("connect failed: hold-BOOT note shown", pg.is_visible("#boot-hint") and "Hold BOOT" in hint and "keep holding BOOT until" in hint, hint)
     check("hold-BOOT note folds in (grows, no jump)", h0 < h1 and h1 > 20, (h0, h1))
     c = console_ok(pg)
     check("install failed: console box usable", not c["dis"] and c["ph"] != "Busy ...", c)
     check("install failed: the page reads the port again", board_text_shows(pg, "board-says-hello-3"))
-    check("install failed: typed text reaches the board", typed_reaches_board(pg, "help()"))
+    check("install failed: typed text reaches the device", typed_reaches_board(pg, "help()"))
     # Try Again with BOOT held (the reset now works): the install goes through and the note is gone
     pg.evaluate("window.__resetWorks = undefined; window.__bootScript = window.__geneBoot")
     pg.click("#error-retry"); pg.wait_for_timeout(400)
@@ -192,12 +192,12 @@ with sync_playwright() as p:
     pg.click("#connect"); pg.wait_for_timeout(2500)
     log = pg.evaluate("window.__log"); out = pg.inner_text("#console-out")
     check("connect: no restart (no RESET, no signals set)", "RESET" not in log and not any(x.startswith("signals") for x in log), log)
-    check("connect: no Reading board info, says the board keeps running", "Reading board info" not in out and "keeps running (no restart)" in out, out[-300:])
+    check("connect: no Reading device info, says the device keeps running", "Reading device info" not in out and "keeps running (no restart)" in out, out[-300:])
     st = pg.inner_text("#board-state")
-    check("connect: board shown as left running, Set Up Wi-Fi and Install offered", "Left Running" in st and pg.is_visible("#wifi-setup") and pg.is_enabled("#install-btn"), st)
+    check("connect: device shown as left running, Set Up Wi-Fi and Install offered", "Left Running" in st and pg.is_visible("#wifi-setup") and pg.is_enabled("#install-btn"), st)
     c = console_ok(pg)
     check("connect: console usable", not c["dis"] and c["ph"] != "Busy ...", c)
-    check("connect: the board's output shows", board_text_shows(pg, "running-board-says-hi"))
+    check("connect: the device's output shows", board_text_shows(pg, "running-board-says-hi"))
     pg.click("#disconnect"); pg.wait_for_timeout(800)
     log = pg.evaluate("window.__log")
     sig = [x for x in log if x.startswith("signals")]
@@ -220,9 +220,9 @@ with sync_playwright() as p:
     # Set Up Wi-Fi on the quiet board restarts it once (the click asks for it), then GSP32-C is found and asked
     pg.click("#wifi-setup")
     pg.wait_for_function("/GSP32-C Beta V125 Found/.test(document.getElementById('board-state').innerText)", timeout=30000)
-    check("Set Up Wi-Fi on a quiet board: restarted once, GSP32-C found", pg.evaluate("window.__log").count("RESET") == 1, pg.evaluate("window.__log"))
+    check("Set Up Wi-Fi on a quiet device: restarted once, GSP32-C found", pg.evaluate("window.__log").count("RESET") == 1, pg.evaluate("window.__log"))
     pg.wait_for_function("/Pick your network|HomeNet/.test(document.getElementById('wizard').innerText)", timeout=30000)
-    check("Set Up Wi-Fi on a quiet board: networks listed", "HomeNet" in pg.inner_text("#wifi-list"))
+    check("Set Up Wi-Fi on a quiet device: networks listed", "HomeNet" in pg.inner_text("#wifi-list"))
     lines = [x[0] for x in pg.evaluate("window.__lines")]
     # The restart the click asks for is the one EN pulse; back to run state RTS first (both lines off, never DTR first)
     check("115.11 Set Up Wi-Fi restart: one EN pulse, run state RTS off then DTR off", pg.evaluate("window.__enPulses") == 1

@@ -1,5 +1,5 @@
 # Flasher Version 114.2 (Gene's ESP32-C3 on COM13, GSP32 114.1 in safe mode): after a native-USB install the page sent
-#  esptool's SYNC frame to a board that had already started; GSP32's REPL took the port and ate the first Set Up Wi-Fi.
+#  esptool's SYNC frame to a device that had already started; GSP32's REPL took the port and ate the first Set Up Wi-Fi.
 #  1. look first: a C3 whose boot output is already there gets no SYNC frame; the first Set Up Wi-Fi lists networks
 #  2. a board with no output yet when the check runs is still asked (SYNC sent), as before
 #  3. "GSP32 Improv Listening" after the REPL prompt is not believed: Set Up Wi-Fi restarts the board first
@@ -57,7 +57,7 @@ with sync_playwright() as p:
     check("c3: install finishes", installed(pg), pg.inner_text("#board-status"))
     check("c3: GSP32 found (its boot lines were kept)", wait_js(pg, "() => /GSP32/.test(document.getElementById('board-state').innerText) && !/No GSP32/.test(document.getElementById('board-state').innerText)", 12000), pg.inner_text("#board-state"))
     pg.wait_for_timeout(2500)
-    check("c3: no SYNC frame sent to the started board", pg.evaluate("window.__syncs || 0") == before, pg.evaluate("[window.__syncs, window.__log.slice(-12)]"))
+    check("c3: no SYNC frame sent to the started device", pg.evaluate("window.__syncs || 0") == before, pg.evaluate("[window.__syncs, window.__log.slice(-12)]"))
     check("c3: no Tap RST guide", pg.evaluate("document.getElementById('usb-guide').hidden"))
     pg.wait_for_selector("#wifi-setup:not([hidden])", timeout=8000)
     r0 = resets(pg)
@@ -75,7 +75,7 @@ with sync_playwright() as p:
     pg.click("#install-btn"); pg.check("#erase-ok"); pg.click("#start-install")
     check("late: install finishes", installed(pg), pg.inner_text("#board-status"))
     pg.wait_for_timeout(2500)
-    check("late: a board with no output yet is still asked (SYNC sent)", pg.evaluate("window.__syncs || 0") > before, pg.evaluate("[window.__syncs, window.__log.slice(-6)]"))
+    check("late: a device with no output yet is still asked (SYNC sent)", pg.evaluate("window.__syncs || 0") > before, pg.evaluate("[window.__syncs, window.__log.slice(-6)]"))
     check("late: GSP32 found afterwards", wait_js(pg, "() => /GSP32 Version/.test(document.getElementById('board-state').innerText)", 20000), pg.inner_text("#board-state"))
     check("late: no page errors", not errors, errors)
     pg.close()
@@ -92,7 +92,7 @@ with sync_playwright() as p:
     r0 = resets(pg)
     pg.click("#wifi-setup")
     check("repl: the first Set Up Wi-Fi lists networks", networks(pg, 30000), pg.inner_text("#wifi-status"))
-    check("repl: the board was restarted first", resets(pg) > r0, resets(pg) - r0)
+    check("repl: the device was restarted first", resets(pg) > r0, resets(pg) - r0)
     check("repl: no packet went to the REPL", pg.evaluate("window.__badPk") == 0, pg.evaluate("window.__badBytes"))
     check("repl: no page errors", not errors, errors)
     pg.close()

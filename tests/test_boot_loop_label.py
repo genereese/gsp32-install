@@ -40,7 +40,7 @@ with sync_playwright() as p:
     pg.click("#connect"); pg.wait_for_timeout(1500)
     loop(pg, BANNER)
     ll = last_line(pg)
-    check("restart loop, no image error: 'The board keeps restarting:'", ll.startswith("[The board keeps restarting: ") and "no bootable" not in ll, ll)
+    check("restart loop, no image error: 'The device keeps restarting:'", ll.startswith("[The device keeps restarting: ") and "no bootable" not in ll, ll)
     check("it still names the button", ("Click " + RECOVER + ".]") in ll, ll)
     label_ok("restart loop", pg)
     check("no page errors (a)", not errors, str(errors)); pg.close()
@@ -49,7 +49,7 @@ with sync_playwright() as p:
     pg.click("#connect"); pg.wait_for_timeout(1500)
     loop(pg, BANNER + IMAGE_ERR)
     ll = last_line(pg)
-    check("restart loop with esp_image errors: '(no bootable firmware)'", ll.startswith("[The board keeps restarting (no bootable firmware): "), ll)
+    check("restart loop with esp_image errors: '(no bootable firmware)'", ll.startswith("[The device keeps restarting (no bootable firmware): "), ll)
     label_ok("loop with image errors", pg); pg.close()
     # A new Get Started forgets it (the next board's loop is judged afresh)
     # (b) Every broken state, wide and narrow window

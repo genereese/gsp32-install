@@ -14,10 +14,10 @@ def check(name, ok, extra=""):
 
 js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
-check("cache-bust 115.13-fw114.2-b115-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117", html.count("?v=115.13-fw114.2-b115-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117") == 3)
-check("probeBoardOnConnect present", "probeBoardOnConnect" in js and "Reading board info" in js)
+check("cache-bust 115.14-fw114.2-b115-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117", html.count("?v=115.14-fw114.2-b115-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117") == 3)
+check("probeBoardOnConnect present", "probeBoardOnConnect" in js and "Reading device info" in js)
 check("Install disabled when compatIssue", "board.compatIssue" in js and "install.disabled" in js)
-check("footer Flasher Version 115.13", "Flasher Version 115.13" in html)
+check("footer Flasher Version 115.14", "Flasher Version 115.14" in html)
 
 def connect_only(b, chip=None, flash_kb=None, usb=None):
     pg = b.new_page(viewport={"width": 1100, "height": 900})
@@ -49,7 +49,7 @@ def connect_only(b, chip=None, flash_kb=None, usb=None):
     pg.wait_for_function("""() => {
       const log = (window.__log || []).join('\\n');
       const body = document.body.innerText;
-      return body.includes('Reading board info') || (document.getElementById('board-details') && !document.getElementById('board-details').hidden);
+      return body.includes('Reading device info') || (document.getElementById('board-details') && !document.getElementById('board-details').hidden);
     }""", timeout=15000)
     pg.wait_for_timeout(500)  # let finally/release finish
     # Ensure install not mid-busy
