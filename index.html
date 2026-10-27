@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=115.18-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117">
+  <link rel="stylesheet" href="style.css?v=115.19-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -115,19 +115,16 @@
             </select>
           </label>
           <p class="version-line">Installs <b id="version">Loading...</b></p>
-          <!-- Flasher 115.18 (Gene): short, current GSP32-C note (was the V118-V127.3 changelog) -->
+          <!-- Flasher 115.19 (Gene): short GSP32-C note; the flasher only does clean installs -->
           <p class="hint gspc-note" id="gspc-note" hidden>GSP32-C is GSP32 rebuilt with its system side in C: same web UI,
             much faster. After installing, click <b>Set Up Wi-Fi</b> here, then open the device's web page; the first
-            visit sets its password (or choose no password). On a device already running GSP32-C,
-            <b>Update (Keep Files)</b> installs the new version and keeps your files, settings, Wi-Fi and paired devices.</p>
-          <p class="hint update-hint" id="update-hint" hidden><b>Already running GSP32-C?</b> Use <b>Update (Keep Files)</b>:
-            it writes only the new firmware and keeps your files, pages, settings, Wi-Fi, password and paired devices. It
-            first checks that the device's storage layout matches; if it does not, it stops without changing anything.</p>
+            visit sets its password (or choose no password). Installing erases the device, so to keep your files, open
+            the <b>Backup</b> app in GSP32 first (Download Backup) and restore it after.</p>
           <!-- Flasher 115.17 (Gene's ESP32): this device needed BOOT held last time (remembered in this browser, app.js) -->
           <div id="boot-remembered" class="warn-box boot-hint" role="note" hidden>
             <b>Hold BOOT for this device.</b>
             Last time this device<span id="boot-remembered-which"></span> did not switch into install mode by itself.
-            Hold the <b>BOOT</b> button, click <b>Erase and Install</b> (or <b>Update</b>), and let go when progress starts.
+            Hold the <b>BOOT</b> button, click <b>Erase and Install</b>, and let go when progress starts.
             The flasher still tries on its own first.
             <br><button id="boot-forget" class="link-button" type="button">It installs without BOOT now: forget this</button>
           </div>
@@ -137,7 +134,6 @@
           </label>
           <div class="actions end">
             <button type="button" data-action="close">Cancel</button>
-            <button id="start-update" type="button" hidden disabled>Update (Keep Files)</button>
             <button id="start-install" class="primary" type="button" disabled>Erase and Install</button>
           </div>
           <p id="start-note" class="hint small button-note" hidden>Tick the box above to continue.</p>
@@ -180,7 +176,7 @@
           <div id="boot-hint" class="warn-box boot-hint" role="note" hidden>
             <b>Hold BOOT to install.</b>
             This device did not switch into install mode by itself (common on classic ESP32 devices, whose auto-reset is weak).
-            Hold the <b>BOOT</b> button on the device, click <b>Try Again</b> and then <b>Erase and Install</b> (or <b>Update</b>), and let go when progress starts (keep holding BOOT until <b>Erasing</b> or <b>Writing</b> shows).
+            Hold the <b>BOOT</b> button on the device, click <b>Try Again</b> and then <b>Erase and Install</b>, and let go when progress starts (keep holding BOOT until <b>Erasing</b> or <b>Writing</b> shows).
             The flasher remembers this device and reminds you next time.
           </div>
           <ul class="hint">
@@ -270,9 +266,9 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=115.18-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117"></script>
+  <script type="module" src="app.js?v=115.19-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117"></script>
   <p class="security-note hint">GSP32 devices serve their web interface over plain HTTP (not encrypted). It's meant for your home network: never forward it to the internet.</p>
-  <p class="flasher-version hint">Flasher Version 115.18 · <a href="LICENSE.txt">License</a></p>
-  <script src="tour.js?v=115.18-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117" defer></script>
+  <p class="flasher-version hint">Flasher Version 115.19 · <a href="LICENSE.txt">License</a></p>
+  <script src="tour.js?v=115.19-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117" defer></script>
 </body>
 </html>

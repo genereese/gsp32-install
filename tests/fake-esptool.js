@@ -116,15 +116,6 @@ export class ESPLoader {
     if ((addr >>> 0) === 0x600080b0 && value === 0 && this.__wdtArmed && window.__onWdt) setTimeout(() => window.__onWdt(), 10);
   }
   async readReg(addr) { window.__log.push("readReg 0x" + (addr >>> 0).toString(16)); if (window.__wdtSilent) return new Promise(() => {}); return 0; }
-  // Flasher Version 115.16: the stub's flash read (Update reads the partition table at 0x8000 first). __devTable is
-  //  what the device holds there (bytes); none reads as erased flash. __readFail makes the read fail
-  async readFlash(addr, size) {
-    window.__log.push("read flash 0x" + (addr >>> 0).toString(16) + " " + size);
-    if (window.__readFail) throw new Error("Failed to read memory: 1");
-    const out = new Uint8Array(size).fill(0xff);
-    if (window.__devTable) out.set(Uint8Array.from(window.__devTable).slice(0, size));
-    return out;
-  }
   async writeFlash(o) {
     window.__log.push("write at " + this.baudrate);
     if ((window.__failWriteAt || []).includes(this.baudrate)) {

@@ -1,5 +1,5 @@
 """ GSP32-C Beta V127.3 (Gene, 2026-10-27): V127.3 is its own Release pick in the GSP32-C group, first, with V127.2 to
-V117 kept as they were. It shows its name and the GSP32-C note (which now mentions Update (Keep Files)) and
+V117 kept as they were. It shows its name and the GSP32-C note (short since 115.18; since 115.19 it points to the Backup app instead of Update) and
 installs manifest-gspc-v127.3.json from firmware/gspc-v127.3/ (its builds say improv: true); the GSP32 picks are unchanged """
 import sys, http.server, threading, functools, os, json, re
 from playwright.sync_api import sync_playwright
@@ -50,7 +50,7 @@ with sync_playwright() as p:
         check(key + ": Installs " + name, pg.text_content("#version").strip() == name, pg.text_content("#version"))
         check(key + ": GSP32-C note shown", pg.is_visible("#gspc-note"))
     note = pg.text_content("#gspc-note")
-    check("note: the short current GSP32-C note (Flasher 115.18)", "system side in C" in note and "Set Up Wi-Fi" in note and "Update (Keep Files)" in note and "V117" not in note and "gsp.wifi" not in note and len(note) < 500, note)
+    check("note: the short current GSP32-C note (Flasher 115.19: clean installs, Backup app)", "system side in C" in note and "Set Up Wi-Fi" in note and "Backup" in note and "Update" not in note and "V117" not in note and "gsp.wifi" not in note and len(note) < 500, note)
     pg.select_option("#release-channel", "stable"); pg.wait_for_timeout(300)
     check("back to Stable: note hidden", not pg.is_visible("#gspc-note"))
     # The pick that installs: tick, start, and see which manifest the page loads
