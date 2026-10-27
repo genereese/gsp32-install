@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=115.9-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117">
+  <link rel="stylesheet" href="style.css?v=115.10-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -139,6 +139,11 @@
           <h3>Installing GSP32</h3>
           <p id="flash-status" class="status-line">Connecting to the board...</p>
           <div class="progress"><div id="flash-bar" class="progress-bar"></div></div>
+          <!-- Flasher Version 115.10 (Gene's ESP32): the first connect did not reach download mode; folds in at once -->
+          <div id="boot-now" class="warn-box boot-hint boot-now" role="note" hidden>
+            <b>Hold BOOT now.</b>
+            This board did not switch into install mode by itself. Press and hold the <b>BOOT</b> button on the board while the flasher tries once more, and keep holding it until <b>Erasing the board</b> shows. Then let go.
+          </div>
         </div>
 
 
@@ -147,6 +152,8 @@
           <p id="wifi-status" class="status-line">Waiting for the board to start...</p>
           <div id="wifi-wait" class="progress indeterminate"><div class="progress-bar"></div></div>
           <ul id="wifi-list" class="nets"></ul>
+          <!-- Flasher Version 115.10 (Gene's ESP32): the console way to set Wi-Fi, when the list is empty or the board did not answer -->
+          <p id="wifi-fallback" class="hint small wifi-fallback" role="note" hidden></p>
           <div class="actions end">
             <button id="wifi-cancel" type="button" data-action="close">Cancel</button>
             <button id="wifi-rescan" type="button" hidden>Scan Again</button>
@@ -161,6 +168,12 @@
         <div class="step" data-step="error" hidden>
           <h3>Something Went Wrong</h3>
           <p id="error-text" class="error-line"></p>
+          <!-- Flasher Version 115.10 (Gene's ESP32): no reset style reached download mode; folds in under the error -->
+          <div id="boot-hint" class="warn-box boot-hint" role="note" hidden>
+            <b>Hold BOOT to install.</b>
+            This board did not switch into install mode by itself (common on classic ESP32 boards, whose auto-reset is weak).
+            Press and hold the <b>BOOT</b> button on the board, click <b>Try Again</b> and then <b>Erase and Install</b>, and keep holding BOOT until <b>Erasing the board</b> shows. Then let go.
+          </div>
           <ul class="hint">
             <li>The console below shows what happened. Click Copy Log to share it.</li>
             <li>Unplug the board, plug it back in, and try again.</li>
@@ -248,9 +261,9 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=115.9-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117"></script>
+  <script type="module" src="app.js?v=115.10-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117"></script>
   <p class="security-note hint">GSP32 boards serve their web interface over plain HTTP (not encrypted). It's meant for your home network: never forward it to the internet.</p>
-  <p class="flasher-version hint">Flasher Version 115.9 · <a href="LICENSE.txt">License</a></p>
-  <script src="tour.js?v=115.9-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117" defer></script>
+  <p class="flasher-version hint">Flasher Version 115.10 · <a href="LICENSE.txt">License</a></p>
+  <script src="tour.js?v=115.10-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117" defer></script>
 </body>
 </html>

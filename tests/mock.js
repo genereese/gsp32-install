@@ -17,12 +17,18 @@
   window.__stopListening = () => { window.__listen = false; say("GSP32 Improv Off\r\n"); };
   function boot() {
     booted = false;
+    window.__mainPy = false;
     window.__listen = false;
     // A half-flashed board: the ROM finds no valid app and restarts about once a second, forever
     if (window.__bootLoop) {
       if (!window.__loopTimer) window.__loopTimer = setInterval(() => say("ets Jul 29 2019 12:21:46\r\n\r\nrst:0x10 (RTCWDT_RTC_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)\r\ninvalid header: 0xffffffff\r\n"), 900);
       return;
     }
+    // A scripted restart (window.__bootScript = [[ms, text, listen?], ...]): a real board's output, piece by piece
+    if (Array.isArray(window.__bootScript)) { for (const [ms, text, listen] of window.__bootScript) setTimeout(() => { booted = true; if (listen !== undefined) window.__listen = listen;
+      // Flasher Version 115.10: GSP32-C's main.py in the foreground: Improv packets go nowhere until Ctrl-C
+      if (/main\.py running/.test(text)) window.__mainPy = true;
+      say(text); }, ms); return; }
     if (window.__other) { setTimeout(() => say("rst:0x1 (POWERON_RESET)\r\nMicroPython v1.25.0 on 2025-04-15; Generic ESP32 module with ESP32\r\n>>> "), 300); return; }
     // GSP32-C (window.__gspc = "125"): its start-up line, then the prompt; from V121 it takes Improv packets at any time
     if (window.__gspc) { setTimeout(() => { booted = true; window.__listen = Number(window.__gspc) >= 121; say("rst:0x1 (POWERON_RESET)\r\n\r\nGSP32-C Beta V" + window.__gspc + " on ESP32 (2 cores), boot 1, reset: power on\r\n" + (window.__wifi ? "Wi-Fi: 192.168.2.77\r\n" : "") + "MicroPython v1.25.0 on 2026-10-26; GSP32-C with ESP32\r\n>>> "); }, 300); return; }
@@ -37,6 +43,13 @@
   function onWrite(bytes) {
     // Flasher Version 114.2: esptool's SYNC frame (command 0x08) counted; __onSync: what a started board does with it
     if (bytes[0] === 0xc0 && bytes[1] === 0x00 && bytes[2] === 0x08) { window.__syncs = (window.__syncs || 0) + 1; log.push("SYNC"); if (window.__onSync) window.__onSync(); return; }
+    window.__typed = (window.__typed || "") + String.fromCharCode(...bytes);
+    // Flasher Version 115.10: Ctrl-C alone stops main.py (unless __mainPyStuck): the traceback, then the prompt
+    if (bytes.length === 1 && bytes[0] === 3) window.__ctrl1 = (window.__ctrl1 || 0) + 1;
+    if (bytes.length === 1 && bytes[0] === 3 && window.__mainPy && !window.__mainPyStuck) {
+      window.__mainPy = false;
+      setTimeout(() => say("Traceback (most recent call last):\r\n  File \"main.py\", line 9, in <module>\r\nKeyboardInterrupt: \r\nMicroPython v1.25.0 on 2026-10-26; GSP32-C with ESP32\r\nType \"help()\" for more information.\r\n>>> "), 150);
+    }
     if (!buf.length && bytes[0] === 3) window.__ctrlc++;
     buf.push(...bytes);
     while (true) {
@@ -47,11 +60,13 @@
       window.__pk++;
       if (!window.__listen) { window.__badPk++; window.__badBytes = (window.__badBytes || "") + String.fromCharCode(...data); continue; }
       if (!booted || window.__other) continue;
+      if (window.__mainPy) { window.__blockedPk = (window.__blockedPk || 0) + 1; continue; }
       const cmd = data[0];
       if (cmd === 2) push(pkt(1, [state]));
       if (cmd === 3) { window.__info = (window.__info || 0) + 1; push(strs(3, window.__gspc ? ["GSP32-C", "Beta V" + window.__gspc, "ESP32", "gsp32c"] : ["GSP32", window.__ver || "1.0", "ESP32", "gsp32"])); }
-      if (cmd === 4) { if (!window.__noNets) { push(strs(4, ["HomeNet", "-50", "YES"])); push(strs(4, ["Cafe", "-80", "NO"])); } push(strs(4, [])); }
-      if (cmd === 1) { push(pkt(1, [3])); setTimeout(() => { window.__wifi = true; push(pkt(1, [4])); push(strs(1, ["http://192.168.2.77/"])); }, 400); }
+      if (cmd === 4) { const scan = () => { if (!window.__noNets) { push(strs(4, ["HomeNet", "-50", "YES"])); push(strs(4, ["Cafe", "-80", "NO"])); } push(strs(4, [])); };
+        if (window.__scanDelay) setTimeout(scan, window.__scanDelay); else scan(); }
+      if (cmd === 1) { window.__wifiSet = String.fromCharCode(...data.slice(3, 3 + data[2])); push(pkt(1, [3])); setTimeout(() => { window.__wifi = true; push(pkt(1, [4])); push(strs(1, ["http://192.168.2.77/"])); }, 400); }
     }
   }
   // Like Web Serial: after a reader cancels, port.readable is a fresh stream
@@ -61,7 +76,9 @@
     get readable() { if (!isOpen) return null; if (!rs) rs = fresh(); return rs; },
     writable: null,
     getInfo() { return window.__usb || { usbVendorId: 0x10c4, usbProductId: 0xea60 }; },
-    async open(o) { log.push("open " + o.baudRate); isOpen = true; rs = null; this.writable = new WritableStream({ write: (c) => onWrite(c) });
+    async open(o) { log.push("open " + o.baudRate); isOpen = true;
+      // Flasher Version 115.10: like Chromium on Windows, the port comes up with DTR and RTS both on (the board runs)
+      if (window.__openAsserts) { dtr = true; rts = true; log.push("opened dtr=true rts=true"); } rs = null; this.writable = new WritableStream({ write: (c) => onWrite(c) });
       // Version 62: a stray byte from the UART switch lands just after a reopen at a fast rate (Gene's first real install)
       // Version 63: a board that restarts on the reopen prints its boot output at its own rate: hundreds of bytes
       if (o.baudRate !== 115200) { window.__fastOpen = true; window.__signalsAfterFast = 0; } else window.__fastOpen = false;

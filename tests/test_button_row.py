@@ -14,7 +14,8 @@ def run(b, name, gap=0, fail=False, frozen=False, reboot=False):
     pg.goto("http://127.0.0.1:8768/index.html"); pg.wait_for_timeout(300); pg.click("#connect"); pg.wait_for_timeout(800)
     pg.click("#install-btn"); pg.check("#erase-ok"); pg.click("#start-install")
     if frozen: pg.evaluate(FROZEN)  # from here finish events are held back, like a background tab
-    pg.wait_for_timeout(gap + 2500)
+    # Flasher Version 115.10: a failed connect waits 2.5 s (hold BOOT now) before its second try
+    pg.wait_for_timeout(gap + 2500 + (3000 if fail else 0))
     if fail: pg.click("#wizard-close") if pg.is_visible("#wizard-close") else None
     if reboot:  # the board restarts again later (reset button / reconnect)
         pg.evaluate("window.__port.setSignals({requestToSend: true}).then(() => window.__port.setSignals({requestToSend: false}))"); pg.wait_for_timeout(gap + 2500)

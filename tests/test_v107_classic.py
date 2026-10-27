@@ -7,6 +7,9 @@
 #  mismatch, then the retry), a stray 0xff byte, a serial BreakError, a lost reply, a write that takes 9 s. Then the
 #  gate itself: the same 9 s write on a 0x303A port is bounded and aborted (Flasher 105's fix), on a classic port not.
 #  Small image (the first 512 KB of the ESP32 build) to keep it short. Faults land in the first install attempt.
+#  Flasher Version 115.10 (Gene's ESP32): the one wanted change on a classic port is the connect: no board-info probe
+#  and no DTR/RTS (a running board is not restarted). So the traces and console text are compared from the Install
+#  click on, and the connect itself is checked on its own (no port signals, no reset)
 import os, re, json, subprocess, http.server, threading, functools, socket, tempfile, time
 from playwright.sync_api import sync_playwright
 here = os.path.dirname(os.path.abspath(__file__)); site = os.path.dirname(here)
@@ -51,16 +54,24 @@ def run(b, app, seed=1, chunk=64, faults=None, usb=CLASSIC):
     try: pg.wait_for_function("() => /Board:|Could not/.test(document.getElementById('console-out').innerText)", timeout=25000)
     except Exception: pass
     pg.wait_for_timeout(1200)
+    at = pg.evaluate("window.__trace.length")
+    connect_trace = pg.evaluate("window.__trace.slice()")
     try:
         pg.click("#install-btn", timeout=5000); pg.check("#erase-ok"); pg.click("#start-install", timeout=5000)
         pg.wait_for_function("() => /Installed|did not finish/.test(document.getElementById('board-status').innerText)", timeout=120000)
     except Exception as e:
         errors.append("driver: " + str(e)[:200])
     pg.wait_for_timeout(2500)
-    out = {"console": pg.inner_text("#console-out"), "status": pg.inner_text("#board-status"),
-           "trace": pg.evaluate("window.__trace"), "stats": pg.evaluate("window.__emuStats"), "errors": errors}
+    con = pg.inner_text("#console-out")
+    out = {"console": con[con.rfind("[Installing"):] if "[Installing" in con else con, "status": pg.inner_text("#board-status"),
+           "trace": renum(pg.evaluate("window.__trace")[at:]), "connect": connect_trace, "connect_console": con, "stats": pg.evaluate("window.__emuStats"), "errors": errors}
     pg.close()
     return out
+
+def renum(trace):
+    # 115.10: from the Install click on, stream and reader numbers count from where the connect left them: renumbered
+    ids = {}
+    return [re.sub(r"#(\d+)", lambda m: "#%d" % ids.setdefault(m.group(1), len(ids) + 1), str(t)) for t in trace]
 
 def norm(text):
     # Times differ run to run (erase/write seconds); nothing else may
@@ -81,6 +92,10 @@ with sync_playwright() as p:
         check(name + ": same console text", norm(old["console"]) == norm(new["console"]), (norm(old["console"])[-300:], norm(new["console"])[-300:]))
         check(name + ": same result (%s)" % old["status"].split("|")[0].strip()[:40], norm(old["status"]) == norm(new["status"]), (old["status"], new["status"]))
         check(name + ": no page errors", not old["errors"] and not new["errors"], (old["errors"], new["errors"]))
+        if name.startswith("clean, seed 1") or name == "clean install, seed 1":
+            sig = [t for t in new["connect"] if "ignal" in str(t)]
+            check("115.10 connect: no DTR/RTS set, no board-info probe (the board keeps running)",
+                  not sig and "Reading board info" not in new["connect_console"] and "keeps running" in new["connect_console"], (sig[:6], new["connect_console"][:300]))
         if name.startswith("clean"):
             check(name + ": installed and verified", "Installed" in new["status"] and "verified (MD5 matches)" in new["console"], new["status"])
     # The gate: 105's bounded write only on native USB

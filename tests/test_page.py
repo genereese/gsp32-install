@@ -39,11 +39,8 @@ with sync_playwright() as p:
     check("cancelled picker opens the checklist", pg.is_visible("#board-help") and pg.is_visible("#connect"))
     pg.evaluate("(() => { navigator.serial.requestPort = window.__realReq; })()")
     pg.click("#connect")
-    # Version 80: connect probes the chip; wait for stats (or notice) before asserting
-    pg.wait_for_function("""() => {
-      const d = document.getElementById('board-details');
-      return d && !d.hidden && /MHz/.test(d.textContent || '');
-    }""", timeout=15000)
+    # Flasher Version 115.10 (Gene's ESP32): a classic board is connected without the probe (Install reads it)
+    pg.wait_for_function("() => /keeps running/.test(document.getElementById('console-out').innerText)", timeout=15000)
     pg.wait_for_timeout(200)
     check("steps fold away, card open with console", not pg.is_visible("#installer") and pg.is_visible("#console") and pg.is_visible("#console-out"))
     check("board card and console are two separate cards", pg.evaluate("(() => { const a = document.getElementById('console'), c = document.getElementById('console-card'); return a.classList.contains('card') && c.classList.contains('card') && !a.contains(c) && c.contains(document.getElementById('console-out')) && !a.contains(document.getElementById('console-out')); })()"))
@@ -53,9 +50,8 @@ with sync_playwright() as p:
     f1 = fill(); pg.set_viewport_size({"width": 1280, "height": 700}); pg.wait_for_timeout(600); f2 = fill(); pg.set_viewport_size({"width": 1280, "height": 380}); pg.wait_for_timeout(600); f3 = fill()
     pg.set_viewport_size({"width": 1280, "height": 900}); pg.wait_for_timeout(200)
     check("console fills the window height, resizes, at least 200px", 8 <= f1[0] <= 24 and 8 <= f2[0] <= 24 and f2[1] < f1[1] and f3[1] == 200, str((f1, f2, f3)))
-    check("V80 connect probe: chip, MAC, CPU MHz stats",
-          pg.inner_text("#board-chip").startswith("ESP32-D0WD-V3") and "F8:B3:B7:22:05:E8" in pg.inner_text("#board-mac")
-          and "240 MHz" in pg.inner_text("#board-details") and "Dual Core" in pg.inner_text("#board-details"),
+    check("115.10 connect: no probe (no restart): plain board name, USB bridge known, no RESET",
+          pg.inner_text("#board-chip") == "ESP32 Board" and "CP2102" in pg.inner_text("#board-details") and "RESET" not in pg.evaluate("window.__log"),
           pg.inner_text("#board-chip") + " | " + pg.inner_text("#board-details"))
     # After probe the board is reset to run; mock GSP32 firmware boots — Install stays available
     pg.wait_for_timeout(800)
@@ -161,7 +157,7 @@ with sync_playwright() as p:
     o.wait_for_function("""() => {
       const d = document.getElementById('board-details');
       const out = document.getElementById('console-out');
-      return (d && !d.hidden && d.textContent) || (out && /Reading board info|Could not read|Board:/.test(out.textContent||''));
+      return (d && !d.hidden && d.textContent) || (out && /Reading board info|Could not read|Board:|keeps running/.test(out.textContent||''));
     }""", timeout=15000)
     o.wait_for_timeout(400)
     o.click("#reset"); o.wait_for_timeout(21500)

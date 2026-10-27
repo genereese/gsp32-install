@@ -98,10 +98,11 @@ with sync_playwright() as p:
     pg, errors = page(b, "window.__openFailsOnce = true;")
     pg.evaluate("() => { const p = window.__port, o = p.open.bind(p); p.open = async (x) => { if (window.__openFailsOnce) { window.__openFailsOnce = false; throw new DOMException('The port is already open.', 'InvalidStateError'); } return o(x); }; }")
     pg.click("#connect"); pg.wait_for_timeout(2500)
-    check("stale port: opens on the second try and connects", not pg.is_disabled("#disconnect") and "Board:" in pg.inner_text("#console-out"), pg.inner_text("#console-out")[-150:])
+    check("stale port: opens on the second try and connects", not pg.is_disabled("#disconnect") and "keeps running" in pg.inner_text("#console-out"), pg.inner_text("#console-out")[-150:])
     check("stale port: no error line", not vis(pg, "#start-error")); pg.close()
     # 10. The port does not come back after the probe: the message, the port closed, Get Started back
-    pg, errors = page(b, "window.__failFlash = true;")
+    #  Flasher Version 115.10: a classic board is probed on connect only with an unfinished install on record (seeded)
+    pg, errors = page(b, "window.__failFlash = true;" + note_js({"mac": "00:00:00:00:00:01", "version": "92", "startedAt": 1, "writing": True}))
     pg.evaluate("() => { const p = window.__port, o = p.open.bind(p); let n = 0; p.open = async (x) => { if (++n > 1) throw new DOMException('Failed to open serial port.', 'NetworkError'); return o(x); }; }")
     pg.click("#connect"); pg.wait_for_timeout(4000)
     check("port lost after the probe: message", "The port closed while reading the board" in pg.inner_text("#console-out"), pg.inner_text("#console-out")[-200:])
@@ -109,7 +110,7 @@ with sync_playwright() as p:
     check("not connected: the greyed Install says why", vis(pg, "#actions-note") and "Click Get Started" in pg.inner_text("#actions-note"), pg.inner_text("#actions-note") if vis(pg, "#actions-note") else "")
     check("no page errors (10)", not errors, str(errors)); pg.close()
     # 11. While the probe reads the board (real esptool-js: the mock never syncs), greyed Install says why
-    pg, errors = page(b, "", fake=False)
+    pg, errors = page(b, note_js({"mac": "00:00:00:00:00:01", "version": "92", "startedAt": 1, "writing": True}), fake=False)
     pg.click("#connect"); pg.wait_for_timeout(1500)
     check("probe running: Install greyed with a reason", pg.is_disabled("#install-btn") and vis(pg, "#actions-note") and "Reading the board" in pg.inner_text("#actions-note"), pg.inner_text("#actions-note") if vis(pg, "#actions-note") else "")
     pg.wait_for_function("document.getElementById('console-out').innerText.includes('Could not read the board yet')", timeout=40000); pg.wait_for_timeout(1500)

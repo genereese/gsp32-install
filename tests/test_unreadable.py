@@ -31,7 +31,7 @@ with sync_playwright() as p:
     log = [l for l in pg.evaluate("window.__log") if isinstance(l, str)]
     opens = [l for l in log if l.startswith("open ")]
     # 1. After the board info the console listens at 115200 (esptool-js never changed the speed)
-    check("board info read", "[Board: ESP32-D0WD-V3, 4 MB flash]" in out(pg))
+    check("connected without a board-info read (115.10: Install reads it)", "keeps running (no restart)" in out(pg) and "[Board:" not in out(pg))
     check("every open at 115200, no baud change", opens and all(l == "open 115200" for l in opens) and not [l for l in log if l.startswith("change baud")], str(opens))
     check("console reads again after board info", pg.evaluate("window.__say('after info 115200\\r\\n')") is None and (pg.wait_for_timeout(300) or "after info 115200" in out(pg)))
     # 2. A 300 KB flood of garbled bytes: one updating line, a few hundred lines at most, the page responsive

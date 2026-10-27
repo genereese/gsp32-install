@@ -417,3 +417,11 @@ body.hero50 .start-go { flex-direction: column; gap: 6px; }
 #board-actions button, #board-actions .button { white-space: nowrap; flex-shrink: 0; }
 /* S3 native USB guide (warn-box like the compat notice): its buttons sit under the text */
 .usb-guide .actions { margin-top: var(--space-2); }
+
+/* Flasher Version 115.10 (Gene's ESP32): the typed network name (an empty scan), the console way to set Wi-Fi, and
+   the hold-BOOT note under an install error */
+.nets .net-typed input[type="text"] { flex: 1; min-width: 0; font: inherit; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--radius-control); }
+.wifi-fallback { margin: 0 0 12px; }
+.wifi-fallback code { white-space: nowrap; }
+.boot-hint { margin: 0 0 0.9rem; font-size: var(--text-sm); }
+.boot-now { margin: 0.9rem 0 0; }

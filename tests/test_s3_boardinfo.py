@@ -326,8 +326,9 @@ with sync_playwright() as p:
 
     # 7. Other bridges unchanged: a CP2102 board that can't be reset keeps the old line and no guide
     pg, errors = page(b, "window.__usb = { usbVendorId: 0x10c4, usbProductId: 0xea60 }; window.__chip = 'ESP32-D0WD-V3 (revision v3.1)'; window.__features = undefined; window.__resetWorks = 'none';")
-    pg.click("#connect"); wait_text(pg, "Install can try again", 20000); pg.wait_for_timeout(500)
-    check("CP2102: 'Install can try again', no guide", "Install can try again" in out(pg) and not shown(pg, "#usb-guide"), out(pg)[-300:])
+    # Flasher Version 115.10 (Gene's ESP32): a classic bridge is not read on a plain connect (the board keeps running)
+    pg.click("#connect"); wait_text(pg, "keeps running", 20000); pg.wait_for_timeout(500)
+    check("CP2102: connected without a board-info read, no guide", "keeps running" in out(pg) and "Reading board info" not in out(pg) and not shown(pg, "#usb-guide"), out(pg)[-300:])
     pg.evaluate("window.__lose('base')"); pg.wait_for_timeout(300)
     check("CP2102 unplug: the plain disconnect line", "The board disconnected" in out(pg) and not shown(pg, "#usb-guide"))
     check("no page errors (CP2102)", not errors, errors)

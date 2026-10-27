@@ -126,6 +126,9 @@ let lineWatchers = [];
 const board = { installed: false, kind: "unknown", readyAt: 0, bootAt: 0, ip: "", name: "", repl: false, chip: "", mac: "", version: "", asked: 0, listening: false };
 let otherTimer = null;
 let probing = false; // the connect probe (Reading board info) is running
+// Flasher Version 115.10 (Gene's ESP32): a classic port (USB-UART bridge) is opened without touching DTR and RTS (see
+//  pickPort and setRunState), and the board it was opened on was left running (no probe, so no restart)
+let plainOpen = false;
 // Fix (S3 native USB): the guide while shown, { kind: "boot" or "repick", resume: "probe", "install", "installed" or
 //  "wifi" }; a restart expected to move a native USB board to a new port, { resume, until }
 let usbGuide = null;
@@ -433,6 +436,7 @@ function trackBoard(line) {
     return;
   }
   if (/^rst:0x|^ets [A-Z][a-z]{2} /.test(line)) {
+    board.leftRunning = false;
     board.bootAt = Date.now();
     board.repl = false;
     board.listening = false;
@@ -544,13 +548,16 @@ function syncBoardUi() {
   const gsp32 = board.kind === "gsp32";
   // Flasher Version 115.9: GSP32-C from V121 sets up Wi-Fi here too (Improv), and gets the web UI button
   const wifiCapable = gsp32 || gspcImprov();
+  // Flasher Version 115.10 (Gene's ESP32): a classic board connected without a restart says nothing yet: Set Up Wi-Fi
+  //  is offered beside Install (it restarts the board, so GSP32 or GSP32-C shows itself, see startWifi)
+  const quiet = board.leftRunning && board.kind === "unknown";
   // Version 42.1: a half-finished install (boot loop, or the saved note of an install that never ended) offers Recover
   const broken = board.kind === "broken" || (!gsp32 && flashNoteMatches());
   // Version 92: a C3 with Stable picked can still open the install step, to choose Beta there
   install.disabled = !on || busy || !!(board.compatIssue && !board.compatIssue.betaOnly);
   install.textContent = broken ? RECOVER_LABEL : gsp32 ? "Reinstall GSP32" : "Install GSP32";
   // While installing, Wi-Fi and the web UI button are gone (not greyed); they come back after
-  setShown(setup, wifiCapable && !flashing);
+  setShown(setup, (wifiCapable || quiet) && !flashing);
   setup.disabled = !on || busy;
   const address = wifiCapable && board.ip ? "http://" + board.ip + "/" : "";
   web.href = address || "#";
@@ -597,7 +604,8 @@ function syncBoardUi() {
     : gspcImprov() ? "GSP32-C Beta V" + board.gspcVersion + " Found"
     : board.kind === "gspc" ? "GSP32-C Beta V" + board.gspcVersion + " Found (set Wi-Fi at its prompt: gsp.wifi('name', 'password'))"
     : board.installed ? "Installed, Restarting..."
-    : board.kind === "other" ? "No GSP32 Found" : "Checking the Board...";
+    : board.kind === "other" ? "No GSP32 Found"
+    : quiet ? "Board Connected (Left Running)" : "Checking the Board...";
   if (on && (gsp32 || gspcImprov()) && address && !board.note) {
     const link = document.createElement("a");
     link.href = address;
@@ -845,7 +853,27 @@ function releaseWakeLock() {
   wakeSentinel = null;
 }
 
+// Flasher Version 115.10 (Gene's ESP32): a classic board whose auto-reset never reaches download mode (it keeps
+//  starting its program through every reset style) installs with BOOT held: the note folds in under the error
+// Flasher Version 115.10 (Gene's ESP32): the same note in the install step, at the moment the first connect failed
+const BOOT_NOW_MS = 2500;
+function showBootNow(on) {
+  const note = $("boot-now");
+  if (note) setFolded(note, on);
+}
+function showBootHint(on) {
+  const hint = $("boot-hint");
+  if (!hint) return;
+  if (!on) {
+    hint.hidden = true;
+    return;
+  }
+  setFolded(hint, true);
+}
 function showError(message, retry) {
+  showBootHint(false);
+  const now = $("boot-now");
+  if (now) now.hidden = true;
   setBusy(false);
   setStatus(message, "error");
   retryStep = retry || "prep";
@@ -879,9 +907,15 @@ function paintConsole() {
   if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
   setTimeout(run, 100);
 }
+// Flasher Version 115.10 (Gene): the password in an echoed gsp.wifi('name', 'password') (or wifi(...)) line is shown as
+//  dots, in the console and in Copy Log ('password' itself, the board's own hint, stays)
+function maskWifi(text) {
+  return text.replace(/(\bwifi\(\s*(['"])[^'"\n]*\2\s*,\s*)(['"])([^'"\n]*)/g,
+    (all, head, q1, q2, secret) => (secret === "password" || !secret ? all : head + q2 + "\u2022\u2022\u2022\u2022\u2022\u2022"));
+}
 function consoleText(all) {
   const shown = all ? lines : lines.slice(-DOM_LINES);
-  let text = shown.join("\n") + (partial ? (shown.length ? "\n" : "") + partial : "");
+  let text = maskWifi(shown.join("\n") + (partial ? (shown.length ? "\n" : "") + partial : ""));
   if (gate.hidden) text += (text ? "\n" : "") + "[Board output isn't readable at 115200 (other firmware?): " + gate.bytes + " bytes hidden]";
   if (mutedLines) text += (text ? "\n" : "") + "[The board keeps restarting" + (board.noBootable ? " (no bootable firmware)" : "") + ": " + mutedLines + " lines of its restart output hidden. Click " + RECOVER_LABEL + ".]";
   return text;
@@ -1188,7 +1222,10 @@ function flasherWorking() {
   // Flasher Version 110: on native USB, Checking for GSP32 does not lock the console (wifi() works on the page).
   //  A classic port still locks it, as in Flasher 104
   if (waiting && nativeUsb(port) && statusWaits.size === 1 && statusWaits.has("check")) waiting = false;
-  return busy || waiting || step === "flash" || step === "wifi";
+  // Flasher Version 115.10 (Gene's ESP32): the Wi-Fi step no longer locks the console while it only waits for a pick
+  //  (a list, "No networks found", an error with Try Again): only while it talks to the board (busy). It locked the
+  //  console as long as the step was open, so after an empty scan gsp.wifi(...) could not be typed either
+  return busy || waiting || step === "flash";
 }
 
 function syncConsoleButtons() {
@@ -1207,8 +1244,21 @@ function syncConsoleButtons() {
 }
 
 async function setRunState() {
+  // Flasher Version 115.10 (Gene's ESP32): not while a classic port is being opened (pickPort): a plain connect leaves
+  //  DTR and RTS as the port came up. Chromium sets the two lines one after the other, DTR first, so from both on
+  //  (Windows opens a port that way) this call passed through DTR off with RTS on: EN low, a restart on every connect
+  if (plainOpen && port && !nativeUsb(port)) return;
   // DTR and RTS off together in one request: the board's EN and GPIO 0 lines both stay high (running)
   if (port) await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+}
+
+// Flasher Version 115.10 (Gene's ESP32: Disconnect dropped its Wi-Fi): the run state one line at a time, RTS first. RTS
+//  off first never pulls EN low (DTR on alone only holds GPIO 0 low, which a running board ignores); setRunState's
+//  single call goes DTR first, which from both on passes through a reset
+async function idleLines() {
+  if (!port) return;
+  await port.setSignals({ requestToSend: false });
+  await port.setSignals({ dataTerminalReady: false });
 }
 
 async function resetBoard() {
@@ -1462,7 +1512,13 @@ async function pickPort() {
     cancel.code = "cancel";
     throw cancel;
   }
-  await openPicked(selected);
+  // Flasher Version 115.10 (Gene's ESP32): a plain connect leaves DTR and RTS alone on a classic port (see setRunState)
+  plainOpen = true;
+  try {
+    await openPicked(selected);
+  } finally {
+    plainOpen = false;
+  }
   return port;
 }
 // Flasher Version 107: on a native-USB port (VID 0x303A) Flasher 105's openPicked; on any other port Flasher 104's, unchanged
@@ -2910,15 +2966,27 @@ async function install() {
         if (err && err.code === "stuck") throw err;
         // Version 61: one more try from a clean port, then a clear error with Retry
         appendConsole("[Connect did not answer (" + (err && err.message ? err.message : err) + "), trying once more]\n");
+        // Flasher Version 115.10 (Gene's ESP32): a weak auto-reset: the hold-BOOT note folds in now, and the second
+        //  try waits a moment so BOOT can be pressed before its resets
+        board.leftRunning = false;
+        showBootNow(true);
+        setProgress("Hold BOOT on the board now: trying once more...", 0, "Installing " + installName() + ": Hold BOOT Now...");
+        appendConsole("[Hold BOOT on the board now (keep holding until Erasing the board shows)]\n");
+        await delay(BOOT_NOW_MS);
+        setProgress("Connecting to the board (holding BOOT)...", 0, "Installing " + installName() + ": Connecting to the Board...");
         try {
           link = await connectLoader(terminal);
         } catch (again) {
           if (again && again.code === "stuck") throw again;
-          throw new Error("The board did not answer. Unplug it, plug it back in and click Try Again. If it still does not answer, hold the BOOT button while you click Try Again.");
+          // Flasher Version 115.10 (Gene's ESP32): no reset style put it into download mode (a weak auto-reset keeps
+          //  starting its program): the hold-BOOT note folds in under the error (see showBootHint)
+          throw Object.assign(new Error("The board did not answer. Unplug it, plug it back in and click Try Again. If it still does not answer, hold the BOOT button while you click Try Again."),
+            { bootHint: !nativeUsb(installPort) });
         }
       } finally {
         installConnecting = false;
       }
+      board.leftRunning = false;
       const chip = link.chip || board.chip || "";
       await readBoardExtras(link);
       syncBoardUi();
@@ -2954,6 +3022,7 @@ async function install() {
       // The whole chip is erased first: about 15 s for 4 MB, longer for an S3's 16 MB
       const eraseWords = family === "ESP32-S3" ? "about a minute" : "about 15 seconds";
       setProgress("Erasing the board (" + eraseWords + ")...", 0, "Installing " + installName() + ": Erasing the Board...", true);
+      showBootNow(false); // in download mode now: BOOT can be let go
       let lastPercent = -1;
       const started = Date.now();
       const timeLeft = makeTimeLeft();
@@ -3088,10 +3157,20 @@ async function install() {
     // Fix (write retries): the plain text alone; the raw esptool text is in the console
     if (err && err.plain) appendConsole("[The install did not finish: " + err.message + "]\n");
     showError(err && err.plain ? "The install did not finish. " + err.message : "The install did not finish: " + (err && err.message ? err.message : err), "prep");
+    if (err && err.bootHint) showBootHint(true);
     showActions(true);
   } finally {
     installEnding = false;
+    installConnecting = false;
+    // Flasher Version 115.10 (Gene): however the install ended, the port comes back to the page: its reader runs
+    //  again (esptool let go of it) and the console box takes typing (gsp.wifi(...)) once nothing else works
+    handBackPort();
   }
+  syncConsoleButtons();
+}
+// After an install (done, failed or stopped): the page reads the port again and the console box is unlocked
+function handBackPort() {
+  if (portOpen() && !reading && !usbGuide) startReading();
   syncConsoleButtons();
 }
 
@@ -3347,15 +3426,50 @@ function renderNetworks(networks) {
     item.append(label);
     wifiList.append(item);
   }
+  if (!networks.length) {
+    // Flasher Version 115.10: one row with a box for the name (its radio takes the typed name as its value)
+    const item = document.createElement("li");
+    const label = document.createElement("label");
+    label.className = "net-typed";
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "network";
+    radio.value = "";
+    radio.checked = true;
+    radio.dataset.open = "";
+    const typed = document.createElement("input");
+    typed.type = "text";
+    typed.id = "wifi-name";
+    typed.maxLength = 32;
+    typed.placeholder = "Network name (SSID)";
+    typed.autocomplete = "off";
+    typed.spellcheck = false;
+    typed.setAttribute("aria-label", "Network name");
+    typed.addEventListener("input", () => {
+      radio.value = typed.value.trim();
+      radio.checked = true;
+      syncWifiConnect();
+    });
+    typed.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && radio.value && !busy) {
+        event.preventDefault();
+        openWifiModal();
+      }
+    });
+    label.append(radio, typed);
+    item.append(label);
+    wifiList.append(item);
+  }
 }
 
 function syncWifiConnect() {
   const picked = wifiList.querySelector("input:checked");
-  wifiConnect.disabled = busy || !picked;
+  wifiConnect.disabled = busy || !picked || !picked.value;
   // Fix (recover flow): greyed Connect says why (the wait bar shows while busy)
   const note = $("wifi-note");
   if (note) {
-    note.textContent = !busy && !picked && wifiList.children.length ? "Pick your network above." : "";
+    note.textContent = busy || !wifiList.children.length ? ""
+      : !picked ? "Pick your network above." : !picked.value ? "Type your network name above." : "";
     note.hidden = !note.textContent;
   }
   wifiModalConnect.disabled = busy;
@@ -3371,10 +3485,12 @@ async function startWifi(fresh) {
   setTimeout(() => wizard.scrollIntoView({ behavior: motionOk() ? "smooth" : "auto", block: "nearest" }), motionOk() ? FOLD_MS : 0);
   setFolded(wifiError, false);
   setShown(wifiRescan, false);
+  showWifiFallback(false);
   wifiPassword.value = "";
   wifiList.replaceChildren();
   setFolded(wifiWait, true);
   setBusy(true);
+  wifiStatus.textContent = "Starting Wi-Fi setup...";
   syncWifiConnect();
   try {
     if (!portOpen()) await pickPort();
@@ -3398,6 +3514,9 @@ async function startWifi(fresh) {
       await waitListening(45000);
       if (!portOpen() && usbGuide) throw new Error("The board restarted on a new USB port. Pick it again (see the note above).");
     }
+    // Flasher Version 115.10 (Gene's ESP32): GSP32-C's main.py in the foreground keeps Improv (and the console) from
+    //  the board's Python until Ctrl-C: it is stopped first, and the >>> prompt waited for (see stopMainPy)
+    if (gspcImprov() && !board.repl && portOpen()) await stopMainPy();
     let state = board.listening ? await waitBoardReady(8000) : null;
     // Flasher Version 114.2 (Gene's C3): GSP32 that does not answer (its REPL had the port, or the listening ended) is
     //  restarted once and asked again, instead of the user having to click Try Again
@@ -3416,6 +3535,7 @@ async function startWifi(fresh) {
       if (!portOpen() && usbGuide) throw new Error("The board restarted on a new USB port. Pick it again (see the note above).");
       state = board.listening ? await waitBoardReady(8000) : null;
     }
+    if (state === null && gspcImprov()) throw Object.assign(new Error("The board did not answer Wi-Fi setup."), { fallback: true });
     if (state === null && board.oldFirmware) throw new Error("This board runs an older GSP32. Install Version 43.1 or newer to change Wi-Fi here.");
     if (state === null && board.kind === "other") throw new Error("This board does not run GSP32. Install GSP32 first to set up Wi-Fi.");
     if (state === null) throw new Error("The board did not answer. Check that GSP32 is installed, then try again.");
@@ -3424,11 +3544,46 @@ async function startWifi(fresh) {
   } catch (err) {
     setFolded(wifiWait, false);
     setBusy(false);
-    wifiStatus.textContent = err.message;
+    wifiStatus.textContent = err && err.message ? err.message : String(err);
     setShown(wifiRescan, true);
     wifiRescan.textContent = "Try Again";
+    // Flasher Version 115.10: GSP32-C takes its Wi-Fi at the console too: the way is shown with the error
+    if ((err && err.fallback) || board.kind === "gspc") showWifiFallback(true);
   }
   syncWifiConnect();
+}
+
+// Flasher Version 115.10 (Gene's ESP32): Ctrl-C (twice at most) until GSP32-C shows its >>> prompt; no prompt is an
+//  error with the console way (see showWifiFallback)
+async function stopMainPy() {
+  wifiStatus.textContent = "Stopping main.py (Ctrl-C) so the board takes Wi-Fi setup...";
+  appendConsole("\n[Set Up Wi-Fi: Ctrl-C stops main.py so the board takes Wi-Fi setup]\n");
+  for (let i = 0; i < 2 && !board.repl; i++) {
+    await writeBytes(new Uint8Array([0x03]));
+    const end = Date.now() + 1500;
+    while (!board.repl && Date.now() < end && portOpen()) await delay(100);
+  }
+  if (!board.repl) {
+    throw Object.assign(new Error("main.py did not stop (no >>> prompt after Ctrl-C), so the board can't take Wi-Fi setup."), { fallback: true });
+  }
+  wifiStatus.textContent = "main.py stopped. Asking the board...";
+}
+
+// Flasher Version 115.10 (Gene's ESP32): the console way to set Wi-Fi, under the Wi-Fi step when the list is empty or
+//  the board did not answer. GSP32-C: gsp.wifi(...) at its prompt (Send Ctrl-C first stops main.py)
+function showWifiFallback(on) {
+  const box = $("wifi-fallback");
+  if (!box) return;
+  if (on) {
+    const code = (text) => Object.assign(document.createElement("code"), { textContent: text });
+    if (board.kind === "gspc") {
+      box.replaceChildren("Or set it in the console below: click ", Object.assign(document.createElement("b"), { textContent: "Send Ctrl-C" }),
+        " (stops main.py), then type ", code("import gsp; gsp.wifi('name', 'password')"), " and press Enter.");
+    } else {
+      box.replaceChildren("Or set it in the console below: type ", code("wifi()"), " and press Enter.");
+    }
+  }
+  setFolded(box, on);
 }
 
 async function scanForWifi() {
@@ -3437,6 +3592,7 @@ async function scanForWifi() {
   setBusy(true);
   setFolded(wifiWait, true);
   setShown(wifiRescan, false);
+  showWifiFallback(false);
   wifiStatus.textContent = "Looking for Wi-Fi networks...";
   syncWifiConnect();
   let networks = [];
@@ -3450,15 +3606,23 @@ async function scanForWifi() {
   renderNetworks(networks);
   setShown(wifiRescan, true);
   wifiRescan.textContent = "Scan Again";
-  wifiStatus.textContent = networks.length
-    ? "Pick your network, then click Connect."
-    : "No networks found. Move the board closer to the router, then click Scan Again.";
+  // Flasher Version 115.10 (Gene's ESP32): an empty list is no dead end: the name can be typed (GSP32-C V125 and
+  //  older answer the scan with an empty list until a network is set: their Wi-Fi radio is off until then)
+  const empty = board.kind === "gspc"
+    ? "No networks found (GSP32-C lists networks once Wi-Fi was set). Type your network name, then click Connect."
+    : "No networks found. Type your network name, or move the board closer to the router and click Scan Again.";
+  wifiStatus.textContent = networks.length ? "Pick your network, then click Connect." : empty;
+  if (!networks.length) showWifiFallback(true);
   syncWifiConnect();
+  if (!networks.length) {
+    const typed = $("wifi-name");
+    if (typed) typed.focus();
+  }
 }
 
 async function connectWifi() {
   const picked = wifiList.querySelector("input:checked");
-  if (!picked || busy) return;
+  if (!picked || !picked.value || busy) return;
   const name = textEncoder.encode(picked.value);
   const secret = textEncoder.encode(wifiPassword.value);
   setFolded(wifiError, false);
@@ -3527,7 +3691,7 @@ function modalWait(text) {
 
 function openWifiModal() {
   const picked = wifiList.querySelector("input:checked");
-  if (!picked || busy) return;
+  if (!picked || !picked.value || busy) return;
   if (picked.dataset.open) {
     connectWifi();
     return;
@@ -3728,7 +3892,7 @@ connectBtn.addEventListener("click", guard(async () => {
   const guided = !!usbGuide && usbGuide.kind === "boot" && nativeUsb(port);
   hideUsbGuide();
   usbExpect = null;
-  Object.assign(board, { noBootable: false, installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {}, telemetrySent: false, compatIssue: null, downloadMode: false, note: "" });
+  Object.assign(board, { leftRunning: false, noBootable: false, installed: false, kind: "unknown", ip: "", name: "", chip: "", mac: "", version: "", readyAt: 0, info: {}, telemetrySent: false, compatIssue: null, downloadMode: false, note: "" });
   // USB bridge is known from the open port (no guess); keep it after the board-state reset
   const bridge = usbBridgeInfo();
   if (bridge) { board.info.usb = bridge.name; board.info.usbLabel = bridge.label; }
@@ -3739,8 +3903,21 @@ connectBtn.addEventListener("click", guard(async () => {
   showConsole();
   // Fix (recover flow): no Incomplete Install yet; the probe shows it once it read this board's MAC
   // Version 80: probe chip/flash now so stats and an incompatible notice appear before Install
+  // Flasher Version 115.10 (Gene's ESP32): not on a classic port: the probe's resets restarted a running board on every
+  //  connect (and dropped its Wi-Fi). Install reads the board (chip, flash, compatibility) when it starts
+  //  The one exception: an unfinished install is on record (Recover): that board is not running a healthy GSP32, and
+  //  only the probe's MAC says whether it is the same board
+  //  (window.__gsp32ProbeOnConnect: the page tests of the probe itself, which still runs for those cases, turn it on)
+  if (!nativeUsb(port) && !flashNoteGet() && !window.__gsp32ProbeOnConnect) {
+    board.leftRunning = true;
+    appendConsole(PLAIN_CONNECT_TEXT);
+    syncBoardUi();
+    syncConsoleButtons();
+    return;
+  }
   await probeBoardOnConnect({ guided, resume: "probe" });
 }));
+const PLAIN_CONNECT_TEXT = "\n[Connected. The board keeps running (no restart); its chip and flash are read when you click Install.]\n";
 function showStartError(text) {
   const line = $("start-error");
   if (!line) return;
@@ -3762,6 +3939,9 @@ async function disconnectBoard() {
   usbExpect = null;
   board.downloadMode = false;
   board.note = "";
+  // Flasher Version 115.10 (Gene's ESP32): the board keeps running (and on Wi-Fi) after Disconnect: the run state is
+  //  set one line at a time before the close (see idleLines); closePort's own call then changes nothing
+  if (portOpen() && !nativeUsb(port)) await idleLines().catch(() => {});
   await closePort();
   hideConsole();
 }
@@ -3773,7 +3953,11 @@ $("board-disconnect").addEventListener("click", guard(async () => {
 resetBtn.addEventListener("click", guard(resetBoard));
 ctrlCBtn.addEventListener("click", guard(() => writeBytes(new Uint8Array([0x03]))));
 $("wifi-setup").addEventListener("click", () => {
-  if (busy) return;
+  // Flasher Version 115.10 (Gene): never a click that does nothing: busy says why in the console
+  if (busy) {
+    appendConsole("\n[Set Up Wi-Fi waits: the flasher is still busy. Click it again once it finishes.]\n");
+    return;
+  }
   startWifi(false);
 });
 // Fix (S3 native USB): the guide's buttons (Pick the Port Again opens the picker, so it needs this click)
@@ -3819,7 +4003,8 @@ window.addEventListener("beforeunload", (event) => {
 });
 // Leaving the page: lines to run first, so closing the tab never holds the board in reset
 window.addEventListener("pagehide", () => {
-  if (port) port.setSignals({ dataTerminalReady: false, requestToSend: false }).catch(() => {});
+  if (port && !nativeUsb(port)) idleLines().catch(() => {});
+  else if (port) port.setSignals({ dataTerminalReady: false, requestToSend: false }).catch(() => {});
 });
 
 loadVersions();

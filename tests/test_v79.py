@@ -2,6 +2,9 @@
 #  subtle board-details; board-model telemetry (no MAC) once per connect
 import sys, os, json, http.server, threading, functools
 from playwright.sync_api import sync_playwright
+# Flasher Version 115.10: a classic board is not probed on a plain connect any more (Gene: it restarted the board); these
+#  tests of the probe itself (still run for native USB and for Recover) turn it on
+PROBE_ON = "window.__gsp32ProbeOnConnect = true;"
 here = os.path.dirname(os.path.abspath(__file__)); site = os.path.dirname(here)
 http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8789), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
@@ -64,7 +67,7 @@ js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 115.9-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117 everywhere", html.count("?v=115.9-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117") == 3, str(html.count("?v=")))
+check("cache-bust 115.10-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117 everywhere", html.count("?v=115.10-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117") == 3, str(html.count("?v=")))
 check("no Compatible Boards card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
@@ -87,7 +90,7 @@ def startInstall(pg, timeout=30000):
     pg.wait_for_timeout(800)
 
 def run(b, chip, flash_kb=None, usb=None, auto_install=True):
-    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js")
+    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(PROBE_ON)
     init = "window.__ver = '47'; window.__log = []; window.__telemetry = [];"
     if chip: init += "window.__chip = %s;" % json.dumps(chip)
     if flash_kb is not None: init += "window.__flashKb = %s;" % json.dumps(flash_kb)
@@ -170,13 +173,13 @@ def check_tel(name, tel, expect_compatible, expect_chip_substr=None):
     if "browser" in body:
         check(name + ": browser enum", body["browser"] in ("chrome", "edge", "opera", "brave", "other"), body["browser"])
     if "flasher_version" in body:
-        check(name + ": flasher_version", body["flasher_version"] == "115.9", body["flasher_version"])
+        check(name + ": flasher_version", body["flasher_version"] == "115.10", body["flasher_version"])
 
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(); pg.goto("http://127.0.0.1:8789/index.html"); body = pg.inner_text("body")
     check("text names ESP32 and ESP32-S3", "ESP32 and ESP32-S3" in body)
-    check("footer Flasher Version 115.9", "Flasher Version 115.9" in pg.text_content(".flasher-version"))
+    check("footer Flasher Version 115.10", "Flasher Version 115.10" in pg.text_content(".flasher-version"))
     check("no Compatible Boards on page", "Compatible Boards" not in body); pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None)
@@ -267,7 +270,7 @@ with sync_playwright() as p:
     pg.close()
 
     # Telemetry must not delay install even if fetch hangs
-    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js")
+    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(PROBE_ON)
     pg.add_init_script("""
       window.__ver='47'; window.__log=[];
       const real = window.fetch.bind(window);

@@ -37,7 +37,7 @@ with sync_playwright() as p:
     pg, errors = page(b, "window.__noiseWrites = 2;")
     log = install(pg)
     check("noise twice: 3 writes, the last verified", log.count("write noise") == 2 and "md5 verified" in log and installed(pg), str([l for l in log if l.startswith(("write", "md5"))]))
-    check("noise twice: a fresh connect before each rewrite", log.count("esptool got reader true") >= 4, str(log.count("esptool got reader true")))
+    check("noise twice: a fresh connect before each rewrite", log.count("esptool got reader true") >= 3, str(log.count("esptool got reader true")))
     check("noise twice: the console names each retry", "writing it again (2 of 3)" in out(pg) and "writing it again (3 of 3)" in out(pg))
     check("no page errors (1)", not errors, str(errors)); pg.close()
     # 2. MD5 mismatch, then noise, then good: within the 3 attempts

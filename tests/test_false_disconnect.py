@@ -27,7 +27,7 @@ with sync_playwright() as p:
     # 1. Noise while the console reads (an Arduino sketch, a reset): reading goes on
     pg, errors = page(b)
     pg.click("#connect"); pg.wait_for_timeout(4500)
-    check("connected, probe done", pg.evaluate("!document.getElementById('disconnect').disabled") and "Board:" in out(pg), out(pg)[-200:])
+    check("connected (115.10: no probe, the board left running)", pg.evaluate("!document.getElementById('disconnect').disabled") and "keeps running" in out(pg), out(pg)[-200:])
     for name in ("FramingError", "BreakError", "ParityError", "BufferOverrunError"):
         pg.evaluate("n => window.__serialError(n)", name); pg.wait_for_timeout(150)
         pg.evaluate("n => window.__say('after ' + n + '\\r\\n')", name); pg.wait_for_timeout(250)
@@ -47,7 +47,7 @@ with sync_playwright() as p:
     check("unplug: console log kept", "still here" in out(pg))
     # Get Started again reconnects the same port (it was closed, so open() works)
     pg.click("#connect"); pg.wait_for_timeout(4500)
-    check("Get Started after unplug: connected again", pg.evaluate("!document.getElementById('disconnect').disabled") and "Board:" in out(pg).split(DISC)[-1], out(pg)[-200:])
+    check("Get Started after unplug: connected again", pg.evaluate("!document.getElementById('disconnect').disabled") and "keeps running" in out(pg).split(DISC)[-1], out(pg)[-200:])
     check("no page errors", not errors, str(errors)); pg.close()
     # 3. esptool-js reads during connect and flash survive one FramingError each; the install finishes
     pg, errors = page(b, "window.__esptoolNoise = true; window.__flashNoise = true;")

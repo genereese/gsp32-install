@@ -4,6 +4,9 @@
 #  remembered per USB bridge and tried first next time
 import os, http.server, threading, functools
 from playwright.sync_api import sync_playwright
+# Flasher Version 115.10: a classic board is not probed on a plain connect any more (Gene: it restarted the board); these
+#  tests of the probe itself (still run for native USB and for Recover) turn it on
+PROBE_ON = "window.__gsp32ProbeOnConnect = true;"
 here = os.path.dirname(os.path.abspath(__file__)); site = os.path.dirname(here)
 http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8794), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
@@ -15,7 +18,7 @@ def plat(name):
     return ("Object.defineProperty(navigator, 'platform', { get: () => '%s' });"
             "Object.defineProperty(navigator, 'userAgentData', { get: () => ({ platform: '%s' }) });") % (name, name.split(' ')[0])
 def page(b, init=""):
-    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js")
+    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(PROBE_ON)
     pg.add_init_script("window.__ver = '47'; window.__ets = true;" + init)
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
     pg.route("**/gsp32-telemetry.genereese.workers.dev/**", lambda r: r.fulfill(status=200, content_type="application/json", body='{"ok":true}'))
@@ -62,7 +65,7 @@ with sync_playwright() as p:
     check("Windows: classic first, then tight", resets(pg) == ["classic", "tight"], str(resets(pg)))
     sig = [l for l in pg.evaluate("window.__log") if l.startswith("signals")]
     classic = ["signals dtr=false rts=false", "signals dtr=false rts=true", "signals dtr=false rts=true", "signals dtr=true rts=true", "signals dtr=true rts=false", "signals dtr=true rts=false", "signals dtr=false rts=false"]
-    check("classic: esptool-js's own calls (setRTS re-sends DTR)", sig[1:8] == classic, str(sig[:9]))
+    check("classic: esptool-js's own calls (setRTS re-sends DTR)", any(sig[k:k + 7] == classic for k in range(2)), str(sig[:9]))  # 115.10: no setRunState call on a plain open
     check("no page errors (Windows)", not errors, str(errors)); pg.close()
     # 4. Native USB (USB-JTAG PID 0x1001) on Linux: USB-JTAG first
     pg, errors = page(b, plat("Linux x86_64") + "window.__usb = { usbVendorId: 0x303a, usbProductId: 0x1001 }; window.__chip = 'ESP32-S3 (QFN56) (revision v0.2)'; window.__resetWorks = 'usbJtag';")
@@ -78,7 +81,7 @@ with sync_playwright() as p:
     check("failure: still connected, Install can try again", pg.evaluate("!document.getElementById('disconnect').disabled && !document.getElementById('install-btn').disabled"))
     check("no page errors (failure)", not errors, str(errors)); pg.close()
     # 6. The real esptool-js 0.5.7 (the mock board never answers its sync): it runs our rotation, one per attempt
-    pg = b.new_page(); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script("window.__ver = '47';" + plat("Linux x86_64"))
+    pg = b.new_page(); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(PROBE_ON); pg.add_init_script("window.__ver = '47';" + plat("Linux x86_64"))
     pg.route("**/gsp32-telemetry.genereese.workers.dev/**", lambda r: r.fulfill(status=200, content_type="application/json", body='{"ok":true}'))
     errors = []; pg.on("pageerror", lambda e: errors.append(str(e)))
     pg.goto("http://127.0.0.1:8794/index.html"); pg.wait_for_timeout(300)

@@ -14,7 +14,7 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={"width": 1440, "height": 900})
     pg.goto("http://127.0.0.1:8813/index.html"); pg.wait_for_timeout(1200)
     check("heading Check It Out", pg.inner_text("#tour-title") == "Check It Out")
-    check("flasher shows its version", "Flasher Version 115.9" in pg.inner_text("body"))
+    check("flasher shows its version", "Flasher Version 115.10" in pg.inner_text("body"))
     check("strip visible without scrolling at 1440x900", pg.locator(".tour-thumb >> nth=0").bounding_box()["y"] < 900, str(pg.locator(".tour-thumb >> nth=0").bounding_box()))
     art = pg.locator(".step-art >> nth=0").bounding_box(); txt = pg.locator(".steps-row li span >> nth=0").bounding_box()
     check("V50: slim steps, icon left of its text, 40px", art["x"] + art["width"] <= txt["x"] + 1 and round(art["width"]) == 40)
@@ -53,8 +53,18 @@ with sync_playwright() as p:
     check("idle: input and Send enabled", pg.is_enabled("#console-in") and not pg.is_visible("#console-note"))
     pg.fill("#console-in", "x"); pg.wait_for_timeout(50)
     check("Send button enabled when idle", pg.is_enabled("#console-send"))
-    pg.click("#wifi-setup"); pg.wait_for_timeout(800)
-    check("Wi-Fi step: input and Send disabled, V61 Busy ... with no tip", not pg.is_enabled("#console-in") and not pg.is_enabled("#console-send") and pg.get_attribute("#console-in", "placeholder") == "Busy ..." and pg.locator("#console-note").count() == 0)
+    # The mock scans fast, so watch the input while the step works instead of sampling it later
+    pg.evaluate("""() => { window.__busySeen = []; const el = document.querySelector('#console-in'), send = document.querySelector('#console-send');
+      new MutationObserver(() => { if (el.disabled) window.__busySeen.push([send.disabled, el.placeholder, document.querySelectorAll('#console-note').length]); })
+        .observe(el, { attributes: true }); }""")
+    pg.evaluate("window.__scanDelay = 1500")  # a real scan takes seconds
+    pg.click("#wifi-setup")
+    pg.wait_for_function("document.querySelectorAll('#wifi-list input[type=radio]').length > 0", timeout=15000)
+    seen = pg.evaluate("window.__busySeen")
+    check("Wi-Fi step working: input and Send disabled, V61 Busy ... with no tip", any(x[0] and x[1] == "Busy ..." and x[2] == 0 for x in seen), str(seen[:4]))
+    # Flasher Version 115.10 (Gene's ESP32): once the networks are listed the page waits for the user: typing is back
+    pg.wait_for_function("document.querySelectorAll('#wifi-list input[type=radio]').length > 0", timeout=15000); pg.wait_for_timeout(300)
+    check("115.10 Wi-Fi step waiting on the user: input enabled", pg.is_enabled("#console-in") and pg.get_attribute("#console-in", "placeholder") != "Busy ...")
     if shots: pg.screenshot(path=shots + "/flasher-after-busy-console-1440.png", full_page=True)
     pg.click("#wifi-cancel"); pg.wait_for_timeout(900)
     check("Cancel restores typing", pg.is_enabled("#console-in") and not pg.is_visible("#console-note"))
