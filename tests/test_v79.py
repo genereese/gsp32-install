@@ -38,19 +38,20 @@ gc = [e for e in v if e.get("channel") == "gspc-beta"]
 # GSP32-C Beta V118 (Gene, 2026-10-25): V118 added as its own entry (manifest-gspc-v118.json), newest first; V117 kept as it was
 # GSP32-C Beta V119 (Gene, 2026-10-25): V119 added as its own entry (manifest-gspc-v119.json), newest first; V118 and V117 kept
 # GSP32-C Beta V120 (Gene, 2026-10-25): V120 added as its own entry (manifest-gspc-v120.json), newest first; V119, V118, V117 kept
-# GSP32-C Beta V127.1 (Gene, 2026-10-27): V127.1 added as its own entry (manifest-gspc-v127.1.json), newest first; V126-V117 kept
-check("versions.json: GSP32-C Beta V127.1, V126, V125, V124, V123, V122, V121, V120, V119, V118, V117, each in the GSP32-C line with its own manifest", len(gc) == 11
-      and gc[0]["label"].startswith("GSP32-C Beta V127.1 ") and gc[0]["manifest"] == "manifest-gspc-v127.1.json"
-      and gc[1]["label"] == "GSP32-C Beta V126 (410cf56)" and gc[1]["manifest"] == "manifest-gspc-v126.json"
-      and gc[2]["label"] == "GSP32-C Beta V125 (0ce21a3)" and gc[2]["manifest"] == "manifest-gspc-v125.json"
-      and gc[3]["label"] == "GSP32-C Beta V124 (83817a0)" and gc[3]["manifest"] == "manifest-gspc-v124.json"
-      and gc[4]["label"] == "GSP32-C Beta V123 (d4e4001)" and gc[4]["manifest"] == "manifest-gspc-v123.json"
-      and gc[5]["label"] == "GSP32-C Beta V122 (396551a)" and gc[5]["manifest"] == "manifest-gspc-v122.json"
-      and gc[6]["label"] == "GSP32-C Beta V121 (ccd447d)" and gc[6]["manifest"] == "manifest-gspc-v121.json"
-      and gc[7]["label"] == "GSP32-C Beta V120 (7389b87)" and gc[7]["manifest"] == "manifest-gspc-v120.json"
-      and gc[8]["label"] == "GSP32-C Beta V119 (5cdd223)" and gc[8]["manifest"] == "manifest-gspc-v119.json"
-      and gc[9]["label"] == "GSP32-C Beta V118 (3350ec2)" and gc[9]["manifest"] == "manifest-gspc-v118.json"
-      and gc[10]["label"] == "GSP32-C Beta V117 (08999a5)" and gc[10]["manifest"] == "manifest-gspc-beta.json"
+# GSP32-C Beta V127.2 (Gene, 2026-10-27): V127.2 added as its own entry (manifest-gspc-v127.2.json), newest first; V127.1-V117 kept
+check("versions.json: GSP32-C Beta V127.2, V127.1, V126, V125, V124, V123, V122, V121, V120, V119, V118, V117, each in the GSP32-C line with its own manifest", len(gc) == 12
+      and gc[0]["label"].startswith("GSP32-C Beta V127.2 ") and gc[0]["manifest"] == "manifest-gspc-v127.2.json"
+      and gc[1]["label"] == "GSP32-C Beta V127.1 (cf043be)" and gc[1]["manifest"] == "manifest-gspc-v127.1.json"
+      and gc[2]["label"] == "GSP32-C Beta V126 (410cf56)" and gc[2]["manifest"] == "manifest-gspc-v126.json"
+      and gc[3]["label"] == "GSP32-C Beta V125 (0ce21a3)" and gc[3]["manifest"] == "manifest-gspc-v125.json"
+      and gc[4]["label"] == "GSP32-C Beta V124 (83817a0)" and gc[4]["manifest"] == "manifest-gspc-v124.json"
+      and gc[5]["label"] == "GSP32-C Beta V123 (d4e4001)" and gc[5]["manifest"] == "manifest-gspc-v123.json"
+      and gc[6]["label"] == "GSP32-C Beta V122 (396551a)" and gc[6]["manifest"] == "manifest-gspc-v122.json"
+      and gc[7]["label"] == "GSP32-C Beta V121 (ccd447d)" and gc[7]["manifest"] == "manifest-gspc-v121.json"
+      and gc[8]["label"] == "GSP32-C Beta V120 (7389b87)" and gc[8]["manifest"] == "manifest-gspc-v120.json"
+      and gc[9]["label"] == "GSP32-C Beta V119 (5cdd223)" and gc[9]["manifest"] == "manifest-gspc-v119.json"
+      and gc[10]["label"] == "GSP32-C Beta V118 (3350ec2)" and gc[10]["manifest"] == "manifest-gspc-v118.json"
+      and gc[11]["label"] == "GSP32-C Beta V117 (08999a5)" and gc[11]["manifest"] == "manifest-gspc-beta.json"
       and all(e.get("line") == "GSP32-C" for e in gc), str(gc))
 check("versions.json: Stable Version 114.2 + Beta Version 115", len(v) - len(gc) == 2 and len(st) == 1 and st[0]["label"].startswith("Version 114.2 ") and st[0]["manifest"] == "manifest.json" and len(bt) == 1 and bt[0]["label"].startswith("Version 115 ") and bt[0]["manifest"] == "manifest-beta.json")
 pv = [e for e in v if e.get("channel") == "previous"]
@@ -69,7 +70,7 @@ js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 115.14-fw114.2-b115-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117 everywhere", html.count("?v=115.14-fw114.2-b115-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117") == 3, str(html.count("?v=")))
+check("cache-bust 115.15-fw114.2-b115-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117 everywhere", html.count("?v=115.15-fw114.2-b115-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117") == 3, str(html.count("?v=")))
 check("no Compatible Devices card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
@@ -175,13 +176,13 @@ def check_tel(name, tel, expect_compatible, expect_chip_substr=None):
     if "browser" in body:
         check(name + ": browser enum", body["browser"] in ("chrome", "edge", "opera", "brave", "other"), body["browser"])
     if "flasher_version" in body:
-        check(name + ": flasher_version", body["flasher_version"] == "115.14", body["flasher_version"])
+        check(name + ": flasher_version", body["flasher_version"] == "115.15", body["flasher_version"])
 
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(); pg.goto("http://127.0.0.1:8789/index.html"); body = pg.inner_text("body")
     check("text names ESP32 and ESP32-S3", "ESP32 and ESP32-S3" in body)
-    check("footer Flasher Version 115.14", "Flasher Version 115.14" in pg.text_content(".flasher-version"))
+    check("footer Flasher Version 115.15", "Flasher Version 115.15" in pg.text_content(".flasher-version"))
     check("no Compatible Devices on page", "Compatible Devices" not in body); pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None)

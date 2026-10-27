@@ -28,6 +28,9 @@ CLASSIC, NATIVE = (0x10c4, 0xea60), (0x303a, 0x1001)
 
 # Static: every function the S3 fixes changed on a classic path is kept twice, <name>Native and <name>Classic, and
 #  <name> picks one by nativeUsb(); each Classic copy must be Flasher 104's function, character for character
+# Flasher 115.14 (Gene): user-facing "board" became "device"; that wording is the only change allowed in a Classic copy
+def dev2board(t):
+    return t.replace("device", "board").replace("Device", "Board") if t else t
 def grab(src, name):
     m = re.search(r'^(?:async )?function ' + name + r'\(', src, re.M)
     if not m: return None
@@ -36,7 +39,7 @@ s104, now = open(APP104).read(), open(APP_NOW).read()
 pairs = re.findall(r'^(?:async )?function (\w+)Classic\(', now, re.M)
 check("functions kept twice (Native/Classic): %d" % len(pairs), len(pairs) >= 16, pairs)
 for n in pairs:
-    same = grab(now, n + "Classic").replace("function " + n + "Classic(", "function " + n + "(", 1) == grab(s104, n)
+    same = dev2board(grab(now, n + "Classic")).replace("function " + n + "Classic(", "function " + n + "(", 1) == dev2board(grab(s104, n))
     disp = grab(now, n)
     check(n + ": the Classic copy is Flasher 104's verbatim, the dispatcher picks it off native USB",
           same and re.search(r"return nativeUsb\(\w+\) \? " + n + r"Native\(.*\) : " + n + r"Classic\(", disp) is not None, disp)
@@ -86,7 +89,7 @@ def idle_pairs(trace):
 
 def norm(text):
     # Times differ run to run (erase/write seconds); nothing else may
-    return re.sub(r"\d+(\.\d+)?(s| s| seconds)\b", "#s", text)
+    return dev2board(re.sub(r"\d+(\.\d+)?(s| s| seconds)\b", "#s", text))
 
 with sync_playwright() as p:
     b = p.chromium.launch()

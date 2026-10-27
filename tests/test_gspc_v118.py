@@ -13,13 +13,13 @@ def check(name, ok, extra=""):
 
 versions = json.load(open(os.path.join(site, "versions.json")))
 gc = [e for e in versions if e.get("channel") == "gspc-beta"]
-check("GSP32-C entries V120, V119, V118, V117 (later ones added, V118 kept)", [re.search(r"V(\d+)", e["label"]).group(1) for e in gc] == ["127", "126", "125", "124", "123", "122", "121", "120", "119", "118", "117"], str([e["label"] for e in gc]))
+check("GSP32-C entries V120, V119, V118, V117 (later ones added, V118 kept)", [re.search(r"V(\d+)", e["label"]).group(1) for e in gc] == ["127", "127", "126", "125", "124", "123", "122", "121", "120", "119", "118", "117"], str([e["label"] for e in gc]))
 for e in gc:
     m = json.load(open(os.path.join(site, e["manifest"])))
     parts = [p["path"] for b in m["builds"] for p in b["parts"]]
     check(e["label"] + ": manifest names it", m["version"] == e["label"], m["version"])
     check(e["label"] + ": five chips' images there", len(m["builds"]) == 5 and all(os.path.exists(os.path.join(site, p)) for p in parts), str(parts))
-    want_dir = "firmware/gspc-v127.1/" if "V127.1" in e["label"] else "firmware/gspc-v126/" if "V126" in e["label"] else "firmware/gspc-v125/" if "V125" in e["label"] else "firmware/gspc-v124/" if "V124" in e["label"] else "firmware/gspc-v123/" if "V123" in e["label"] else "firmware/gspc-v122/" if "V122" in e["label"] else "firmware/gspc-v121/" if "V121" in e["label"] else "firmware/gspc-v120/" if "V120" in e["label"] else "firmware/gspc-v119/" if "V119" in e["label"] else "firmware/gspc-v118/" if "V118" in e["label"] else "firmware/gspc/"
+    want_dir = "firmware/gspc-v127.2/" if "V127.2" in e["label"] else "firmware/gspc-v127.1/" if "V127.1" in e["label"] else "firmware/gspc-v126/" if "V126" in e["label"] else "firmware/gspc-v125/" if "V125" in e["label"] else "firmware/gspc-v124/" if "V124" in e["label"] else "firmware/gspc-v123/" if "V123" in e["label"] else "firmware/gspc-v122/" if "V122" in e["label"] else "firmware/gspc-v121/" if "V121" in e["label"] else "firmware/gspc-v120/" if "V120" in e["label"] else "firmware/gspc-v119/" if "V119" in e["label"] else "firmware/gspc-v118/" if "V118" in e["label"] else "firmware/gspc/"
     check(e["label"] + ": its own firmware folder " + want_dir, all(p.startswith(want_dir) for p in parts), str(parts))
     check(e["label"] + ": offsets 4096 (ESP32) and 0", all(p["offset"] == (4096 if b["chipFamily"] == "ESP32" else 0) for b in m["builds"] for p in b["parts"]))
 
@@ -36,7 +36,7 @@ with sync_playwright() as p:
     pg.on("request", lambda r: asked.append(r.url))
     pg.goto("http://127.0.0.1:8818/index.html"); pg.wait_for_timeout(600)
     opts = pg.evaluate("[...document.querySelectorAll('#gspc-group option')].map(o => [o.value, o.textContent, o.disabled, o.hidden])")
-    check("GSP32-C group lists V118 then V117", [o[:2] for o in opts][9:] == [["gspc-118", "GSP32-C Beta V118"], ["gspc-117", "GSP32-C Beta V117"]], str(opts))
+    check("GSP32-C group lists V118 then V117", [o[:2] for o in opts][10:] == [["gspc-118", "GSP32-C Beta V118"], ["gspc-117", "GSP32-C Beta V117"]], str(opts))
     check("both GSP32-C options usable", all(not o[2] and not o[3] for o in opts))
     check("GSP32-C group shown", not pg.evaluate("document.getElementById('gspc-group').hidden"))
     check("GSP32 picks unchanged: Stable default, Beta there", pg.input_value("#release-channel") == "stable"
