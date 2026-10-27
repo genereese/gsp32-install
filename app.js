@@ -1776,8 +1776,6 @@ function releaseChannelUpdate() {
   const picked = release_versions[channel];
   if (picked !== latest) manifestCache = null;
   latest = picked;
-  const gspc_note = $("gspc-note");
-  if (gspc_note) gspc_note.hidden = !isGspc(channel);
   const number = latest ? String(latest.label || latest.version).match(/Version (\d+(?:\.\d+)?)/) : null;
   versionSelect.textContent = (isGspc(channel) && latest) ? gspcName(latest)
     : number ? "Version " + number[1] : latest ? String(latest.label || latest.version) : "No Version Found";

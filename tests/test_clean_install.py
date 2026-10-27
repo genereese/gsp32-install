@@ -1,8 +1,8 @@
 """ Flasher Version 115.19 (Gene, 2026-10-27): the flasher only does clean installs. The Update (Keep Files) path of
 115.16 is gone: no Update button, no keep-files hint or text, no partition-table read, no "update" flag in versions.json.
 Every pick (GSP32 and GSP32-C, V127.3 included) installs with the erase tick and Erase and Install, which erases the
-whole chip and writes the one merged image; afterwards the next step is Set Up Wi-Fi. To keep files, the note points to
-the Backup app in GSP32 """
+whole chip and writes the one merged image; afterwards the next step is Set Up Wi-Fi. To keep files, the yellow erase box points to
+the Backup app (Flasher 115.20: the GSP32-C note is gone) """
 import http.server, threading, functools, os, json, re, sys
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); here = os.path.dirname(os.path.abspath(__file__))
@@ -37,8 +37,8 @@ with sync_playwright() as p:
         check(key + ": no Update button, no keep-files text", pg.locator("#start-update").count() == 0 and "Update" not in step and "Keep Files" not in step, step[-300:])
         check(key + ": Erase and Install needs the tick", not pg.is_enabled("#start-install"))
     pg.select_option("#release-channel", "gspc-127.3"); pg.wait_for_timeout(300)
-    note = " ".join(pg.text_content("#gspc-note").split())
-    check("note: points to the Backup app to keep files", "Backup" in note and "erases" in note and "Update" not in note, note)
+    box = " ".join(pg.text_content("label[for=erase-ok]").split())
+    check("Flasher 115.20: no GSP32-C note; the yellow erase box mentions Backup", pg.locator("#gspc-note").count() == 0 and "Backup" in box and "erases everything" in box, box)
     pg.check("#erase-ok"); pg.wait_for_timeout(100)
     check("ticked: Erase and Install usable", pg.is_enabled("#start-install"))
     pg.evaluate("window.__log.length = 0"); pg.click("#start-install"); pg.wait_for_timeout(6000)

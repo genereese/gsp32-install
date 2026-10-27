@@ -1,6 +1,5 @@
 """ GSP32-C Beta V125 (Gene, 2026-10-26): V125 is its own Release pick in the GSP32-C group, first, with V124, V123, V122,
-V121, V120, V119, V118 and V117 kept as they were. It shows its name and the GSP32-C note (which now mentions the old GSP32
-move and microSD) and installs manifest-gspc-v125.json from firmware/gspc-v125/ (its builds say improv: true); the GSP32 picks are unchanged """
+V121, V120, V119, V118 and V117 kept as they were. It shows its name and no GSP32-C note (removed in Flasher 115.20) and installs manifest-gspc-v125.json from firmware/gspc-v125/ (its builds say improv: true); the GSP32 picks are unchanged """
 import sys, http.server, threading, functools, os, json, re
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); here = os.path.dirname(os.path.abspath(__file__))
@@ -43,16 +42,14 @@ with sync_playwright() as p:
     check("GSP32-C group shown", not pg.evaluate("document.getElementById('gspc-group').hidden"))
     check("GSP32 picks unchanged: Stable default, Beta there", pg.input_value("#release-channel") == "stable"
           and pg.evaluate("[...document.querySelectorAll('#release-channel > option')].map(o => o.value).join()") == "stable,beta,previous")
-    check("Stable: no GSP32-C note", not pg.is_visible("#gspc-note"))
+    check("Flasher 115.20: no GSP32-C note element at all", pg.locator("#gspc-note").count() == 0)
     show(pg)
     for key, name in (("gspc-125", "GSP32-C Beta V125"), ("gspc-124", "GSP32-C Beta V124"), ("gspc-123", "GSP32-C Beta V123"), ("gspc-122", "GSP32-C Beta V122"), ("gspc-121", "GSP32-C Beta V121"), ("gspc-120", "GSP32-C Beta V120"), ("gspc-119", "GSP32-C Beta V119"), ("gspc-118", "GSP32-C Beta V118"), ("gspc-117", "GSP32-C Beta V117")):
         pg.select_option("#release-channel", key); pg.wait_for_timeout(300)
         check(key + ": Installs " + name, pg.text_content("#version").strip() == name, pg.text_content("#version"))
-        check(key + ": GSP32-C note shown", pg.is_visible("#gspc-note"))
-    note = pg.text_content("#gspc-note")
-    check("note: the short current GSP32-C note (Flasher 115.19: clean installs, Backup app)", "system side in C" in note and "Set Up Wi-Fi" in note and "Backup" in note and "Update" not in note and "V117" not in note and "gsp.wifi" not in note and len(note) < 500, note)
+        check(key + ": no note under the picker, the yellow erase box mentions Backup", pg.locator("#gspc-note").count() == 0 and "Backup" in pg.text_content("label[for=erase-ok]"))
     pg.select_option("#release-channel", "stable"); pg.wait_for_timeout(300)
-    check("back to Stable: note hidden", not pg.is_visible("#gspc-note"))
+    check("back to Stable: still no note", pg.locator("#gspc-note").count() == 0)
     # The pick that installs: tick, start, and see which manifest the page loads
     pg.select_option("#release-channel", "gspc-125"); pg.wait_for_timeout(300)
     asked.clear()

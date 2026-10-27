@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=115.19-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117">
+  <link rel="stylesheet" href="style.css?v=115.20-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -115,11 +115,6 @@
             </select>
           </label>
           <p class="version-line">Installs <b id="version">Loading...</b></p>
-          <!-- Flasher 115.19 (Gene): short GSP32-C note; the flasher only does clean installs -->
-          <p class="hint gspc-note" id="gspc-note" hidden>GSP32-C is GSP32 rebuilt with its system side in C: same web UI,
-            much faster. After installing, click <b>Set Up Wi-Fi</b> here, then open the device's web page; the first
-            visit sets its password (or choose no password). Installing erases the device, so to keep your files, open
-            the <b>Backup</b> app in GSP32 first (Download Backup) and restore it after.</p>
           <!-- Flasher 115.17 (Gene's ESP32): this device needed BOOT held last time (remembered in this browser, app.js) -->
           <div id="boot-remembered" class="warn-box boot-hint" role="note" hidden>
             <b>Hold BOOT for this device.</b>
@@ -266,9 +261,9 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=115.19-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117"></script>
+  <script type="module" src="app.js?v=115.20-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117"></script>
   <p class="security-note hint">GSP32 devices serve their web interface over plain HTTP (not encrypted). It's meant for your home network: never forward it to the internet.</p>
-  <p class="flasher-version hint">Flasher Version 115.19 · <a href="LICENSE.txt">License</a></p>
-  <script src="tour.js?v=115.19-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117" defer></script>
+  <p class="flasher-version hint">Flasher Version 115.20 · <a href="LICENSE.txt">License</a></p>
+  <script src="tour.js?v=115.20-fw114.2-b115-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117" defer></script>
 </body>
 </html>
