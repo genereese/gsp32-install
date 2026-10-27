@@ -3680,8 +3680,9 @@ async function connectWifi() {
     wifiError.textContent = err.code === "quiet"
       ? "The board stopped listening for Wi-Fi setup. Click Scan Again, then try again."
       : err.code === 3
-      ? "Could not connect. Check the password and try again."
-      : "Could not connect. Move the board closer to the router and try again.";
+      ? "Could not connect: the password may be wrong. Check it and try again."
+      // Flasher Version 115.12: a wrong password often ends here too (no answer in time), so it is named first
+      : "Could not connect. Check the password and try again. If it is right, move the board closer to the router.";
     wifiStatus.textContent = "Pick your network, then click Connect.";
     setStatus(wifiError.textContent, "error");
     modalWait("");
@@ -3719,6 +3720,9 @@ function openWifiModal() {
 // Step 5: the board joined Wi-Fi on its own (the Improv result carries its address): no reset; the card shows it
 function finishWifi(url) {
   setBusy(false);
+  // Flasher Version 115.12 (Gene's ESP32, real-board check): the wait ends with the answer. Its "wifi" reason stayed
+  //  in statusWaits, so after Wi-Fi Connected! the console said "Busy ..." and took no typing or Ctrl-C
+  setFolded(wifiWait, false);
   const ip = url ? new URL(url).hostname : "";
   if (!ip) {
     showError("The board did not report its address. The console below shows what it printed.", "prep");

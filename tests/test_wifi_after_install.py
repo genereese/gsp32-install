@@ -112,6 +112,11 @@ with sync_playwright() as p:
     check("typed name: Wi-Fi Connected! with the address", st.startswith("Wi-Fi Connected!") and "192.168.2.77" in st, st)
     check("typed name: the board got that name", pg.evaluate("window.__wifiSet") == "HomeNet", pg.evaluate("window.__wifiSet"))
     check("typed name: password not in the console", SECRET not in pg.inner_text("#console-out"))
+    # 115.12 (Gene's ESP32, real board): after Wi-Fi Connected! the console takes typing and Ctrl-C again (the wait's
+    #  "wifi" reason was left behind, so the box said "Busy ..." until the page was reloaded)
+    pg.wait_for_timeout(500)
+    ci = pg.evaluate("({dis: document.getElementById('console-in').disabled, ph: document.getElementById('console-in').placeholder, cc: document.getElementById('ctrl-c').disabled})")
+    check("115.12 after Wi-Fi Connected!: console takes typing and Ctrl-C", not ci["dis"] and not ci["cc"] and ci["ph"] != "Busy ...", ci)
     check("flow 1: no page errors", not pg.__errors, pg.__errors)
     pg.close()
 
