@@ -31,7 +31,7 @@ with sync_playwright() as p:
     pg.click("#connect"); pg.wait_for_timeout(100)
     pg.evaluate("window.__port.setSignals({requestToSend: true}).then(() => window.__port.setSignals({requestToSend: false}))")
     pg.wait_for_timeout(4500); pg.click("#install-btn"); pg.wait_for_timeout(500)
-    for key in ("stable", "beta", "gspc-127.3", "gspc-127.2", "gspc-126"):
+    for key in ("stable", "beta", "gspc-128", "gspc-127.3", "gspc-127.2", "gspc-126"):
         pg.select_option("#release-channel", key); pg.wait_for_timeout(250)
         step = pg.inner_text('[data-step="prep"]')
         check(key + ": no Update button, no keep-files text", pg.locator("#start-update").count() == 0 and "Update" not in step and "Keep Files" not in step, step[-300:])
