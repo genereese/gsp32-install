@@ -5,7 +5,7 @@ import sys, http.server, threading, functools, os, json, re
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); here = os.path.dirname(os.path.abspath(__file__))
 http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
-srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8830), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
+srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8900), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 fails = 0
 def check(name, ok, extra=""):
@@ -36,7 +36,7 @@ with sync_playwright() as p:
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r, _q=None: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
     asked = []
     pg.on("request", lambda r: asked.append(r.url))
-    pg.goto("http://127.0.0.1:8830/index.html"); pg.wait_for_timeout(600)
+    pg.goto("http://127.0.0.1:8900/index.html"); pg.wait_for_timeout(600)
     opts = pg.evaluate("[...document.querySelectorAll('#gspc-group option')].map(o => [o.value, o.textContent, o.disabled, o.hidden])")
     check("GSP32-C group lists V121, V120, V119, V118, V117", [o[:2] for o in opts] == [["gspc-127.3", "GSP32-C Beta V127.3"], ["gspc-127.2", "GSP32-C Beta V127.2"], ["gspc-127.1", "GSP32-C Beta V127.1"], ["gspc-126", "GSP32-C Beta V126"], ["gspc-125", "GSP32-C Beta V125"], ["gspc-124", "GSP32-C Beta V124"], ["gspc-123", "GSP32-C Beta V123"], ["gspc-122", "GSP32-C Beta V122"], ["gspc-121", "GSP32-C Beta V121"], ["gspc-120", "GSP32-C Beta V120"], ["gspc-119", "GSP32-C Beta V119"], ["gspc-118", "GSP32-C Beta V118"], ["gspc-117", "GSP32-C Beta V117"]], str(opts))
     check("all GSP32-C options usable", all(not o[2] and not o[3] for o in opts))
@@ -50,7 +50,7 @@ with sync_playwright() as p:
         check(key + ": Installs " + name, pg.text_content("#version").strip() == name, pg.text_content("#version"))
         check(key + ": GSP32-C note shown", pg.is_visible("#gspc-note"))
     note = pg.text_content("#gspc-note")
-    check("note: V118 page, V119 live pages, V120 file manager, V121 Settings + Improv, V117 none", "V118" in note and "V119" in note and "live pages" in note and "V120" in note and "file manager" in note and "V121" in note and "Settings" in note and "Improv" in note and "V122" in note and "AI Helper" in note and "V123" in note and "Package Manager" in note and "V124" in note and "Devices" in note and "V125" in note and "microSD" in note and "old GSP32" in note and "V126" in note and "pair your devices again" in note and "V127" in note and "no password" in note and "V127.2" in note and "Ctrl-C" in note and "V127.3" in note and "Update (Keep Files)" in note and "V117 has no web page" in note, note)
+    check("note: the short current GSP32-C note (Flasher 115.18)", "system side in C" in note and "Set Up Wi-Fi" in note and "Update (Keep Files)" in note and "V117" not in note and "gsp.wifi" not in note and len(note) < 500, note)
     pg.select_option("#release-channel", "stable"); pg.wait_for_timeout(300)
     check("back to Stable: note hidden", not pg.is_visible("#gspc-note"))
     # The pick that installs: tick, start, and see which manifest the page loads

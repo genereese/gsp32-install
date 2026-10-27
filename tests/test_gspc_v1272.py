@@ -50,7 +50,7 @@ with sync_playwright() as p:
         check(key + ": Installs " + name, pg.text_content("#version").strip() == name, pg.text_content("#version"))
         check(key + ": GSP32-C note shown", pg.is_visible("#gspc-note"))
     note = pg.text_content("#gspc-note")
-    check("note: V118 page, V119 live pages, V120 file manager, V121 Settings + Improv, V117 none", "V118" in note and "V119" in note and "live pages" in note and "V120" in note and "file manager" in note and "V121" in note and "Settings" in note and "Improv" in note and "V122" in note and "AI Helper" in note and "V123" in note and "Package Manager" in note and "V124" in note and "Devices" in note and "V125" in note and "microSD" in note and "old GSP32" in note and "V126" in note and "pair your devices again" in note and "V127" in note and "no password" in note and "V127.2" in note and "Ctrl-C" in note and "V117 has no web page" in note, note)
+    check("note: the short current GSP32-C note (Flasher 115.18)", "system side in C" in note and "Set Up Wi-Fi" in note and "Update (Keep Files)" in note and "V117" not in note and "gsp.wifi" not in note and len(note) < 500, note)
     pg.select_option("#release-channel", "stable"); pg.wait_for_timeout(300)
     check("back to Stable: note hidden", not pg.is_visible("#gspc-note"))
     # The pick that installs: tick, start, and see which manifest the page loads
