@@ -73,6 +73,17 @@ def renum(trace):
     ids = {}
     return [re.sub(r"#(\d+)", lambda m: "#%d" % ids.setdefault(m.group(1), len(ids) + 1), str(t)) for t in trace]
 
+def idle_pairs(trace):
+    # 115.11 (Gene's ESP32 on COM4): the run state is two calls, RTS off then DTR off (Flasher 104: one call, which
+    #  Chromium applies DTR first). Folded back into Flasher 104's one call so the rest of the trace still compares
+    out, i = [], 0
+    while i < len(trace):
+        if 'signals {"requestToSend":false}' in str(trace[i]) and i + 1 < len(trace) and 'signals {"dataTerminalReady":false}' in str(trace[i + 1]):
+            out.append(str(trace[i]).replace('{"requestToSend":false}', '{"dataTerminalReady":false,"requestToSend":false}')); i += 2
+        else:
+            out.append(trace[i]); i += 1
+    return out
+
 def norm(text):
     # Times differ run to run (erase/write seconds); nothing else may
     return re.sub(r"\d+(\.\d+)?(s| s| seconds)\b", "#s", text)
@@ -87,6 +98,8 @@ with sync_playwright() as p:
                  ("the 8th big write takes 9 s", dict(faults={"slowWrite": 8, "slowMs": 9000}))]
     for name, kw in scenarios:
         old, new = run(b, APP104, **kw), run(b, APP_NOW, **kw)
+        pairs = len(new["trace"]) - len(idle_pairs(new["trace"])); new["trace"] = idle_pairs(new["trace"])
+        check(name + ": 115.11 run state set RTS off, then DTR off (%d times)" % pairs, pairs > 0, pairs)
         check(name + ": same port calls as Flasher 104 (%d)" % len(old["trace"]), old["trace"] == new["trace"],
               next(((i, a, c) for i, (a, c) in enumerate(zip(old["trace"], new["trace"])) if a != c), (len(old["trace"]), len(new["trace"]))))
         check(name + ": same console text", norm(old["console"]) == norm(new["console"]), (norm(old["console"])[-300:], norm(new["console"])[-300:]))

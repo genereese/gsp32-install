@@ -1248,17 +1248,28 @@ async function setRunState() {
   //  DTR and RTS as the port came up. Chromium sets the two lines one after the other, DTR first, so from both on
   //  (Windows opens a port that way) this call passed through DTR off with RTS on: EN low, a restart on every connect
   if (plainOpen && port && !nativeUsb(port)) return;
-  // DTR and RTS off together in one request: the board's EN and GPIO 0 lines both stay high (running)
-  if (port) await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+  // The board's EN and GPIO 0 lines both high (running). Flasher Version 115.11 (Gene's ESP32 on COM4): one line at a
+  //  time, RTS first (see idleLines); one setSignals with both lines off is applied DTR first (the Web Serial spec's
+  //  order), and from both on that passes through DTR off with RTS on: EN low, a restart
+  //  Each call is awaited, so the bridge has RTS off before DTR moves. No gap here (setRunState runs inside the
+  //  install, whose timing stays Flasher 104's); idleLines, for Disconnect and leaving the page, adds one
+  if (!port) return;
+  const p = port;
+  await p.setSignals({ requestToSend: false });
+  await p.setSignals({ dataTerminalReady: false });
 }
 
 // Flasher Version 115.10 (Gene's ESP32: Disconnect dropped its Wi-Fi): the run state one line at a time, RTS first. RTS
-//  off first never pulls EN low (DTR on alone only holds GPIO 0 low, which a running board ignores); setRunState's
-//  single call goes DTR first, which from both on passes through a reset
+//  off first never pulls EN low (DTR on alone only holds GPIO 0 low, which a running board ignores); DTR off first
+//  from both on does (a restart). Flasher Version 115.11 (on the real board, COM4: DTR then RTS restarts it, RTS then
+//  DTR does not): two separate awaited calls with a short gap, so the bridge has applied RTS before DTR moves
+const LINE_GAP_MS = 30;
 async function idleLines() {
   if (!port) return;
-  await port.setSignals({ requestToSend: false });
-  await port.setSignals({ dataTerminalReady: false });
+  const p = port;
+  await p.setSignals({ requestToSend: false });
+  await delay(LINE_GAP_MS);
+  await p.setSignals({ dataTerminalReady: false });
 }
 
 async function resetBoard() {
@@ -4003,8 +4014,11 @@ window.addEventListener("beforeunload", (event) => {
 });
 // Leaving the page: lines to run first, so closing the tab never holds the board in reset
 window.addEventListener("pagehide", () => {
-  if (port && !nativeUsb(port)) idleLines().catch(() => {});
-  else if (port) port.setSignals({ dataTerminalReady: false, requestToSend: false }).catch(() => {});
+  // Flasher Version 115.11: RTS off now (the step that matters), DTR off once that is done, if the page is still there.
+  //  If it is not, the port closes with only DTR on, and dropping DTR alone never pulls EN low
+  if (!port) return;
+  const p = port;
+  p.setSignals({ requestToSend: false }).then(() => p.setSignals({ dataTerminalReady: false })).catch(() => {});
 });
 
 loadVersions();

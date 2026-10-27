@@ -87,8 +87,13 @@
     async close() { log.push("close dtr=" + dtr + " rts=" + rts); isOpen = false; rs = null; this.writable = null; },
     async setSignals(s) {
       if (window.__fastOpen) window.__signalsAfterFast++;
-      if ("dataTerminalReady" in s) dtr = s.dataTerminalReady;
-      const was = rts; if ("requestToSend" in s) rts = s.requestToSend;
+      // Flasher Version 115.11: one line at a time, DTR first, as the Web Serial spec orders a setSignals call (and
+      //  Chromium does it). __lines logs each line change with its time; __enPulses counts EN pulled low (RTS on,
+      //  DTR off: the auto-reset transistor), which a running board takes as a restart
+      const line = (name, v) => { (window.__lines = window.__lines || []).push([name + "=" + v, performance.now()]);
+        const low = rts && !dtr; if (low && !window.__enLow) window.__enPulses = (window.__enPulses || 0) + 1; window.__enLow = low; };
+      if ("dataTerminalReady" in s) { dtr = s.dataTerminalReady; line("dtr", dtr); }
+      const was = rts; if ("requestToSend" in s) { rts = s.requestToSend; line("rts", rts); }
       log.push("signals dtr=" + dtr + " rts=" + rts);
       if (was && !rts && !dtr) { log.push("RESET"); boot(); }
     },

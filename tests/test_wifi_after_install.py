@@ -22,6 +22,9 @@ U = "http://127.0.0.1:8893/index.html"
 SECRET = "Sekr3t-Gene-125"
 fails = 0
 def check(name, ok, extra=""):
+    # The mock board prints MicroPython's KeyboardInterrupt traceback (after Ctrl-C); echoed console text must not read
+    #  as this suite's own Python traceback to tools/flasher_tests.py
+    extra = str(extra).replace("Traceback (most recent call last)", "Traceback (board output)")
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, extra); sys.stdout.flush()
 # What Gene's ESP32 printed after the install (V125, first boot, nothing saved): ROM lines, the first-boot setup, the
 #  GSP32-C line, the no-Wi-Fi line and main.py, no >>> prompt (main.py runs). Third item: whether it takes Improv
@@ -195,16 +198,39 @@ with sync_playwright() as p:
     sig = [x for x in log if x.startswith("signals")]
     check("Disconnect: no restart (RTS off first, then DTR, then close)", "RESET" not in log and sig[:2] == ["signals dtr=true rts=false", "signals dtr=false rts=false"]
           and any(x.startswith("close") for x in log), log)
-    pg.evaluate("window.__log.length = 0"); pg.click("#connect"); pg.wait_for_timeout(2000)
+    lines = pg.evaluate("window.__lines || []")
+    check("115.11 connect + Disconnect: EN never pulled low", pg.evaluate("window.__enPulses || 0") == 0, lines)
+    check("115.11 Disconnect: two separate calls, RTS off, a gap, then DTR off",
+          [x[0] for x in lines[:2]] == ["rts=false", "dtr=false"] and lines[1][1] - lines[0][1] >= 20, lines)
+    pg.evaluate("window.__log.length = 0; window.__lines = []"); pg.click("#connect"); pg.wait_for_timeout(2000)
     log = pg.evaluate("window.__log")
     check("reconnect: no restart", "RESET" not in log and not any(x.startswith("signals") for x in log), log)
+    # Leaving the page: RTS off first too, no EN pulse
+    pg.evaluate("window.dispatchEvent(new Event('pagehide'))"); pg.wait_for_timeout(300)
+    lines = pg.evaluate("window.__lines")
+    check("115.11 page leave: RTS off, then DTR off, EN never low", [x[0] for x in lines] == ["rts=false", "dtr=false"] and pg.evaluate("window.__enPulses || 0") == 0, lines)
+    # Back to both on (as the port opened), for the Set Up Wi-Fi restart below
+    pg.evaluate("window.__port.setSignals({ requestToSend: true }).then(() => window.__port.setSignals({ dataTerminalReady: true }))"); pg.wait_for_timeout(200)
+    pg.evaluate("window.__enPulses = 0; window.__lines = []; window.__log.length = 0")
     # Set Up Wi-Fi on the quiet board restarts it once (the click asks for it), then GSP32-C is found and asked
     pg.click("#wifi-setup")
     pg.wait_for_function("/GSP32-C Beta V125 Found/.test(document.getElementById('board-state').innerText)", timeout=30000)
     check("Set Up Wi-Fi on a quiet board: restarted once, GSP32-C found", pg.evaluate("window.__log").count("RESET") == 1, pg.evaluate("window.__log"))
     pg.wait_for_function("/Pick your network|HomeNet/.test(document.getElementById('wizard').innerText)", timeout=30000)
     check("Set Up Wi-Fi on a quiet board: networks listed", "HomeNet" in pg.inner_text("#wifi-list"))
+    lines = [x[0] for x in pg.evaluate("window.__lines")]
+    # The restart the click asks for is the one EN pulse; back to run state RTS first (both lines off, never DTR first)
+    check("115.11 Set Up Wi-Fi restart: one EN pulse, run state RTS off then DTR off", pg.evaluate("window.__enPulses") == 1
+          and all(lines[k + 1] == "dtr=false" for k in range(len(lines) - 1) if lines[k] == "rts=false" and k + 1 < len(lines) and lines[k + 1].startswith("dtr")), lines)
     check("flow 5: no page errors", not pg.__errors, pg.__errors)
+    pg.close()
+
+    # 5b. The mock is faithful: one setSignals call with both lines off, from both on, goes DTR first and pulses EN
+    #  (what 115.10's single call did on Gene's board); two calls RTS first do not
+    pg = page(b, "window.__gspc = '125'; window.__openAsserts = true;")
+    pg.click("#connect"); pg.wait_for_timeout(1500)
+    pg.evaluate("window.__port.setSignals({ dataTerminalReady: false, requestToSend: false })"); pg.wait_for_timeout(100)
+    check("mock: single call from both on = DTR first, an EN pulse (a restart)", pg.evaluate("window.__enPulses") == 1 and "RESET" in pg.evaluate("window.__log"))
     pg.close()
 
     # 4. Native USB (0x303A): a failed connect gets the BOOT and RST guide as before, not the classic note

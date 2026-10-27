@@ -41,7 +41,9 @@ with sync_playwright() as p:
     pg.click("#connect")
     # Flasher Version 115.10 (Gene's ESP32): a classic board is connected without the probe (Install reads it)
     pg.wait_for_function("() => /keeps running/.test(document.getElementById('console-out').innerText)", timeout=15000)
-    pg.wait_for_timeout(200)
+    # the probe's seconds used to cover the fold: now the connect is quick, so wait for the steps to fold away
+    pg.wait_for_function("() => document.getElementById('installer').hidden || getComputedStyle(document.getElementById('installer')).display === 'none'", timeout=5000)
+    pg.wait_for_timeout(800)
     check("steps fold away, card open with console", not pg.is_visible("#installer") and pg.is_visible("#console") and pg.is_visible("#console-out"))
     check("board card and console are two separate cards", pg.evaluate("(() => { const a = document.getElementById('console'), c = document.getElementById('console-card'); return a.classList.contains('card') && c.classList.contains('card') && !a.contains(c) && c.contains(document.getElementById('console-out')) && !a.contains(document.getElementById('console-out')); })()"))
     def fill():
@@ -86,7 +88,11 @@ with sync_playwright() as p:
     log = pg.evaluate("window.__log")
     opens = [l for l in log if isinstance(l, str) and l.startswith("open")]
     # V49: the install reopens the port for the faster rate and back to 115200 after; the pick opens it once
-    check("V64: only ever 115200 opens, run state, reset after flash", opens[0] == "open 115200" and opens[-1] == "open 115200" and "open 921600" not in log and log[1] == "signals dtr=false rts=false" and "RESET" in log)
+    check("V64: only ever 115200 opens, run state, reset after flash", opens[0] == "open 115200" and opens[-1] == "open 115200" and "open 921600" not in log and "RESET" in log
+          # 115.10: the pick sets no lines (the board keeps running; log[1] was its run state); the reset after the
+          #  flash still goes back to the run state
+          and log[1] != "signals dtr=false rts=false" and "signals dtr=false rts=true" in log
+          and log[log.index("signals dtr=false rts=true") + 1] == "signals dtr=false rts=false", str(log[:6]))
     pg.wait_for_timeout(800)
     check("re-detected GSP32 after install", pg.is_visible("#wifi-setup") and pg.inner_text("#wifi-setup") == "Set Up Wi-Fi" and pg.inner_text("#install-btn") == "Reinstall GSP32"
           and pg.inner_text("#board-state") == "GSP32 " + LISTED + " Found" and pg.locator("#board-hint, [data-step=choice], [data-step=usb]").count() == 0 and not pg.is_visible("#console-webui"), pg.inner_text("#board-state"))
@@ -142,7 +148,10 @@ with sync_playwright() as p:
     pg.click("#connect"); pg.wait_for_timeout(2500)
     pg.evaluate("window.__failFlash = true")
     pg.click("#install-btn"); pg.check("#erase-ok"); pg.click("#start-install")
-    pg.wait_for_timeout(1500)
+    # 115.10: a classic board whose first connect fails gets the hold-BOOT note and 2.5 s before the second try
+    try: pg.wait_for_selector("#wizard [data-step=error]", state="visible", timeout=20000)
+    except Exception: pass
+    pg.wait_for_timeout(600)
     check("error step inline, console still open", pg.is_visible("#wizard [data-step=error]") and pg.is_visible("#console-out") and pg.is_visible("#copy-log"), pg.inner_text("#wizard")[:200])
     pg.wait_for_timeout(500); check("warning gone after failed flash", not pg.is_visible("#flash-warn"))
     check("V30 install button row back after a failed install", pg.is_visible("#install-btn"))

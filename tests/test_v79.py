@@ -67,7 +67,7 @@ js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 115.10-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117 everywhere", html.count("?v=115.10-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117") == 3, str(html.count("?v=")))
+check("cache-bust 115.11-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117 everywhere", html.count("?v=115.11-fw114.2-b115-c125-c124-c123-c122-c121-c120-c119-c118-c117") == 3, str(html.count("?v=")))
 check("no Compatible Boards card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
@@ -173,13 +173,13 @@ def check_tel(name, tel, expect_compatible, expect_chip_substr=None):
     if "browser" in body:
         check(name + ": browser enum", body["browser"] in ("chrome", "edge", "opera", "brave", "other"), body["browser"])
     if "flasher_version" in body:
-        check(name + ": flasher_version", body["flasher_version"] == "115.10", body["flasher_version"])
+        check(name + ": flasher_version", body["flasher_version"] == "115.11", body["flasher_version"])
 
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(); pg.goto("http://127.0.0.1:8789/index.html"); body = pg.inner_text("body")
     check("text names ESP32 and ESP32-S3", "ESP32 and ESP32-S3" in body)
-    check("footer Flasher Version 115.10", "Flasher Version 115.10" in pg.text_content(".flasher-version"))
+    check("footer Flasher Version 115.11", "Flasher Version 115.11" in pg.text_content(".flasher-version"))
     check("no Compatible Boards on page", "Compatible Boards" not in body); pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None)
