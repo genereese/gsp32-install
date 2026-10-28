@@ -23,6 +23,10 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 APP104 = os.path.join(tempfile.gettempdir(), "gsp32-flasher-app104-%d.js" % os.getpid())
 open(APP104, "wb").write(subprocess.run(["git", "-C", site, "show", "f243ed2:app.js"], capture_output=True, check=True).stdout)
 APP_NOW = os.path.join(site, "app.js")
+# Flasher 115.23: Stable became GSP32-C V130; this test is about the classic GSP32 port flow, so both pages get the
+#  115.22 version list (classic Version 114.2 as Stable), as before
+VERS = os.path.join(tempfile.gettempdir(), "gsp32-flasher-vers11522-%d.json" % os.getpid())
+open(VERS, "wb").write(subprocess.run(["git", "-C", site, "show", "cdebb63:versions.json"], capture_output=True, check=True).stdout)
 IMAGE = open(os.path.join(site, "firmware", "gsp32-esp32.bin"), "rb").read()[:512 * 1024]
 CLASSIC, NATIVE = (0x10c4, 0xea60), (0x303a, 0x1001)
 
@@ -49,6 +53,7 @@ def run(b, app, seed=1, chunk=64, faults=None, usb=CLASSIC):
     pg.add_init_script("window.__emu = {seed: %d, chunk: %d, faults: %s}; window.__usb = {usbVendorId: %d, usbProductId: %d};" % (seed, chunk, json.dumps(faults or {}), usb[0], usb[1]))
     pg.add_init_script(path=os.path.join(here, "espemu.js"))
     pg.route("**/app.js*", lambda r: r.fulfill(path=app, content_type="text/javascript"))
+    pg.route("**/versions.json*", lambda r: r.fulfill(path=VERS, content_type="application/json"))
     pg.route("**/firmware/gsp32-esp32.bin*", lambda r: r.fulfill(body=IMAGE, content_type="application/octet-stream"))
     pg.route("**/gsp32-telemetry.genereese.workers.dev/**", lambda r: r.fulfill(status=200, content_type="application/json", body='{"ok":true}'))
     errors = []; pg.on("pageerror", lambda e: errors.append(str(e)))

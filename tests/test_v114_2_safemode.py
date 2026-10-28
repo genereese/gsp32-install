@@ -27,7 +27,7 @@ def wait_js(pg, js, ms=15000):
     except Exception: return False
 def page(b, init=""):
     pg = b.new_page(viewport={"width": 1280, "height": 900})
-    pg.add_init_script(path=here + "/mock.js")
+    pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(path=here + "/classic.js")
     if init: pg.add_init_script(init)
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
     pg.route("**/gsp32-telemetry.genereese.workers.dev/**", lambda r: r.fulfill(status=200, content_type="application/json", body='{"ok":true}'))

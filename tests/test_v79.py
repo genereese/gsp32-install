@@ -57,9 +57,10 @@ check("versions.json: GSP32-C Beta V129, V128, V127.3, V127.2, V127.1, V126, V12
       and gc[13]["label"] == "GSP32-C Beta V118 (3350ec2)" and gc[13]["manifest"] == "manifest-gspc-v118.json"
       and gc[14]["label"] == "GSP32-C Beta V117 (08999a5)" and gc[14]["manifest"] == "manifest-gspc-beta.json"
       and all(e.get("line") == "GSP32-C" for e in gc), str(gc))
-check("versions.json: Stable Version 114.2 + Beta Version 115", len(v) - len(gc) == 2 and len(st) == 1 and st[0]["label"].startswith("Version 114.2 ") and st[0]["manifest"] == "manifest.json" and len(bt) == 1 and bt[0]["label"].startswith("Version 115 ") and bt[0]["manifest"] == "manifest-beta.json")
+# Flasher 115.23 (Gene): Stable is GSP32-C V130 (no channel, line GSP32-C); the classic Version 114.2 is Previous
+check("versions.json: Stable GSP32-C V130 + Beta Version 115 + Previous Version 114.2", len(v) - len(gc) == 3 and len(st) == 1 and st[0]["label"].startswith("GSP32-C V130 ") and st[0].get("line") == "GSP32-C" and st[0]["manifest"] == "manifest-gspc-v130.json" and len(bt) == 1 and bt[0]["label"].startswith("Version 115 ") and bt[0]["manifest"] == "manifest-beta.json")
 pv = [e for e in v if e.get("channel") == "previous"]
-check("versions.json: no Previous", len(pv) == 0)
+check("versions.json: Previous is Version 114.2 (manifest.json)", len(pv) == 1 and pv[0]["label"].startswith("Version 114.2 ") and pv[0]["manifest"] == "manifest.json", str(pv))
 pm = json.load(open(os.path.join(site, "manifest-v99.json")))
 check("unlisted manifest-v99.json still points at firmware/v99 images that exist", pm["version"].startswith("Version 99 ") and all(os.path.exists(os.path.join(site, p["path"])) and p["path"].startswith("firmware/v99/") for b in pm["builds"] for p in b["parts"]))
 sm = json.load(open(os.path.join(site, "manifest.json")))
@@ -74,7 +75,7 @@ js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
 css = open(os.path.join(site, "style.css")).read()
 check("erase wording per chip (S3 16 MB about a minute)", 'family === "ESP32-S3" ? "about a minute" : "about 15 seconds"' in js)
-check("cache-bust 115.22-fw114.2-b115-c129-c128-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117 everywhere", html.count("?v=115.22-fw114.2-b115-c129-c128-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117") == 3, str(html.count("?v=")))
+check("cache-bust 115.23-s130-fw114.2-b115-c129-c128-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117 everywhere", html.count("?v=115.23-s130-fw114.2-b115-c129-c128-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117") == 3, str(html.count("?v=")))
 check("no Compatible Devices card", 'id="compatible"' not in html)
 check("compat-notice warn-box present", 'id="compat-notice"' in html and "compat-notice" in css)
 check("board-details MAC-style", 'id="board-details"' in html and "board-details" in css and "formatBoardDetails" in js)
@@ -97,7 +98,7 @@ def startInstall(pg, timeout=30000):
     pg.wait_for_timeout(800)
 
 def run(b, chip, flash_kb=None, usb=None, auto_install=True):
-    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(PROBE_ON)
+    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(path=here + "/classic.js"); pg.add_init_script(PROBE_ON)
     init = "window.__ver = '47'; window.__log = []; window.__telemetry = [];"
     if chip: init += "window.__chip = %s;" % json.dumps(chip)
     if flash_kb is not None: init += "window.__flashKb = %s;" % json.dumps(flash_kb)
@@ -180,13 +181,13 @@ def check_tel(name, tel, expect_compatible, expect_chip_substr=None):
     if "browser" in body:
         check(name + ": browser enum", body["browser"] in ("chrome", "edge", "opera", "brave", "other"), body["browser"])
     if "flasher_version" in body:
-        check(name + ": flasher_version", body["flasher_version"] == "115.22", body["flasher_version"])
+        check(name + ": flasher_version", body["flasher_version"] == "115.23", body["flasher_version"])
 
 with sync_playwright() as p:
     b = p.chromium.launch()
     pg = b.new_page(); pg.goto("http://127.0.0.1:8789/index.html"); body = pg.inner_text("body")
     check("text names ESP32 and ESP32-S3", "ESP32 and ESP32-S3" in body)
-    check("footer Flasher Version 115.22", "Flasher Version 115.22" in pg.text_content(".flasher-version"))
+    check("footer Flasher Version 115.23", "Flasher Version 115.23" in pg.text_content(".flasher-version"))
     check("no Compatible Devices on page", "Compatible Devices" not in body); pg.close()
 
     pg, log, st, notice, details, mac, early, tel = run(b, None)
@@ -232,7 +233,7 @@ with sync_playwright() as p:
     check("ESP32-C3 on Stable: no note", not notice, str(notice))
     # Version 106 (Gene): Stable is the only version: Stable stays picked and the Release dropdown is hidden (again from Version 114.1)
     # Version 115 Beta: Stable (default) + Beta listed, so Release shows
-    check("ESP32-C3: Stable picked, Release shown (Beta listed)", pg.input_value("#release-channel") == "stable" and not pg.evaluate("document.querySelector('.release-field').hidden"))
+    check("ESP32-C3: Stable (or the classic Previous the test picks), Release shown (Beta listed)", pg.input_value("#release-channel") in ("stable", "previous") and not pg.evaluate("document.querySelector('.release-field').hidden"))
     check("ESP32-C3: no old clear-error string", "GSP32 runs on ESP32 and ESP32-S3 devices" not in pg.inner_text("body") and "Not Supported" not in (notice or {}).get("title", ""))
     check("ESP32-C3: Single Core in details", "Single Core" in details, details)
     check_tel("C3 telemetry", tel, True, "ESP32-C3")
@@ -277,7 +278,7 @@ with sync_playwright() as p:
     pg.close()
 
     # Telemetry must not delay install even if fetch hangs
-    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(PROBE_ON)
+    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(path=here + "/classic.js"); pg.add_init_script(PROBE_ON)
     pg.add_init_script("""
       window.__ver='47'; window.__log=[];
       const real = window.fetch.bind(window);

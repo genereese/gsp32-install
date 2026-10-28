@@ -19,7 +19,7 @@ LOOP = ("rst:0xc (SW_CPU_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)\r\nconfigsip: 0,
         "E (31) esp_image: invalid segment length 0xe0f6e781\r\nE (37) boot: Factory app partition is not bootable\r\n"
         "E (42) boot: No bootable app partitions in the partition table\r\n")
 def page(b, init=""):
-    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js")
+    pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(path=here + "/classic.js")
     pg.add_init_script("window.__ver = '47';" + init)
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
     pg.route("**/gsp32-telemetry.genereese.workers.dev/**", lambda r: r.fulfill(status=200, content_type="application/json", body='{"ok":true}'))

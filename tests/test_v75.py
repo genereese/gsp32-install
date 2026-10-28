@@ -20,7 +20,7 @@ def atBottom(pg):
     return pg.evaluate("(() => { const c = document.getElementById('console-out'); return c.scrollHeight - c.scrollTop - c.clientHeight < 4; })()")
 def open_(b, width, init=""):
     pg = b.new_page(viewport={"width": width, "height": 900 if width > 500 else 852})
-    pg.add_init_script(path=here + "/mock.js"); pg.add_init_script("window.__ver = '47';" + init)
+    pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(path=here + "/classic.js"); pg.add_init_script("window.__ver = '47';" + init)
     pg.add_init_script("""window.__status = []; addEventListener('DOMContentLoaded', () => { const el = document.getElementById('board-status');
       new MutationObserver(() => window.__status.push(el.textContent)).observe(el, {childList: true, characterData: true, subtree: true}); });""")
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))

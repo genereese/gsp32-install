@@ -1728,6 +1728,10 @@ function gspFound() {
 function isGspc(channel) {
   return String(channel || "").startsWith("gspc-");
 }
+// Flasher 115.23 (Gene): GSP32-C V130 is the Stable pick (a versions.json entry with no channel and line "GSP32-C")
+function gspcEntry(entry) {
+  return !!entry && entry.line === "GSP32-C";
+}
 // GSP32-C Beta V117 (Gene): "GSP32-C Beta V117" from a label like "GSP32-C Beta V117 (08999a5)"
 function gspcName(entry) {
   return String(entry.label || entry.version).replace(/\s*\([0-9a-f]{7,}\)\s*$/, "");
@@ -1777,7 +1781,7 @@ function releaseChannelUpdate() {
   if (picked !== latest) manifestCache = null;
   latest = picked;
   const number = latest ? String(latest.label || latest.version).match(/Version (\d+(?:\.\d+)?)/) : null;
-  versionSelect.textContent = (isGspc(channel) && latest) ? gspcName(latest)
+  versionSelect.textContent = (isGspc(channel) || gspcEntry(latest)) ? gspcName(latest)
     : number ? "Version " + number[1] : latest ? String(latest.label || latest.version) : "No Version Found";
   versionsReady = !!latest;
   syncStart();
@@ -2393,7 +2397,7 @@ async function loadFirmware(family) {
 
 // "Version 30" for the status line (the picked build), "GSP32" when it has no number
 function installName() {
-  if (isGspc(release_channel.value)) return versionSelect.textContent;   // GSP32-C Beta V117/V118 (Gene)
+  if (isGspc(release_channel.value) || gspcEntry(latest)) return versionSelect.textContent;   // GSP32-C Beta V117/V118, Stable V130 (Gene)
   const picked = versionSelect.textContent.match(/Version \d+(?:\.\d+)?/);
   return picked ? picked[0] : "GSP32";
 }

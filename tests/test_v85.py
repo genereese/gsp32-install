@@ -10,7 +10,9 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 fails = 0
 def check(name, ok, extra=""):
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, extra)
-stable = [e for e in json.load(open(os.path.join(site, "versions.json"))) if e.get("channel", "stable") == "stable"]
+# Flasher 115.23: Stable is GSP32-C V130 now; this test keeps checking the classic Stable/Beta pick with the classic
+#  Version 114.2 entry (listed as Previous) as its Stable
+stable = [{k: x for k, x in e.items() if k != "channel"} for e in json.load(open(os.path.join(site, "versions.json"))) if e.get("channel") == "previous"]
 # Version 99: the Stable entry's number from versions.json (Version 85 until V99 became Stable)
 import re
 STABLE = "Version " + re.search(r"Version (\d+(?:\.\d+)?)", stable[0]["label"]).group(1)

@@ -1,8 +1,15 @@
 [
   {
+    "version": "6f859b6",
+    "manifest": "manifest-gspc-v130.json",
+    "label": "GSP32-C V130 (6f859b6)",
+    "line": "GSP32-C"
+  },
+  {
     "version": "1a9c002",
     "manifest": "manifest.json",
-    "label": "Version 114.2 (1a9c002), latest"
+    "label": "Version 114.2 (1a9c002)",
+    "channel": "previous"
   },
   {
     "version": "7eec233",
