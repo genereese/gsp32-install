@@ -10,8 +10,8 @@ check('<a href="LICENSE.txt">License</a>' in html, "footer links LICENSE.txt")
 check("redistribute" in lic and "unmodified" in lic and "closed" in lic and "WITHOUT WARRANTY" in lic, "license: redistribute unmodified, closed source, no warranty")
 check("plain HTTP" in html and "home network" in html, "plain-HTTP home-network note")
 # Flasher 115.25 (Gene, "remove all previous versions"): the unlisted rollbacks V84, V85 and V99 are gone from the site
-#  (git history keeps them; tests/oldsite.py brings them back for test_v79). The site has GSP32-C V130 and Beta V131 only
+#  (git history keeps them; tests/oldsite.py brings them back for test_v79). The site has GSP32-C V130 and Beta V132 only (115.26)
 mans = sorted(n for n in os.listdir(site) if n.startswith("manifest"))
-check(mans == ["manifest-gspc-v130.json", "manifest-gspc-v131.json"], "manifests: V130 and V131 only, no rollbacks: %r" % mans)
+check(mans == ["manifest-gspc-v130.json", "manifest-gspc-v132.json"], "manifests: V130 and V132 only, no rollbacks: %r" % mans)
 check(not any(os.path.exists(os.path.join(site, "firmware", d)) for d in ("v84", "v85", "v99")), "firmware/v84, v85, v99 gone")
 print("FAILS", fails); sys.exit(1 if fails else 0)
