@@ -1,9 +1,16 @@
-""" Flasher 115.25 (Gene, 2026-10-28): GSP32-C V130 stays the Stable pick and GSP32-C Beta V131 is listed next to it
+""" Flasher 115.26 (GSP32-C V132 (a), Gene's ESP32, 2026-10-28): the first Wi-Fi setup after a fresh install of
+GSP32-C Beta V131 found no networks (Scan Again did). 115.10-115.25 sent Ctrl-C before Wi-Fi setup; at the >>> prompt
+the board's REPL echoed each packet's "IMPROV" (plus rub-outs) ahead of the answer, and takeSerialBytes read the echo
+as a packet with length '[' (91), holding the real answers back. Now: no Ctrl-C (classic GSP32's rule; GSP32-C takes
+Improv while main.py runs), and a header whose version byte isn't 1 or whose type isn't 1-4 is text at once. Checked
+below: Gene's flow lists the networks on the first scan with no Ctrl-C and no restart; a board already at >>> (echoing)
+does too; takeSerialBytes lets the echo go. Footer/tag 115.26. Earlier (115.25, unchanged):
+Flasher 115.25 (Gene, 2026-10-28): GSP32-C V130 stays the Stable pick and GSP32-C Beta V131 is listed next to it
 (its own pick in the GSP32-C group of the Release dropdown). The unlisted rollbacks V84, V85 and V99 are gone (Gene:
 "remove all previous versions"; git history keeps them, tests/oldsite.py brings them back for test_v79). The page
 names a board from its start-up line or Improv answer in both forms: "GSP32-C Beta V131" and, from a Stable build,
 "GSP32-C V132". Replaces test_flasher_11524 (V130 the only entry). No update flag, no note """
-import sys, http.server, threading, functools, os, json, re, urllib.request, urllib.error
+import sys, time, http.server, threading, functools, os, json, re, urllib.request, urllib.error
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); here = os.path.dirname(os.path.abspath(__file__))
 http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
@@ -29,8 +36,8 @@ for v in ("130", "131"):
     check("V%s: five images there, in firmware/gspc-v%s/" % (v, v), len(parts) == 5 and all(os.path.exists(os.path.join(site, p)) and p.startswith("firmware/gspc-v%s/" % v) for p in parts), str(parts))
     check("V%s manifest names itself" % v, re.fullmatch(r"GSP32-C (Beta )?V%s \([0-9a-f]{7,}\)" % v, m["version"]) is not None, m["version"])
 html = open(os.path.join(site, "index.html"), encoding="utf-8").read()
-tag = re.search(r"\?v=(115\.25-[\w.-]+)\"", html)
-check("cache tag 115.25-* on style.css, app.js, tour.js", bool(tag) and html.count("?v=" + tag.group(1) + "\"") == 3, tag and tag.group(1))
+tag = re.search(r"\?v=(115\.26-[\w.-]+)\"", html)
+check("cache tag 115.26-* on style.css, app.js, tour.js", bool(tag) and html.count("?v=" + tag.group(1) + "\"") == 3, tag and tag.group(1))
 def status(path):
     try: return urllib.request.urlopen("http://127.0.0.1:8904/" + path).status
     except urllib.error.HTTPError as e: return e.code
@@ -42,6 +49,19 @@ for path in ("manifest.json", "manifest-beta.json", "manifest-gspc-beta.json", "
 def pick(pg, value):   # the dropdown sits in the install step (hidden before connect): set it as a pick does
     pg.evaluate("v => { const s = document.getElementById('release-channel'); s.value = v; s.dispatchEvent(new Event('change')); }", value); pg.wait_for_timeout(200)
 
+# V132 (a): Gene's V131 first boot after a fresh install (his log, 28 Oct 11:30 MT): no Wi-Fi saved, main.py running
+GENE131 = [[150, "ets Jul 29 2019 12:21:46\r\n\r\nrst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)\r\n"], [600, "Performing initial setup\r\n"],
+           [2500, "\r\nGSP32-C Beta V131 on ESP32 (GSP32-C ESP32), boot 1, reset: power-on\r\n", True],
+           [2600, "GSP32-C: no Wi-Fi set; gsp.wifi('name', 'password') sets it\r\n"], [3200, "main.py running\r\n"]]
+def gspc_page(init):
+    pg = b.new_page(viewport={"width": 1280, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(init)
+    pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
+    errs = []; pg.on("pageerror", lambda e: errs.append(str(e))); pg.__errs = errs
+    pg.goto("http://127.0.0.1:8904/index.html"); pg.wait_for_timeout(300)
+    pg.click("#connect"); pg.wait_for_timeout(100)
+    pg.evaluate("window.__port.setSignals({requestToSend: true}).then(() => window.__port.setSignals({requestToSend: false}))")
+    pg.wait_for_timeout(2500); return pg
+
 with sync_playwright() as p:
     b = p.chromium.launch()
     for width in (1100, 390):
@@ -51,7 +71,7 @@ with sync_playwright() as p:
         pg.on("request", lambda r: asked.append(r.url)); pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.goto("http://127.0.0.1:8904/index.html"); pg.wait_for_timeout(800)
         w = " @%d" % width
-        check("footer Flasher Version 115.25" + w, "Flasher Version 115.25" in pg.text_content(".flasher-version"))
+        check("footer Flasher Version 115.26" + w, "Flasher Version 115.26" in pg.text_content(".flasher-version"))
         check("Release dropdown shown (Stable and the Beta)" + w, pg.evaluate("!document.querySelector('.release-field').hidden"))   # (in the install step, shown after connect)
         usable = pg.evaluate("[...document.querySelectorAll('#release-channel option')].filter(o => !o.hidden && !o.disabled).map(o => o.value + '=' + o.textContent.trim())")
         check("picks: Stable, GSP32-C Beta V131" + w, usable == ["stable=Stable", "gspc-131=GSP32-C Beta V131"], str(usable))
@@ -108,4 +128,39 @@ with sync_playwright() as p:
             pg.wait_for_timeout(1500); st = pg.inner_text("#board-state")
             check("found: still " + want + " after Improv", "GSP32-C V132" in st and "Beta" not in st, st)
         check("found: no page errors (" + want + ")", not errs, str(errs)); pg.close()
+    # V132 (a) 1. Gene's flow: Erase and Install GSP32-C Beta V131 (the REPL echo on, as on the real board), Set Up
+    #  Wi-Fi as soon as main.py runs: the first scan lists the networks, no Ctrl-C, no restart, nothing echoed
+    pg = gspc_page("window.__gspc = '130'; window.__gspcStable = true; window.__replEcho = true;")
+    pg.click("#install-btn"); pg.wait_for_timeout(400); pg.select_option("#release-channel", "gspc-131"); pg.wait_for_timeout(300)
+    pg.evaluate("window.__bootScript = %s" % json.dumps(GENE131)); pg.check("#erase-ok"); pg.click("#start-install")
+    pg.wait_for_function("/main\\.py running/.test(document.getElementById('console-out').innerText)", timeout=60000); pg.wait_for_timeout(300)
+    resets = len([x for x in pg.evaluate("window.__log") if "requestToSend" in str(x)])
+    t0 = time.time(); pg.click("#wifi-setup")
+    pg.wait_for_function("/Pick your network|No networks found|did not answer/.test(document.getElementById('board-status').innerText)", timeout=40000)
+    took = time.time() - t0; st = pg.inner_text("#board-status")
+    check("V132 (a) Gene's flow: first scan lists the networks", "Pick your network" in st and pg.locator("#wifi-list li").count() == 2, st)
+    check("V132 (a) Gene's flow: in a few seconds (115.25: 20 s scan timeout)", took < 8, "%.1f s" % took)
+    check("V132 (a) Gene's flow: no Ctrl-C, no console note about it", pg.evaluate("window.__ctrl1 || 0") == 0 and "Ctrl-C stops main.py" not in pg.inner_text("#console-out"))
+    check("V132 (a) Gene's flow: no restart (no RTS pulse after Set Up Wi-Fi)", len([x for x in pg.evaluate("window.__log") if "requestToSend" in str(x)]) == resets)
+    check("V132 (a) Gene's flow: no REPL echo (main.py kept running)", (pg.evaluate("window.__echoes") or 0) == 0)
+    check("V132 (a) Gene's flow: no page errors", not pg.__errs, str(pg.__errs)); pg.close()
+    # V132 (a) 2. A board already at >>> (the person sent Ctrl-C): every packet is echoed ahead of its answer, and the
+    #  first scan still lists the networks (115.25 held the answers behind the echo)
+    pg = gspc_page("window.__gspc = '131'; window.__replEcho = true;")
+    t0 = time.time(); pg.click("#wifi-setup")
+    pg.wait_for_function("/Pick your network|No networks found|did not answer/.test(document.getElementById('board-status').innerText)", timeout=60000)
+    took = time.time() - t0; st = pg.inner_text("#board-status")
+    check("V132 (a) at >>> with the echo: first scan lists the networks", "Pick your network" in st and pg.locator("#wifi-list li").count() == 2, st)
+    check("V132 (a) at >>> with the echo: echoes really came", (pg.evaluate("window.__echoes") or 0) >= 2, pg.evaluate("window.__echoes"))
+    check("V132 (a) at >>> with the echo: quick, no restart retry", took < 8, "%.1f s" % took)
+    # takeSerialBytes itself (the page's own module): the echo is text at once, the answer behind it a packet
+    r = pg.evaluate("""async () => { const m = await import(document.querySelector('script[type=module]').src);
+        const enc = new TextEncoder(); const echo = enc.encode('IMPROV' + '\\b\\x1b[K'.repeat(6));
+        const ans = m.buildImprovPacket(1, [2]); const all = new Uint8Array(echo.length + ans.length); all.set(echo, 0); all.set(ans, echo.length);
+        const t = m.takeSerialBytes(all); const half = m.takeSerialBytes(enc.encode('IMPROV'));
+        const v1 = m.takeSerialBytes(Uint8Array.from([73,77,80,82,79,86,1]));
+        return {packets: t.packets.length, type: t.packets.length ? t.packets[0].type : -1, rest: t.rest.length, textLen: t.text.length, half: half.rest.length, v1: v1.rest.length}; }""")
+    check("takeSerialBytes: echo then a state answer -> 1 packet, nothing held", r["packets"] == 1 and r["type"] == 1 and r["rest"] == 0 and r["textLen"] == 6 + 24, r)
+    check("takeSerialBytes: a bare IMPROV or IMPROV+1 is still held (could be a packet)", r["half"] == 6 and r["v1"] == 7, r)
+    check("V132 (a) at >>>: no page errors", not pg.__errs, str(pg.__errs)); pg.close()
 print("fails", fails); sys.exit(1 if fails else 0)

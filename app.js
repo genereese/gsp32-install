@@ -767,6 +767,19 @@ export function takeSerialBytes(input) {
       return finish(bytes.length - hold);
     }
     if (found > i) texts.push(bytes.subarray(i, found));
+    // Flasher 115.26 (GSP32-C V132 (a)): a header whose version byte isn't 1, or whose type isn't one Improv uses
+    //  (1-4), is text (a REPL echoing "IMPROV" then backspaces): it is let go at once. 115.25 waited for "length"
+    //  bytes first, and the echo's '[' (91) kept the board's real answers behind it until ~100 more bytes came
+    if (found + 6 < bytes.length && bytes[found + 6] !== 1) {
+      texts.push(bytes.subarray(found, found + 1));
+      i = found + 1;
+      continue;
+    }
+    if (found + 7 < bytes.length && (bytes[found + 7] < 1 || bytes[found + 7] > 4)) {
+      texts.push(bytes.subarray(found, found + 1));
+      i = found + 1;
+      continue;
+    }
     if (found + 9 > bytes.length) return finish(found);
     const length = bytes[found + 8];
     const total = 9 + length + 1;
@@ -3632,9 +3645,10 @@ async function startWifi(fresh) {
       await waitListening(45000);
       if (!portOpen() && usbGuide) throw new Error("The device restarted on a new USB port. Pick it again (see the note above).");
     }
-    // Flasher Version 115.10 (Gene's ESP32): GSP32-C's main.py in the foreground keeps Improv (and the console) from
-    //  the board's Python until Ctrl-C: it is stopped first, and the >>> prompt waited for (see stopMainPy)
-    if (gspcImprov() && !board.repl && portOpen()) await stopMainPy();
+    // Flasher 115.26 (GSP32-C V132 (a), Gene's ESP32): no Ctrl-C before Wi-Fi setup any more (115.10-115.25 sent it to
+    //  stop main.py). GSP32-C's console takes Improv packets while main.py runs, so this is classic GSP32's rule again.
+    //  At the >>> prompt the board's REPL echoed each packet's "IMPROV" (and rubbed it out), and that echo held the
+    //  answers back here, so the first scan after a fresh install came back empty (see takeSerialBytes)
     let state = board.listening ? await waitBoardReady(8000) : null;
     // Flasher Version 114.2 (Gene's C3): GSP32 that does not answer (its REPL had the port, or the listening ended) is
     //  restarted once and asked again, instead of the user having to click Try Again
@@ -3670,22 +3684,6 @@ async function startWifi(fresh) {
     if ((err && err.fallback) || board.kind === "gspc") showWifiFallback(true);
   }
   syncWifiConnect();
-}
-
-// Flasher Version 115.10 (Gene's ESP32): Ctrl-C (twice at most) until GSP32-C shows its >>> prompt; no prompt is an
-//  error with the console way (see showWifiFallback)
-async function stopMainPy() {
-  wifiStatus.textContent = "Stopping main.py (Ctrl-C) so the device takes Wi-Fi setup...";
-  appendConsole("\n[Set Up Wi-Fi: Ctrl-C stops main.py so the device takes Wi-Fi setup]\n");
-  for (let i = 0; i < 2 && !board.repl; i++) {
-    await writeBytes(new Uint8Array([0x03]));
-    const end = Date.now() + 1500;
-    while (!board.repl && Date.now() < end && portOpen()) await delay(100);
-  }
-  if (!board.repl) {
-    throw Object.assign(new Error("main.py did not stop (no >>> prompt after Ctrl-C), so the device can't take Wi-Fi setup."), { fallback: true });
-  }
-  wifiStatus.textContent = "main.py stopped. Asking the device...";
 }
 
 // Flasher Version 115.10 (Gene's ESP32): the console way to set Wi-Fi, under the Wi-Fi step when the list is empty or

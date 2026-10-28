@@ -26,7 +26,7 @@
     }
     // A scripted restart (window.__bootScript = [[ms, text, listen?], ...]): a real board's output, piece by piece
     if (Array.isArray(window.__bootScript)) { for (const [ms, text, listen] of window.__bootScript) setTimeout(() => { booted = true; if (listen !== undefined) window.__listen = listen;
-      // Flasher Version 115.10: GSP32-C's main.py in the foreground: Improv packets go nowhere until Ctrl-C
+      // Flasher Version 115.10: GSP32-C's main.py in the foreground (115.26: it still takes Improv, see __mainPyBlocks)
       if (/main\.py running/.test(text)) window.__mainPy = true;
       say(text); }, ms); return; }
     if (window.__other) { setTimeout(() => say("rst:0x1 (POWERON_RESET)\r\nMicroPython v1.25.0 on 2025-04-15; Generic ESP32 module with ESP32\r\n>>> "), 300); return; }
@@ -60,7 +60,11 @@
       window.__pk++;
       if (!window.__listen) { window.__badPk++; window.__badBytes = (window.__badBytes || "") + String.fromCharCode(...data); continue; }
       if (!booted || window.__other) continue;
-      if (window.__mainPy) { window.__blockedPk = (window.__blockedPk || 0) + 1; continue; }
+      // Flasher 115.26: a real GSP32-C (V121+) takes Improv while main.py runs; __mainPyBlocks keeps 115.10's model
+      if (window.__mainPy && window.__mainPyBlocks) { window.__blockedPk = (window.__blockedPk || 0) + 1; continue; }
+      // Flasher 115.26 (V132 (a), Gene's ESP32): at the >>> prompt GSP32-C's REPL echoes each packet's "IMPROV" and its
+      //  six rub-outs ahead of the answer (the raw bytes of the dev ESP32 on V131); __replEcho turns it on
+      if (window.__replEcho && window.__gspc && !window.__mainPy) { window.__echoes = (window.__echoes || 0) + 1; say("IMPROV" + "\b\x1b[K".repeat(6)); }
       const cmd = data[0];
       if (cmd === 2) push(pkt(1, [state]));
       if (cmd === 3) { window.__info = (window.__info || 0) + 1; push(strs(3, window.__gspc ? ["GSP32-C", (window.__gspcStable ? "" : "Beta ") + "V" + window.__gspc, "ESP32", "gsp32c"] : ["GSP32", window.__ver || "1.0", "ESP32", "gsp32"])); }

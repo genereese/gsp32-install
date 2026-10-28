@@ -5,8 +5,8 @@
 #  gsp.wifi(...) could not be typed either. Now: the name can be typed, the console way is shown, the console stays
 #  usable whenever the page is not talking to the board, and every install end hands the port back to the page.
 #  Also: a classic board that no reset style puts into download mode gets the hold-BOOT note (it folds in), at once in
-#  the install step and again with the error. GSP32-C's main.py in the foreground keeps Improv from the board until
-#  Ctrl-C: Set Up Wi-Fi sends it and waits for >>> (or says it could not). A plain connect, reconnect or Disconnect of a
+#  the install step and again with the error. (115.10-115.25 sent Ctrl-C before Wi-Fi setup; 115.26 does not: GSP32-C
+#  takes Improv while main.py runs, and the REPL's echo at >>> held the answers back, V132 (a).) A plain connect, reconnect or Disconnect of a
 #  classic board never restarts it (no probe, DTR and RTS untouched on connect, set RTS first on Disconnect), modelled
 #  on Chromium on Windows: the port opens with both lines on, and setSignals sets DTR, then RTS. The password of an
 #  echoed gsp.wifi(...) line is shown as dots.
@@ -96,9 +96,10 @@ with sync_playwright() as p:
     check("empty scan: Ctrl-C button usable", pg.is_enabled("#ctrl-c"))
     check("empty scan: Connect greyed until a name is typed", pg.is_disabled("#wifi-connect") and "Type your network name" in pg.inner_text("#wifi-note"),
           pg.inner_text("#wifi-note"))
-    check("Set Up Wi-Fi: Ctrl-C sent first (main.py ran in the foreground)", pg.evaluate("window.__ctrl1 || 0") >= 1 and "[Set Up Wi-Fi: Ctrl-C stops main.py" in pg.inner_text("#console-out"),
+    # Flasher 115.26 (V132 (a)): no Ctrl-C any more; GSP32-C answers Improv while main.py runs (classic GSP32's rule)
+    check("Set Up Wi-Fi: no Ctrl-C sent (main.py keeps running)", (pg.evaluate("window.__ctrl1 || 0") == 0) and "[Set Up Wi-Fi: Ctrl-C" not in pg.inner_text("#console-out"),
           pg.evaluate("window.__ctrl1 || 0"))
-    check("Set Up Wi-Fi: Improv reached the device only after the prompt", pg.evaluate("window.__mainPy") is False and ">>>" in pg.inner_text("#console-out"))
+    check("Set Up Wi-Fi: the device answered Improv while main.py ran", pg.evaluate("window.__mainPy") is True and (pg.evaluate("window.__blockedPk") or 0) == 0)
     check("empty scan: gsp.wifi(...) typed in the console reaches the device", typed_reaches_board(pg, "import gsp; gsp.wifi('HomeNet', 'x')"))
     # The REPL echoes the line: the password is shown as dots (console and Copy Log); the board's own hint stays
     pg.evaluate("window.__say(%s)" % json.dumps(">>> import gsp; gsp.wifi('HomeNet', '%s')\r\n" % SECRET)); pg.wait_for_timeout(400)
@@ -129,7 +130,7 @@ with sync_playwright() as p:
     pg.click("#wifi-setup")
     pg.wait_for_function("/did not answer Wi-Fi setup/.test(document.getElementById('board-status').innerText)", timeout=90000); pg.wait_for_timeout(500)
     fb = pg.inner_text("#wifi-fallback") if pg.is_visible("#wifi-fallback") else ""
-    check("no answer: main.py stopped first (Ctrl-C)", pg.evaluate("window.__ctrl1 || 0") >= 1)
+    check("no answer: no Ctrl-C sent (115.26)", pg.evaluate("window.__ctrl1 || 0") == 0)
     check("no answer: error with the console way", "gsp.wifi('name', 'password')" in fb, pg.inner_text("#board-status") + " | " + fb)
     check("no answer: Try Again offered", pg.is_visible("#wifi-rescan") and pg.inner_text("#wifi-rescan") == "Try Again")
     c = console_ok(pg)
@@ -138,18 +139,14 @@ with sync_playwright() as p:
     check("flow 2: no page errors", not pg.__errors, pg.__errors)
     pg.close()
 
-    # 2b. main.py that ignores Ctrl-C: no prompt, so Set Up Wi-Fi says so (with the console way), console usable
+    # 2b. (115.10-115.25: main.py that ignores Ctrl-C.) Flasher 115.26 sends no Ctrl-C, so a main.py that ignores it
+    #  still gets Wi-Fi set: the scan lists the networks
     pg = page(b, "window.__gspc = '120'; window.__mainPyStuck = true;")
     connect(pg); install(pg)
     pg.wait_for_function("/main\\.py running/.test(document.getElementById('console-out').innerText)", timeout=60000); pg.wait_for_timeout(500)
     pg.click("#wifi-setup")
-    pg.wait_for_function("/main\\.py did not stop/.test(document.getElementById('board-status').innerText)", timeout=30000); pg.wait_for_timeout(500)
-    fb = pg.inner_text("#wifi-fallback") if pg.is_visible("#wifi-fallback") else ""
-    check("main.py stuck: two Ctrl-C at most, then the error", pg.evaluate("window.__ctrl1 || 0") == 2, pg.evaluate("window.__ctrl1 || 0"))
-    check("main.py stuck: the console way shown", "Send Ctrl-C" in fb, fb)
-    check("main.py stuck: no Improv sent into main.py", (pg.evaluate("window.__blockedPk") or 0) == 0)
-    c = console_ok(pg)
-    check("main.py stuck: console box usable", not c["dis"] and c["ph"] != "Busy ...", c)
+    pg.wait_for_function("/Pick your network/.test(document.getElementById('board-status').innerText)", timeout=30000); pg.wait_for_timeout(300)
+    check("main.py ignoring Ctrl-C: no Ctrl-C sent, networks listed", pg.evaluate("window.__ctrl1 || 0") == 0 and pg.locator("#wifi-list li").count() == 2, pg.inner_text("#board-status"))
     pg.close()
 
     # 3. Gene's earlier tries: no reset style reaches download mode (the board keeps starting its program): the install
