@@ -1768,7 +1768,9 @@ function releaseChannelUpdate() {
     const old = release_versions.previous;
     const old_number = old ? String(old.label || old.version).match(/Version (\d+(?:\.\d+)?)/) : null;
     previous_option.hidden = previous_option.disabled = !old;
-    previous_option.textContent = old_number ? "Previous (Version " + old_number[1] + ")" : "Previous";
+    // Flasher 115.27 (Gene): the previous Stable is GSP32-C V130: "Previous (GSP32-C V130)"
+    previous_option.textContent = gspcEntry(old) ? "Previous (" + gspcName(old) + ")"
+      : old_number ? "Previous (Version " + old_number[1] + ")" : "Previous";
     if ((release_channel.value === "previous") && !(old)) release_channel.value = "stable";
   }
   // Version 106 (Gene): Stable is the only version listed: one choice is no choice, so the Release dropdown is hidden

@@ -34,7 +34,10 @@ def overlay(site):
     # the V130 entry as the current site has it (its label names the current build)
     cur = json.load(open(os.path.join(site, "versions.json")))
     old = json.load(open(os.path.join(work, "versions.json")))
-    old[0] = cur[0]
+    # Flasher 115.27: V130 is Previous on the site now; the old suites keep it as their Stable (V133's are in test_flasher_11527)
+    v130 = dict(next(e for e in cur if e["manifest"] == "manifest-gspc-v130.json"))
+    v130.pop("channel", None)
+    old[0] = v130
     open(os.path.join(work, "versions.json"), "w").write(json.dumps(old, indent=2) + "\n")
     open(os.path.join(work, ".ready"), "w").write("ok")
     try:

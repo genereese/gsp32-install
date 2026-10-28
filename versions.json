@@ -1,15 +1,15 @@
 [
   {
-    "version": "6f859b6",
-    "manifest": "manifest-gspc-v130.json",
-    "label": "GSP32-C V130 (6f859b6)",
+    "version": "29ffbf8",
+    "manifest": "manifest-gspc-v133.json",
+    "label": "GSP32-C V133 (29ffbf8)",
     "line": "GSP32-C"
   },
   {
-    "version": "6ac7d5b",
-    "manifest": "manifest-gspc-v132.json",
-    "label": "GSP32-C Beta V132 (6ac7d5b)",
-    "channel": "gspc-beta",
+    "version": "6f859b6",
+    "manifest": "manifest-gspc-v130.json",
+    "label": "GSP32-C V130 (6f859b6)",
+    "channel": "previous",
     "line": "GSP32-C"
   }
 ]

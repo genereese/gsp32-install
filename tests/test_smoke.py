@@ -21,6 +21,9 @@ tags = re.findall(r"\?v=([\w.-]+)", html)
 gs = versions[0].get("line") == "GSP32-C"
 # Flasher 115.24 (Gene): V130 may be the only entry (no classic Previous): then the tag has no -fw part ("115.24-s130")
 classic = next((e for e in versions if e.get("channel") == "previous"), None) if gs else versions[0]
+# Flasher 115.27 (Gene): the Previous may be a GSP32-C build too (V130 once V133 is Stable): the tag gets -p130, no -fw
+gs_prev = classic if classic and classic.get("line") == "GSP32-C" else None
+if gs_prev: classic = None
 stable = re.search(r"Version (\d+(?:\.\d+)?)", classic["label"]).group(1) if classic else None
 stable_name = re.sub(r"\s*\([0-9a-f]{7,}\)\s*$", "", versions[0]["label"]) if gs else "Version " + stable
 check("footer names a Flasher Version", footer is not None)
@@ -29,6 +32,7 @@ check("one cache tag on style.css, app.js and tour.js", len(tags) == 3 and len(s
 betas = [re.search(r"Version (\d+(?:\.\d+)?)", e["label"]).group(1) for e in versions if e.get("channel") == "beta"]
 want = "%s%s%s" % (footer.group(1) if footer else "?", ("-s" + re.search(r"V(\d+(?:\.\d+)?)", versions[0]["label"]).group(1)) if gs else "", ("-fw" + stable) if stable else "") + "".join("-b" + x for x in betas)
 # GSP32-C Beta V117 (Gene): a listed GSP32-C line adds -c<version> ("GSP32-C Beta V117" -> -c117)
+want += ("-p" + re.search(r"V(\d+(?:\.\d+)?)", gs_prev["label"]).group(1)) if gs_prev else ""
 want += "".join("-c" + re.search(r"V(\d+(?:\.\d+)?)", e["label"]).group(1) for e in versions if e.get("channel") == "gspc-beta")
 check("cache tag is <flasher>-fw<firmware>[-b<beta>]", bool(footer) and bool(tags) and tags[0] == want, "%s vs %s" % (tags[:1], want))
 for entry in versions:
