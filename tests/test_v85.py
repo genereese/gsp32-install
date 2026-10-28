@@ -3,6 +3,7 @@ versions.json entry with "channel": "beta", and says None Right Now (disabled) w
 import sys, http.server, threading, functools, os, json
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); here = os.path.dirname(os.path.abspath(__file__))
+import oldsite; site = oldsite.overlay(site)  # Flasher 115.24: several releases come from the 115.23 list (tests/oldsite.py)
 SHOTS = os.environ.get("V85_SHOTS", "")
 http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8785), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))

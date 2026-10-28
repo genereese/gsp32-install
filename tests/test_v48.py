@@ -14,7 +14,7 @@ with sync_playwright() as p:
     pg = b.new_page(viewport={"width": 1440, "height": 900})
     pg.goto("http://127.0.0.1:8813/index.html"); pg.wait_for_timeout(1200)
     check("heading Check It Out", pg.inner_text("#tour-title") == "Check It Out")
-    check("flasher shows its version", "Flasher Version 115.23" in pg.inner_text("body"))
+    check("flasher shows its version", "Flasher Version 115.24" in pg.inner_text("body"))
     check("strip visible without scrolling at 1440x900", pg.locator(".tour-thumb >> nth=0").bounding_box()["y"] < 900, str(pg.locator(".tour-thumb >> nth=0").bounding_box()))
     art = pg.locator(".step-art >> nth=0").bounding_box(); txt = pg.locator(".steps-row li span >> nth=0").bounding_box()
     check("V50: slim steps, icon left of its text, 40px", art["x"] + art["width"] <= txt["x"] + 1 and round(art["width"]) == 40)

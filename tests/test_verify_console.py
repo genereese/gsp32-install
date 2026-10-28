@@ -6,6 +6,7 @@
 import os, http.server, threading, functools, hashlib, time
 from playwright.sync_api import sync_playwright
 here = os.path.dirname(os.path.abspath(__file__)); site = os.path.dirname(here)
+import oldsite; site = oldsite.overlay(site)  # Flasher 115.24: several releases come from the 115.23 list (tests/oldsite.py)
 http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8799), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
 threading.Thread(target=srv.serve_forever, daemon=True).start()

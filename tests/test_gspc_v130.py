@@ -5,6 +5,7 @@ classic Beta 115 and the GSP32-C Betas V129-V117 are unchanged; no update flag, 
 import sys, http.server, threading, functools, os, json, re
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); here = os.path.dirname(os.path.abspath(__file__))
+import oldsite; site = oldsite.overlay(site)  # Flasher 115.24: several releases come from the 115.23 list (tests/oldsite.py)
 http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8903), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
 threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -45,7 +46,7 @@ with sync_playwright() as p:
         pg.on("request", lambda r: asked.append(r.url)); pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.goto("http://127.0.0.1:8903/index.html"); pg.wait_for_timeout(600)
         w = " @%d" % width
-        check("footer Flasher Version 115.23" + w, "Flasher Version 115.23" in pg.content())
+        check("footer Flasher Version 115.24" + w, "Flasher Version 115.24" in pg.content())
         check("Stable is the default pick" + w, pg.input_value("#release-channel") == "stable")
         top = pg.evaluate("[...document.querySelectorAll('#release-channel > option')].map(o => [o.value, o.textContent, o.hidden || o.disabled])")
         check("Release: Stable, Beta, Previous (Version 114.2), all usable" + w, [o[:2] for o in top] == [["stable", "Stable"], ["beta", "Beta"], ["previous", "Previous (Version 114.2)"]] and not any(o[2] for o in top), str(top))

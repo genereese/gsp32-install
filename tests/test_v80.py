@@ -5,6 +5,7 @@ from playwright.sync_api import sync_playwright
 #  tests of the probe itself (still run for native USB and for Recover) turn it on
 PROBE_ON = "window.__gsp32ProbeOnConnect = true;"
 here = os.path.dirname(os.path.abspath(__file__)); site = os.path.dirname(here)
+import oldsite; site = oldsite.overlay(site)  # Flasher 115.24: several releases come from the 115.23 list (tests/oldsite.py)
 http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8798), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
 threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -14,10 +15,10 @@ def check(name, ok, extra=""):
 
 js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
-check("cache-bust 115.23-s130-fw114.2-b115-c129-c128-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117", html.count("?v=115.23-s130-fw114.2-b115-c129-c128-c127.3-c127.2-c127.1-c126-c125-c124-c123-c122-c121-c120-c119-c118-c117") == 3)
+check("cache-bust 115.24-s130", html.count("?v=115.24-s130") == 3)
 check("probeBoardOnConnect present", "probeBoardOnConnect" in js and "Reading device info" in js)
 check("Install disabled when compatIssue", "board.compatIssue" in js and "install.disabled" in js)
-check("footer Flasher Version 115.23", "Flasher Version 115.23" in html)
+check("footer Flasher Version 115.24", "Flasher Version 115.24" in html)
 
 def connect_only(b, chip=None, flash_kb=None, usb=None):
     pg = b.new_page(viewport={"width": 1100, "height": 900})

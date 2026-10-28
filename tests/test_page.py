@@ -1,6 +1,7 @@
 import re, sys, http.server, threading, functools, os
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import oldsite; site = oldsite.overlay(site)  # Flasher 115.24: several releases come from the 115.23 list (tests/oldsite.py)
 import json as _j, re as _r, os as _o
 LISTED = _r.match(r"Version \d+(?:\.\d+)?", _j.load(open(_o.path.join(site, "manifest.json")))["version"]).group(0)  # the listed build, e.g. "Version 32"
 handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=site)

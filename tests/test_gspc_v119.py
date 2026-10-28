@@ -4,6 +4,7 @@ manifest-gspc-v119.json from firmware/gspc-v119/; the GSP32 picks (Stable, Beta)
 import sys, http.server, threading, functools, os, json, re
 from playwright.sync_api import sync_playwright
 site = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); here = os.path.dirname(os.path.abspath(__file__))
+import oldsite; site = oldsite.overlay(site)  # Flasher 115.24: several releases come from the 115.23 list (tests/oldsite.py)
 http.server.SimpleHTTPRequestHandler.log_message = lambda *a: None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8819), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
 threading.Thread(target=srv.serve_forever, daemon=True).start()

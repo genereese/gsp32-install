@@ -19,14 +19,15 @@ tags = re.findall(r"\?v=([\w.-]+)", html)
 # Flasher 115.23 (Gene): Stable may be a GSP32-C build (line "GSP32-C", "GSP32-C V130 (...)"): the tag gets -s130 and
 #  -fw<classic> names the classic GSP32 entry (Previous); the version line names "GSP32-C V130"
 gs = versions[0].get("line") == "GSP32-C"
-classic = next(e for e in versions if (e.get("channel") == "previous") if gs) if gs else versions[0]
-stable = re.search(r"Version (\d+(?:\.\d+)?)", classic["label"]).group(1)
+# Flasher 115.24 (Gene): V130 may be the only entry (no classic Previous): then the tag has no -fw part ("115.24-s130")
+classic = next((e for e in versions if e.get("channel") == "previous"), None) if gs else versions[0]
+stable = re.search(r"Version (\d+(?:\.\d+)?)", classic["label"]).group(1) if classic else None
 stable_name = re.sub(r"\s*\([0-9a-f]{7,}\)\s*$", "", versions[0]["label"]) if gs else "Version " + stable
 check("footer names a Flasher Version", footer is not None)
 check("one cache tag on style.css, app.js and tour.js", len(tags) == 3 and len(set(tags)) == 1, str(tags))
 # Flasher Version 107: a listed Beta adds -b<beta> (as ?v=102-fw103-b105 did)
 betas = [re.search(r"Version (\d+(?:\.\d+)?)", e["label"]).group(1) for e in versions if e.get("channel") == "beta"]
-want = "%s%s-fw%s" % (footer.group(1) if footer else "?", ("-s" + re.search(r"V(\d+(?:\.\d+)?)", versions[0]["label"]).group(1)) if gs else "", stable) + "".join("-b" + x for x in betas)
+want = "%s%s%s" % (footer.group(1) if footer else "?", ("-s" + re.search(r"V(\d+(?:\.\d+)?)", versions[0]["label"]).group(1)) if gs else "", ("-fw" + stable) if stable else "") + "".join("-b" + x for x in betas)
 # GSP32-C Beta V117 (Gene): a listed GSP32-C line adds -c<version> ("GSP32-C Beta V117" -> -c117)
 want += "".join("-c" + re.search(r"V(\d+(?:\.\d+)?)", e["label"]).group(1) for e in versions if e.get("channel") == "gspc-beta")
 check("cache tag is <flasher>-fw<firmware>[-b<beta>]", bool(footer) and bool(tags) and tags[0] == want, "%s vs %s" % (tags[:1], want))

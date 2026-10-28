@@ -13,6 +13,7 @@
 import os, re, json, subprocess, http.server, threading, functools, socket, tempfile, time
 from playwright.sync_api import sync_playwright
 here = os.path.dirname(os.path.abspath(__file__)); site = os.path.dirname(here)
+repo = site; import oldsite; site = oldsite.overlay(site)  # Flasher 115.24: several releases come from the 115.23 list (tests/oldsite.py)
 fails = 0
 def check(name, ok, extra=""):
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, "" if ok else str(extra)[:900])
@@ -21,12 +22,12 @@ s = socket.socket(); s.bind(("127.0.0.1", 0)); PORT = s.getsockname()[1]; s.clos
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), functools.partial(http.server.SimpleHTTPRequestHandler, directory=site))
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 APP104 = os.path.join(tempfile.gettempdir(), "gsp32-flasher-app104-%d.js" % os.getpid())
-open(APP104, "wb").write(subprocess.run(["git", "-C", site, "show", "f243ed2:app.js"], capture_output=True, check=True).stdout)
+open(APP104, "wb").write(subprocess.run(["git", "-C", repo, "show", "f243ed2:app.js"], capture_output=True, check=True).stdout)
 APP_NOW = os.path.join(site, "app.js")
 # Flasher 115.23: Stable became GSP32-C V130; this test is about the classic GSP32 port flow, so both pages get the
 #  115.22 version list (classic Version 114.2 as Stable), as before
 VERS = os.path.join(tempfile.gettempdir(), "gsp32-flasher-vers11522-%d.json" % os.getpid())
-open(VERS, "wb").write(subprocess.run(["git", "-C", site, "show", "cdebb63:versions.json"], capture_output=True, check=True).stdout)
+open(VERS, "wb").write(subprocess.run(["git", "-C", repo, "show", "cdebb63:versions.json"], capture_output=True, check=True).stdout)
 IMAGE = open(os.path.join(site, "firmware", "gsp32-esp32.bin"), "rb").read()[:512 * 1024]
 CLASSIC, NATIVE = (0x10c4, 0xea60), (0x303a, 0x1001)
 

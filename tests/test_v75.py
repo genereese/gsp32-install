@@ -4,6 +4,7 @@
 import sys, os, http.server, threading, functools, re
 from playwright.sync_api import sync_playwright
 here = os.path.dirname(os.path.abspath(__file__)); site = os.path.dirname(here)
+import oldsite; site = oldsite.overlay(site)  # Flasher 115.24: several releases come from the 115.23 list (tests/oldsite.py)
 SHOTS = os.environ.get("SHOTS", "/tmp"); os.makedirs(SHOTS, exist_ok=True)
 hits = []
 class H(http.server.SimpleHTTPRequestHandler):
