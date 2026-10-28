@@ -366,10 +366,12 @@ function trackBoard(line) {
   // GSP32-C Beta V117 (Gene): GSP32-C prints "GSP32-C Beta V117 on <chip> ..." at start-up. V117-V120 have no Improv,
   //  so Wi-Fi is set at their prompt (the note says how). Flasher Version 115.9: V121 and newer listen for Improv from
   //  this line on, so Set Up Wi-Fi is offered (and the Next step after an install)
-  const gspc = line.match(/GSP32-C Beta V(\d+(?:\.\d+)?) on /);
+  // Flasher 115.25 (GSP32-C V131, Gene): a Stable build prints "GSP32-C V131 on ...", a Beta "GSP32-C Beta V131 on ..."
+  const gspc = line.match(/GSP32-C (Beta )?V(\d+(?:\.\d+)?) on /);
   if (gspc) {
     board.kind = "gspc";
-    board.gspcVersion = gspc[1];
+    board.gspcVersion = gspc[2];
+    board.gspcBeta = !!gspc[1];
     board.listening = gspcImprov();
     board.readyAt = Date.now();
     bootTimes = [];
@@ -601,8 +603,8 @@ function syncBoardUi() {
     : board.note ? board.note
     : broken ? "Incomplete Install Detected"
     : gsp32 ? (board.version ? "GSP32 Version " + board.version + " Found" : "GSP32 Found")
-    : gspcImprov() ? "GSP32-C Beta V" + board.gspcVersion + " Found"
-    : board.kind === "gspc" ? "GSP32-C Beta V" + board.gspcVersion + " Found (set Wi-Fi at its prompt: gsp.wifi('name', 'password'))"
+    : gspcImprov() ? gspcFoundName() + " Found"
+    : board.kind === "gspc" ? gspcFoundName() + " Found (set Wi-Fi at its prompt: gsp.wifi('name', 'password'))"
     : board.installed ? "Installed, Restarting..."
     : board.kind === "other" ? "No GSP32 Found"
     : quiet ? "Device Connected (Left Running)" : "Checking the Device...";
@@ -1110,11 +1112,12 @@ function consumeSerial(chunk) {
         const v = parsed.strings[1] || "";
         const n = v.match(/^(?:Version\s*)?(\d{2,}(?:\.\d+)?)$/i);
         if (n) board.version = n[1];
-        // Flasher Version 115.9: GSP32-C answers "GSP32-C", "Beta V125"
-        const c = parsed.strings[0] === "GSP32-C" && v.match(/^Beta V(\d+(?:\.\d+)?)$/);
+        // Flasher Version 115.9: GSP32-C answers "GSP32-C", "Beta V125". Flasher 115.25: a Stable build "V131"
+        const c = parsed.strings[0] === "GSP32-C" && v.match(/^(Beta )?V(\d+(?:\.\d+)?)$/);
         if (c) {
           board.kind = "gspc";
-          board.gspcVersion = c[1];
+          board.gspcVersion = c[2];
+          board.gspcBeta = !!c[1];
         }
       }
     }
@@ -1720,6 +1723,10 @@ async function loadVersions() {
   syncStart();
 }
 
+// Flasher 115.25 (Gene): the name the board gave ("GSP32-C Beta V131" or, from a Stable build, "GSP32-C V132")
+function gspcFoundName() {
+  return "GSP32-C " + (board.gspcBeta === false ? "" : "Beta ") + "V" + board.gspcVersion;
+}
 // GSP32-C Beta V117 (Gene): GSP32 or GSP32-C runs on the board (the install is done, no recovery, no handoff)
 function gspFound() {
   return board.kind === "gsp32" || board.kind === "gspc";

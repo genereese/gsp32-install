@@ -9,7 +9,8 @@ OLD_FILES = ["versions.json", "manifest.json", "manifest-beta.json", "manifest-g
     ["manifest-gspc-v%s.json" % v for v in ("118", "119", "120", "121", "122", "123", "124", "125", "126", "127.1", "127.2", "127.3", "128", "129")] + \
     ["firmware/gsp32-esp32.bin", "firmware/gsp32-esp32c3.bin", "firmware/gsp32-esp32s3.bin", "firmware/gsp32-esp32s3-n8r8.bin",
      "firmware/gsp32-esp32s3-n8r2.bin", "firmware/beta", "firmware/gspc"] + \
-    ["firmware/gspc-v%s" % v for v in ("118", "119", "120", "121", "122", "123", "124", "125", "126", "127.1", "127.2", "127.3", "128", "129")]
+    ["firmware/gspc-v%s" % v for v in ("118", "119", "120", "121", "122", "123", "124", "125", "126", "127.1", "127.2", "127.3", "128", "129")] + \
+    ["manifest-v84.json", "manifest-v85.json", "manifest-v99.json", "firmware/v84", "firmware/v85", "firmware/v99"]  # Flasher 115.25: the rollbacks are gone from the site too
 
 def overlay(site):
     head = subprocess.run(["git", "-C", site, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip() or "x"

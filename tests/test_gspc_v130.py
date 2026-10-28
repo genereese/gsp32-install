@@ -46,7 +46,7 @@ with sync_playwright() as p:
         pg.on("request", lambda r: asked.append(r.url)); pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.goto("http://127.0.0.1:8903/index.html"); pg.wait_for_timeout(600)
         w = " @%d" % width
-        check("footer Flasher Version 115.24" + w, "Flasher Version 115.24" in pg.content())
+        check("footer Flasher Version 115.25" + w, "Flasher Version 115.25" in pg.content())
         check("Stable is the default pick" + w, pg.input_value("#release-channel") == "stable")
         top = pg.evaluate("[...document.querySelectorAll('#release-channel > option')].map(o => [o.value, o.textContent, o.hidden || o.disabled])")
         check("Release: Stable, Beta, Previous (Version 114.2), all usable" + w, [o[:2] for o in top] == [["stable", "Stable"], ["beta", "Beta"], ["previous", "Previous (Version 114.2)"]] and not any(o[2] for o in top), str(top))

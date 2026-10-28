@@ -30,8 +30,8 @@
       if (/main\.py running/.test(text)) window.__mainPy = true;
       say(text); }, ms); return; }
     if (window.__other) { setTimeout(() => say("rst:0x1 (POWERON_RESET)\r\nMicroPython v1.25.0 on 2025-04-15; Generic ESP32 module with ESP32\r\n>>> "), 300); return; }
-    // GSP32-C (window.__gspc = "125"): its start-up line, then the prompt; from V121 it takes Improv packets at any time
-    if (window.__gspc) { setTimeout(() => { booted = true; window.__listen = Number(window.__gspc) >= 121; say("rst:0x1 (POWERON_RESET)\r\n\r\nGSP32-C Beta V" + window.__gspc + " on ESP32 (2 cores), boot 1, reset: power on\r\n" + (window.__wifi ? "Wi-Fi: 192.168.2.77\r\n" : "") + "MicroPython v1.25.0 on 2026-10-26; GSP32-C with ESP32\r\n>>> "); }, 300); return; }
+    // GSP32-C (window.__gspc = "125"; __gspcStable: a Stable build, no "Beta " in its name): its start-up line, then the prompt; from V121 it takes Improv packets at any time
+    if (window.__gspc) { setTimeout(() => { booted = true; window.__listen = Number(window.__gspc) >= 121; say("rst:0x1 (POWERON_RESET)\r\n\r\nGSP32-C " + (window.__gspcStable ? "" : "Beta ") + "V" + window.__gspc + " on ESP32 (2 cores), boot 1, reset: power on\r\n" + (window.__wifi ? "Wi-Fi: 192.168.2.77\r\n" : "") + "MicroPython v1.25.0 on 2026-10-26; GSP32-C with ESP32\r\n>>> "); }, 300); return; }
     const gap = window.__bootGap || 0;
     if (gap) setTimeout(() => say((window.__ets ? "ets Jul 29 2019 12:21:46\r\n\r\n" : "") + "rst:0x1 (POWERON_RESET)\r\n"), 300);
     setTimeout(() => { booted = true; say((gap ? "" : (window.__ets ? "ets Jul 29 2019 12:21:46\r\n\r\n" : "") + "rst:0x1 (POWERON_RESET)\r\n") + "mDNS name: gsp32.local\r\n" + (window.__noReady ? "" : "GSP32 Improv Ready\r\n") + "Press Enter within 10 s\r\nServer listening on port 80\r\nWeb UI running in the background\r\n" + (window.__oldFw ? "" : "GSP32 Improv Listening\r\n")); window.__listen = !window.__oldFw; }, 300 + gap);
@@ -63,7 +63,7 @@
       if (window.__mainPy) { window.__blockedPk = (window.__blockedPk || 0) + 1; continue; }
       const cmd = data[0];
       if (cmd === 2) push(pkt(1, [state]));
-      if (cmd === 3) { window.__info = (window.__info || 0) + 1; push(strs(3, window.__gspc ? ["GSP32-C", "Beta V" + window.__gspc, "ESP32", "gsp32c"] : ["GSP32", window.__ver || "1.0", "ESP32", "gsp32"])); }
+      if (cmd === 3) { window.__info = (window.__info || 0) + 1; push(strs(3, window.__gspc ? ["GSP32-C", (window.__gspcStable ? "" : "Beta ") + "V" + window.__gspc, "ESP32", "gsp32c"] : ["GSP32", window.__ver || "1.0", "ESP32", "gsp32"])); }
       if (cmd === 4) { const scan = () => { if (!window.__noNets) { push(strs(4, ["HomeNet", "-50", "YES"])); push(strs(4, ["Cafe", "-80", "NO"])); } push(strs(4, [])); };
         if (window.__scanDelay) setTimeout(scan, window.__scanDelay); else scan(); }
       if (cmd === 1) { window.__wifiSet = String.fromCharCode(...data.slice(3, 3 + data[2])); push(pkt(1, [3])); setTimeout(() => { window.__wifi = true; push(pkt(1, [4])); push(strs(1, ["http://192.168.2.77/"])); }, 400); }
