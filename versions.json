@@ -11,5 +11,12 @@
     "label": "GSP32-C V130 (6f859b6)",
     "channel": "previous",
     "line": "GSP32-C"
+  },
+  {
+    "version": "eac1325",
+    "manifest": "manifest-gspc-v134.json",
+    "label": "GSP32-C Beta V134 (eac1325)",
+    "channel": "gspc-beta",
+    "line": "GSP32-C"
   }
 ]
