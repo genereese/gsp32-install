@@ -42,10 +42,10 @@ with sync_playwright() as p:
         # Version 106 (Gene): ten slides of the current web UI (the Experiment menu's Sandbox and Examples added)
         check(tag + ": Check It Out slides", "Code Editor" in titles and "Sandbox" in titles and "Examples" in titles and "Insert Wizards" not in titles and len(titles) == 10, str(titles))
         # Flasher Version 104 (Gene): the AI Helper is the first slide, the Settings slide is gone (still ten)
-        check(tag + ": AI Helper first, no Settings slide", titles[:1] == ["AI Helper"] and "Settings" not in titles, str(titles))
+        check(tag + ": AI Helper first, Settings slide (Flasher 115.29: V135 tour)", titles[:1] == ["AI Helper"] and "Settings" in titles, str(titles))
         pg.screenshot(path=SHOTS + "/tour8-check-it-out-" + tag + ".png")
         pg.click(".tour-thumb >> nth=0"); pg.wait_for_timeout(600)
-        check(tag + ": the AI slide's tour text", "Both Sandbox Files" in pg.inner_text("#tour-modal") and "Verify" in pg.inner_text("#tour-modal"))
+        check(tag + ": the AI slide's tour text", "Sandbox Files" in pg.inner_text("#tour-modal").title() and "Apply" in pg.inner_text("#tour-modal"))  # Flasher 115.29: V135 text
         pg.screenshot(path=SHOTS + "/tour8-ai-" + tag + ".png"); pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
         pg.click(".tour-thumb >> nth=3"); pg.wait_for_timeout(600)
         pg.screenshot(path=SHOTS + "/tour8-editor-" + tag + ".png"); pg.keyboard.press("Escape"); pg.wait_for_timeout(300)

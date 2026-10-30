@@ -10,7 +10,9 @@ OLD_FILES = ["versions.json", "manifest.json", "manifest-beta.json", "manifest-g
     ["firmware/gsp32-esp32.bin", "firmware/gsp32-esp32c3.bin", "firmware/gsp32-esp32s3.bin", "firmware/gsp32-esp32s3-n8r8.bin",
      "firmware/gsp32-esp32s3-n8r2.bin", "firmware/beta", "firmware/gspc"] + \
     ["firmware/gspc-v%s" % v for v in ("118", "119", "120", "121", "122", "123", "124", "125", "126", "127.1", "127.2", "127.3", "128", "129")] + \
-    ["manifest-v84.json", "manifest-v85.json", "manifest-v99.json", "firmware/v84", "firmware/v85", "firmware/v99"]  # Flasher 115.25: the rollbacks are gone from the site too
+    ["manifest-v84.json", "manifest-v85.json", "manifest-v99.json", "firmware/v84", "firmware/v85", "firmware/v99"] + \
+    ["manifest-gspc-v130.json", "firmware/gspc-v130"]
+# Flasher 115.25: the rollbacks are gone from the site too. Flasher 115.29: so is V130 (V135 is the only version)
 
 def overlay(site):
     head = subprocess.run(["git", "-C", site, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip() or "x"
@@ -31,13 +33,9 @@ def overlay(site):
                     os.symlink(os.path.join(site, "firmware", sub), os.path.join(work, "firmware", sub))
             continue
         os.symlink(os.path.join(site, name), os.path.join(work, name))
-    # the V130 entry as the current site has it (its label names the current build)
-    cur = json.load(open(os.path.join(site, "versions.json")))
     old = json.load(open(os.path.join(work, "versions.json")))
     # Flasher 115.27: V130 is Previous on the site now; the old suites keep it as their Stable (V133's are in test_flasher_11527)
-    v130 = dict(next(e for e in cur if e["manifest"] == "manifest-gspc-v130.json"))
-    v130.pop("channel", None)
-    old[0] = v130
+    # Flasher 115.29: V130 left the site; the old list's own V130 entry (and its manifest and images, above) stays their Stable
     open(os.path.join(work, "versions.json"), "w").write(json.dumps(old, indent=2) + "\n")
     open(os.path.join(work, ".ready"), "w").write("ok")
     try:

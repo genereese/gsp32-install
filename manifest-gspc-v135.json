@@ -1,6 +1,6 @@
 {
   "name": "GSP32-C",
-  "version": "GSP32-C V130 (6f859b6)",
+  "version": "GSP32-C V135 (a63077e)",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 15,
   "builds": [
@@ -10,7 +10,7 @@
       "label": "ESP32 4 MB",
       "parts": [
         {
-          "path": "firmware/gspc-v130/gsp32c-esp32.bin",
+          "path": "firmware/gspc-v135/gsp32c-esp32.bin",
           "offset": 4096
         }
       ]
@@ -23,7 +23,7 @@
       "label": "ESP32-S3 16 MB (N16R8)",
       "parts": [
         {
-          "path": "firmware/gspc-v130/gsp32c-esp32s3.bin",
+          "path": "firmware/gspc-v135/gsp32c-esp32s3.bin",
           "offset": 0
         }
       ]
@@ -37,7 +37,7 @@
       "untested": true,
       "parts": [
         {
-          "path": "firmware/gspc-v130/gsp32c-esp32s3-n8r8.bin",
+          "path": "firmware/gspc-v135/gsp32c-esp32s3-n8r8.bin",
           "offset": 0
         }
       ]
@@ -51,7 +51,7 @@
       "untested": true,
       "parts": [
         {
-          "path": "firmware/gspc-v130/gsp32c-esp32s3-n8r2.bin",
+          "path": "firmware/gspc-v135/gsp32c-esp32s3-n8r2.bin",
           "offset": 0
         }
       ]
@@ -62,7 +62,7 @@
       "label": "ESP32-C3 4 MB (Super Mini)",
       "parts": [
         {
-          "path": "firmware/gspc-v130/gsp32c-esp32c3.bin",
+          "path": "firmware/gspc-v135/gsp32c-esp32c3.bin",
           "offset": 0
         }
       ]

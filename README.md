@@ -1,11 +1,12 @@
 # GSP32 Installer
 
-Install [GSP32](https://genereese.github.io/gsp32-install/), a MicroPython web UI for ESP32 and ESP32-S3 boards, straight from your browser. No tools to install.
+Install [GSP32](https://genereese.github.io/gsp32-install/), a MicroPython web UI for ESP32, ESP32-C3 and ESP32-S3 boards, straight from your browser. No tools to install.
 
 ## Supported Boards
 
 - ESP32 (classic) with 4 MB of flash or more
-- ESP32-S3 with 8 MB or 16 MB of flash
+- ESP32-C3 with 4 MB of flash or more
+- ESP32-S3 with 8 MB or 16 MB of flash (attached displays and the window manager are S3 only; Bluetooth needs an S3 with PSRAM)
 
 The installer detects your board and picks the right firmware automatically.
 

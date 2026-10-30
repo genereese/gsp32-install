@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Install GSP32</title>
-  <link rel="stylesheet" href="style.css?v=115.28-s133-p130-c134">
+  <link rel="stylesheet" href="style.css?v=115.29-s135">
   <script>
     (function () {
       var ua = navigator.userAgent || "";
@@ -25,7 +25,7 @@
     <div class="hero">
     <div id="page-head" class="page-head">
       <h1>Install GSP32</h1>
-      <p class="lede">A MicroPython web UI for ESP32 and ESP32-S3 devices<span class="lede-more">. Plug your device in with a USB data cable and install it right from this page; it picks the right firmware for your chip</span>.</p>
+      <p class="lede">A MicroPython web UI for ESP32, ESP32-C3 and ESP32-S3 devices<span class="lede-more">. Plug your device in with a USB data cable and install it right from this page; it picks the right firmware for your chip</span>.</p>
     </div>
 
     <section id="browser-block" class="card">
@@ -108,7 +108,7 @@
             <select id="release-channel">
               <option value="stable" selected>Stable</option>
               <option value="beta">Beta</option>
-              <!-- Version 99 (Gene): the previous Stable stays one pick away. Flasher 115.23 (Gene): Stable is GSP32-C V130, Previous the classic GSP32 Version 114.2. Flasher 115.24 (Gene): V130 is the only Stable, so Previous stays hidden. Flasher 115.25 (Gene): GSP32-C Beta V131 is listed next to it (its own Release pick). Flasher 115.26: Beta V132 replaces it. Flasher 115.27 (Gene): GSP32-C V133 is the Stable default, V130 the Previous pick, Beta V132 gone. Flasher 115.28 (Gene): GSP32-C Beta V134 is listed as the Beta pick next to them -->
+              <!-- Version 99 (Gene): the previous Stable stays one pick away. Flasher 115.23 (Gene): Stable is GSP32-C V130, Previous the classic GSP32 Version 114.2. Flasher 115.24 (Gene): V130 is the only Stable, so Previous stays hidden. Flasher 115.25 (Gene): GSP32-C Beta V131 is listed next to it (its own Release pick). Flasher 115.26: Beta V132 replaces it. Flasher 115.27 (Gene): GSP32-C V133 is the Stable default, V130 the Previous pick, Beta V132 gone. Flasher 115.28 (Gene): GSP32-C Beta V134 is listed as the Beta pick next to them. Flasher 115.29 (Gene): GSP32-C V135 is the only version (Stable); V134, V133 and V130 are gone, so the dropdown stays hidden -->
               <option value="previous" hidden disabled>Previous</option>
               <!-- GSP32-C: app.js fills one option per GSP32-C Beta listed in versions.json -->
               <optgroup label="GSP32-C" id="gspc-group" hidden></optgroup>
@@ -261,9 +261,9 @@
     </div>
   </dialog>
 
-  <script type="module" src="app.js?v=115.28-s133-p130-c134"></script>
+  <script type="module" src="app.js?v=115.29-s135"></script>
   <p class="security-note hint">GSP32 devices serve their web interface over plain HTTP (not encrypted). It's meant for your home network: never forward it to the internet.</p>
-  <p class="flasher-version hint">Flasher Version 115.28 · <a href="LICENSE.txt">License</a></p>
-  <script src="tour.js?v=115.28-s133-p130-c134" defer></script>
+  <p class="flasher-version hint">Flasher Version 115.29 · <a href="LICENSE.txt">License</a></p>
+  <script src="tour.js?v=115.29-s135" defer></script>
 </body>
 </html>
