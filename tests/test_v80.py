@@ -15,10 +15,10 @@ def check(name, ok, extra=""):
 
 js = open(os.path.join(site, "app.js")).read()
 html = open(os.path.join(site, "index.html")).read()
-check("cache-bust 115.30-s135.1", html.count("?v=115.30-s135.1") == 3)
+check("cache-bust 115.31-s136", html.count("?v=115.31-s136") == 3)
 check("probeBoardOnConnect present", "probeBoardOnConnect" in js and "Reading device info" in js)
 check("Install disabled when compatIssue", "board.compatIssue" in js and "install.disabled" in js)
-check("footer Flasher Version 115.30", "Flasher Version 115.30" in html)
+check("footer Flasher Version 115.31", "Flasher Version 115.31" in html)
 
 def connect_only(b, chip=None, flash_kb=None, usb=None):
     pg = b.new_page(viewport={"width": 1100, "height": 900})

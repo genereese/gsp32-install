@@ -1,8 +1,8 @@
 [
   {
-    "version": "7f04202",
-    "manifest": "manifest-gspc-v135.1.json",
-    "label": "GSP32-C V135.1 (7f04202)",
+    "version": "b7c3a89",
+    "manifest": "manifest-gspc-v136.json",
+    "label": "GSP32-C V136 (b7c3a89)",
     "line": "GSP32-C"
   }
 ]
