@@ -1,8 +1,14 @@
-""" Flasher 115.35 (Gene, 2026-11-01 MT): GSP32-C Beta V137.1 replaces Beta V137 as the Beta pick next to the
+""" Flasher 115.36 (Gene, 2026-11-01 MT): GSP32-C Beta V138 replaces Beta V137.1 as the Beta pick next to the
+Stable V136 (manifest-gspc-v138.json, firmware/gspc-v138; channel gspc-beta). V138: Projects: every program is a
+project in /projects/<id> with its pages and data; Build and Run menus, Run now, Start at boot, the running
+project's dashboard at /, Explore. V137.1's manifest and images are gone (404). V136 (b7c3a89) stays the Stable
+default and its files are unchanged. Footer/tag 115.36-s136-c138.
+Earlier (115.35):
+ Flasher 115.35 (Gene, 2026-11-01 MT): GSP32-C Beta V137.1 replaces Beta V137 as the Beta pick next to the
 Stable V136 (manifest-gspc-v137.1.json, firmware/gspc-v137.1; channel gspc-beta). V137.1: the editor pane is a plain
 compact list, drag and drop moves files and folders, New Folder in the right-click menu, tabs one width (middle click
 closes), the last tab closes into "No files open", Docs is the Apps menu's last entry. V137's manifest and images are
-gone (404). V136 (b7c3a89) stays the Stable default and its files are unchanged. Footer/tag 115.35-s136-c137.1.
+gone (404). V136 (b7c3a89) stays the Stable default and its files are unchanged. Footer/tag 115.36-s136-c138.
 Earlier (115.34):
  Flasher 115.34 (Gene, 2026-11-01 MT): GSP32-C Beta V137 replaces Beta V136.2 as the Beta pick next to the
 Stable V136 (manifest-gspc-v137.json, firmware/gspc-v137; channel gspc-beta). V137: the Sandbox is gone (main.py is the
@@ -64,17 +70,17 @@ def check(name, ok, extra=""):
     global fails; fails += not ok; print(("PASS " if ok else "FAIL ") + name, "" if ok else extra); sys.stdout.flush()
 
 versions = json.load(open(os.path.join(site, "versions.json")))
-check("versions.json: V136 Stable (no channel) first, then GSP32-C Beta V137.1 (gspc-beta), both line GSP32-C", len(versions) == 2
+check("versions.json: V136 Stable (no channel) first, then GSP32-C Beta V138 (gspc-beta), both line GSP32-C", len(versions) == 2
       and re.fullmatch(r"GSP32-C V136 \([0-9a-f]{7,}\)", versions[0]["label"]) and "channel" not in versions[0] and versions[0]["manifest"] == "manifest-gspc-v136.json"
-      and re.fullmatch(r"GSP32-C Beta V137\.1 \([0-9a-f]{7,}\)", versions[1]["label"]) and versions[1].get("channel") == "gspc-beta" and versions[1]["manifest"] == "manifest-gspc-v137.1.json"
+      and re.fullmatch(r"GSP32-C Beta V138 \([0-9a-f]{7,}\)", versions[1]["label"]) and versions[1].get("channel") == "gspc-beta" and versions[1]["manifest"] == "manifest-gspc-v138.json"
       and all(e.get("line") == "GSP32-C" for e in versions), str(versions))
 check("V136 Stable still b7c3a89", versions[0]["version"] == "b7c3a89", versions[0]["version"])
 check("no update flag, no note", all("update" not in e and "note" not in e for e in versions))
 mans = sorted(n for n in os.listdir(site) if n.startswith("manifest"))
-check("manifests: V136 and Beta V137.1 only", mans == ["manifest-gspc-v136.json", "manifest-gspc-v137.1.json"], str(mans))
+check("manifests: V136 and Beta V138 only", mans == ["manifest-gspc-v136.json", "manifest-gspc-v138.json"], str(mans))
 fw = sorted(os.listdir(os.path.join(site, "firmware")))
-check("firmware/: gspc-v136 and gspc-v137.1 only", fw == ["gspc-v136", "gspc-v137.1"], str(fw))
-for v, entry in (("136", versions[0]), ("137.1", versions[1])):
+check("firmware/: gspc-v136 and gspc-v138 only", fw == ["gspc-v136", "gspc-v138"], str(fw))
+for v, entry in (("136", versions[0]), ("138", versions[1])):
     m = json.load(open(os.path.join(site, "manifest-gspc-v%s.json" % v)))
     parts = [p["path"] for b in m["builds"] for p in b["parts"]]
     check("V%s: five images there, in firmware/gspc-v%s/" % (v, v), len(parts) == 5 and all(os.path.exists(os.path.join(site, p)) and p.startswith("firmware/gspc-v%s/" % v) for p in parts), str(parts))
@@ -84,13 +90,13 @@ for v, entry in (("136", versions[0]), ("137.1", versions[1])):
     esp = open(os.path.join(site, "firmware/gspc-v%s/gsp32c-esp32.bin" % v), "rb").read(4)
     check("V%s ESP32 image: 80 MHz flash header" % v, esp[0] == 0xE9 and esp[3] & 0x0F == 0x0F, esp.hex())
 html = open(os.path.join(site, "index.html"), encoding="utf-8").read()
-check("cache tag 115.35-s136-c137.1 on style.css, app.js, tour.js", html.count("?v=115.35-s136-c137.1\"") == 3)
+check("cache tag 115.36-s136-c138 on style.css, app.js, tour.js", html.count("?v=115.36-s136-c138\"") == 3)
 def status(path):
     try: return urllib.request.urlopen("http://127.0.0.1:8904/" + path).status
     except urllib.error.HTTPError as e: return e.code
 for path in ("manifest.json", "manifest-beta.json", "manifest-gspc-beta.json", "manifest-gspc-v129.json", "manifest-gspc-v118.json",
              "firmware/gsp32-esp32.bin", "firmware/beta/gsp32-esp32.bin", "firmware/gspc-v129/gsp32c-esp32.bin",
-             "manifest-gspc-v131.json", "firmware/gspc-v131/gsp32c-esp32.bin", "manifest-gspc-v132.json", "firmware/gspc-v132/gsp32c-esp32.bin", "firmware/gspc-v132/gsp32c-esp32s3.bin", "manifest-gspc-v130.json", "manifest-gspc-v133.json", "manifest-gspc-v134.json", "firmware/gspc-v130/gsp32c-esp32.bin", "firmware/gspc-v133/gsp32c-esp32.bin", "firmware/gspc-v134/gsp32c-esp32.bin", "manifest-gspc-v135.json", "firmware/gspc-v135/gsp32c-esp32.bin", "firmware/gspc-v135/gsp32c-esp32s3.bin", "manifest-gspc-v135.1.json", "firmware/gspc-v135.1/gsp32c-esp32.bin", "firmware/gspc-v135.1/gsp32c-esp32c3.bin", "firmware/gspc-v134/gsp32c-esp32c3.bin", "manifest-gspc-v136.1.json", "firmware/gspc-v136.1/gsp32c-esp32.bin", "manifest-gspc-v136.2.json", "firmware/gspc-v136.2/gsp32c-esp32.bin", "firmware/gspc-v136.2/gsp32c-esp32c3.bin", "firmware/gspc-v136.2/gsp32c-esp32s3.bin", "manifest-v84.json", "manifest-v85.json", "manifest-v99.json", "firmware/v84/gsp32-esp32.bin", "firmware/v99/gsp32-esp32.bin", "manifest-gspc-v137.json", "firmware/gspc-v137/gsp32c-esp32.bin", "firmware/gspc-v137/gsp32c-esp32c3.bin", "firmware/gspc-v137/gsp32c-esp32s3.bin"):
+             "manifest-gspc-v137.1.json", "firmware/gspc-v137.1/gsp32c-esp32.bin", "manifest-gspc-v131.json", "firmware/gspc-v131/gsp32c-esp32.bin", "manifest-gspc-v132.json", "firmware/gspc-v132/gsp32c-esp32.bin", "firmware/gspc-v132/gsp32c-esp32s3.bin", "manifest-gspc-v130.json", "manifest-gspc-v133.json", "manifest-gspc-v134.json", "firmware/gspc-v130/gsp32c-esp32.bin", "firmware/gspc-v133/gsp32c-esp32.bin", "firmware/gspc-v134/gsp32c-esp32.bin", "manifest-gspc-v135.json", "firmware/gspc-v135/gsp32c-esp32.bin", "firmware/gspc-v135/gsp32c-esp32s3.bin", "manifest-gspc-v135.1.json", "firmware/gspc-v135.1/gsp32c-esp32.bin", "firmware/gspc-v135.1/gsp32c-esp32c3.bin", "firmware/gspc-v134/gsp32c-esp32c3.bin", "manifest-gspc-v136.1.json", "firmware/gspc-v136.1/gsp32c-esp32.bin", "manifest-gspc-v136.2.json", "firmware/gspc-v136.2/gsp32c-esp32.bin", "firmware/gspc-v136.2/gsp32c-esp32c3.bin", "firmware/gspc-v136.2/gsp32c-esp32s3.bin", "manifest-v84.json", "manifest-v85.json", "manifest-v99.json", "firmware/v84/gsp32-esp32.bin", "firmware/v99/gsp32-esp32.bin", "manifest-gspc-v137.json", "firmware/gspc-v137/gsp32c-esp32.bin", "firmware/gspc-v137/gsp32c-esp32c3.bin", "firmware/gspc-v137/gsp32c-esp32s3.bin"):
     check("gone: " + path, status(path) == 404, status(path))
 
 def pick(pg, value):   # the dropdown sits in the install step (hidden before connect): set it as a pick does
@@ -118,15 +124,15 @@ with sync_playwright() as p:
         pg.on("request", lambda r: asked.append(r.url)); pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.goto("http://127.0.0.1:8904/index.html"); pg.wait_for_timeout(800)
         w = " @%d" % width
-        check("footer Flasher Version 115.35" + w, "Flasher Version 115.35" in pg.text_content(".flasher-version"))
+        check("footer Flasher Version 115.36" + w, "Flasher Version 115.36" in pg.text_content(".flasher-version"))
         check("Release dropdown shown (Stable and the Beta)" + w, pg.evaluate("!document.querySelector('.release-field').hidden"))
         usable = pg.evaluate("[...document.querySelectorAll('#release-channel option')].filter(o => !o.hidden && !o.disabled).map(o => o.value + '=' + o.textContent.trim())")
-        check("picks: Stable, GSP32-C Beta V137.1" + w, usable == ["stable=Stable", "gspc-137.1=GSP32-C Beta V137.1"], str(usable))
+        check("picks: Stable, GSP32-C Beta V138" + w, usable == ["stable=Stable", "gspc-138=GSP32-C Beta V138"], str(usable))
         check("Stable is the default pick" + w, pg.eval_on_selector("#release-channel", "e => e.value") == "stable")
         check("Installs GSP32-C V136" + w, pg.text_content("#version").strip() == "GSP32-C V136", pg.text_content("#version"))
         check("no old manifest asked for" + w, not any(re.search(r"/manifest(-beta|-gspc-beta|-gspc-v1[123][0-5][.\d]*|-gspc-v1[12]\d[.\d]*|-v\d+)?\.json", u) for u in asked), str([u for u in asked if "manifest" in u]))
-        pick(pg, "gspc-137.1")
-        check("Beta pick: Installs GSP32-C Beta V137.1" + w, pg.text_content("#version").strip() == "GSP32-C Beta V137.1", pg.text_content("#version"))
+        pick(pg, "gspc-138")
+        check("Beta pick: Installs GSP32-C Beta V138" + w, pg.text_content("#version").strip() == "GSP32-C Beta V138", pg.text_content("#version"))
         pick(pg, "stable")
         check("back to Stable: Installs GSP32-C V136" + w, pg.text_content("#version").strip() == "GSP32-C V136", pg.text_content("#version"))
         if width < 500:
@@ -144,7 +150,7 @@ with sync_playwright() as p:
         check("images from firmware/gspc-v136/", bool(img) and all("/firmware/gspc-v136/" in u for u in img), str(img))
         check("no page errors" + w, not errs, str(errs))
         pg.close()
-    # Flasher 115.35: the Beta pick installs Beta V137.1 from its own files
+    # Flasher 115.36: the Beta pick installs Beta V138 from its own files
     pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script("window.__ver = '84';")
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
     asked = []; errs = []
@@ -154,23 +160,23 @@ with sync_playwright() as p:
     pg.evaluate("window.__port.setSignals({requestToSend: true}).then(() => window.__port.setSignals({requestToSend: false}))")
     pg.wait_for_timeout(4500); pg.click("#install-btn"); pg.wait_for_timeout(500)
     check("Beta: Release dropdown visible in the install step", pg.locator(".release-field").is_visible())
-    pg.select_option("#release-channel", "gspc-137.1"); pg.wait_for_timeout(300)
-    check("Beta: after connect Installs GSP32-C Beta V137.1", pg.text_content("#version").strip() == "GSP32-C Beta V137.1", pg.text_content("#version"))
+    pg.select_option("#release-channel", "gspc-138"); pg.wait_for_timeout(300)
+    check("Beta: after connect Installs GSP32-C Beta V138", pg.text_content("#version").strip() == "GSP32-C Beta V138", pg.text_content("#version"))
     asked.clear(); pg.check("#erase-ok"); pg.click("#start-install"); pg.wait_for_timeout(3000)
     man = [u for u in asked if "manifest" in u]; img = [u for u in asked if u.endswith(".bin")]
-    check("Beta: Erase and Install loads manifest-gspc-v137.1.json", any("manifest-gspc-v137.1.json" in u for u in man) and not any("manifest-gspc-v136.json" in u for u in man), str(man))
-    check("Beta: images from firmware/gspc-v137.1/", bool(img) and all("/firmware/gspc-v137.1/" in u for u in img), str(img))
+    check("Beta: Erase and Install loads manifest-gspc-v138.json", any("manifest-gspc-v138.json" in u for u in man) and not any("manifest-gspc-v136.json" in u for u in man), str(man))
+    check("Beta: images from firmware/gspc-v138/", bool(img) and all("/firmware/gspc-v138/" in u for u in img), str(img))
     check("Beta: no page errors", not errs, str(errs)); pg.close()
-    # a found Beta V137.1 board names itself with its point number
-    pg = b.new_page(viewport={"width": 1280, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script("window.__gspc = '137.1'")
+    # a found Beta V138 board names itself with its point number
+    pg = b.new_page(viewport={"width": 1280, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script("window.__gspc = '138'")
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
     errs = []; pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.goto("http://127.0.0.1:8904/index.html"); pg.wait_for_timeout(300)
     pg.click("#connect"); pg.wait_for_timeout(100)
     pg.evaluate("window.__port.setSignals({requestToSend: true}).then(() => window.__port.setSignals({requestToSend: false}))")
     pg.wait_for_timeout(2500); st = pg.inner_text("#board-state")
-    check("found: GSP32-C Beta V137.1 Found", "GSP32-C Beta V137.1 Found" in st, st)
-    check("found: no page errors (Beta V137.1)", not errs, str(errs)); pg.close()
+    check("found: GSP32-C Beta V138 Found", "GSP32-C Beta V138 Found" in st, st)
+    check("found: no page errors (Beta V138)", not errs, str(errs)); pg.close()
     # a found board is named as it names itself: "GSP32-C Beta V131" from a Beta, "GSP32-C V132" from a Stable build
     for init, want, bad in (("window.__gspc = '131'", "GSP32-C Beta V131 Found", None), ("window.__gspc = '132'; window.__gspcStable = true", "GSP32-C V132 Found", "Beta")):
         pg = b.new_page(viewport={"width": 1280, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script(init)
