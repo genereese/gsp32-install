@@ -6,9 +6,9 @@
     "line": "GSP32-C"
   },
   {
-    "version": "dbfa32c",
-    "manifest": "manifest-gspc-v139.json",
-    "label": "GSP32-C Beta V139 (dbfa32c)",
+    "version": "a266541",
+    "manifest": "manifest-gspc-v140.json",
+    "label": "GSP32-C Beta V140 (a266541)",
     "channel": "gspc-beta",
     "line": "GSP32-C"
   },
