@@ -11,5 +11,12 @@
     "label": "GSP32-C Beta V138 (7aeb3f5)",
     "channel": "gspc-beta",
     "line": "GSP32-C"
+  },
+  {
+    "version": "ec780b3",
+    "manifest": "manifest-gspc-v137.1.json",
+    "label": "GSP32-C Beta V137.1 (before Projects) (ec780b3)",
+    "channel": "gspc-beta",
+    "line": "GSP32-C"
   }
 ]
