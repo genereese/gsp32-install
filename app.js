@@ -3196,6 +3196,8 @@ async function install() {
           appendConsole("[Write " + attempt + " of " + WRITE_ATTEMPTS + " failed (" + raw + "). Giving up.]\n");
           const plain = new Error(writeFailureText(err));
           plain.plain = true;
+          plain.writeFailed = true;   // Flasher 115.38: for hiddenNote
+          plain.mismatch = mismatch;
           throw plain;
         }
         appendConsole(mismatch
@@ -3286,7 +3288,9 @@ async function install() {
     stopFlashGuard();
     // Fix (write retries): the plain text alone; the raw esptool text is in the console
     if (err && err.plain) appendConsole("[The install did not finish: " + err.message + "]\n");
-    showError(err && err.plain ? "The install did not finish. " + err.message : "The install did not finish: " + (err && err.message ? err.message : err), "prep");
+    const hidden = hiddenNote(err);
+    if (hidden) appendConsole("[The tab was in the background for " + Math.round(flashHidden.ms / 1000) + " s during the install]\n");
+    showError(hidden || (err && err.plain ? "The install did not finish. " + err.message : "The install did not finish: " + (err && err.message ? err.message : err)), "prep");
     if (err && err.bootHint) showBootHint(true);
     showActions(true);
   } finally {
@@ -3857,19 +3861,48 @@ function finishWifi(url) {
 }
 
 // While flashing: the red warning under the progress bar folds open, and away when done (Version 38)
+// Flasher Version 115.38 (Gene): the install guard. While an install (with its erase) runs: the banner says to keep
+//  this tab in front, the browser's own "Leave site?" prompt guards close, reload and navigating away (the handler is
+//  added here and removed at the end), and the page counts the time the tab spends hidden. A failed write after
+//  hidden time names it in the error (hiddenNote)
 let flashing = false;
+const flashHidden = { went: false, ms: 0, since: 0 };   // was the tab hidden this install, for how long (ms)
+function guardUnload(event) {
+  event.preventDefault();
+  event.returnValue = "";
+}
+function countHidden() {
+  if (flashHidden.since) flashHidden.ms += Date.now() - flashHidden.since;
+  flashHidden.since = document.hidden ? Date.now() : 0;
+  if (document.hidden) flashHidden.went = true;
+}
 function startFlashGuard() {
   flashing = true;
+  flashHidden.went = false; flashHidden.ms = 0; flashHidden.since = 0;
+  countHidden();
+  window.addEventListener("beforeunload", guardUnload);
   stopCheckWait();
   syncBoardUi();
   setFolded($("flash-warn"), true);
 }
 function stopFlashGuard() {
+  if (flashing) {
+    countHidden();
+    flashHidden.since = 0;
+  }
   flashing = false;
+  window.removeEventListener("beforeunload", guardUnload);
   // The board's Ready line may have come while esptool still held the port: ask now if it still listens
   askVersion();
   syncBoardUi();
   setFolded($("flash-warn"), false);
+}
+// The error after a failed write or check when the tab was hidden during the install; "" when it never was
+function hiddenNote(err) {
+  if (!(err && err.writeFailed) || !flashHidden.went) return "";
+  const seconds = Math.max(1, Math.round(flashHidden.ms / 1000));
+  return (err.mismatch ? "The install didn't verify. " : "The install didn't finish. ") + "This tab was in the background for " +
+    seconds + " s during the install, which can interrupt it. Keep this tab in front and try again.";
 }
 
 // Start state <-> board card: the steps and Get Started fold away while the card slides in, and back on Disconnect
@@ -4122,15 +4155,14 @@ if ("serial" in navigator) {
     attachUsbPort(arrived).catch(() => {});
   });
 }
+// The screen wake lock is let go by the browser when the tab hides: asked for again when it shows mid-install.
+//  Flasher 115.38: the install also counts its hidden time here
 document.addEventListener("visibilitychange", () => {
+  if (flashing) countHidden();
   if (!document.hidden) requestWakeLock();
 });
-// Version 42.1 (Gene): leaving or refreshing the page while installing asks first ("Leave page?")
-window.addEventListener("beforeunload", (event) => {
-  if (!flashing) return;
-  event.preventDefault();
-  event.returnValue = "";
-});
+// Version 42.1 (Gene): leaving or refreshing the page while installing asks first ("Leave page?"). Flasher 115.38:
+//  guardUnload is added by startFlashGuard and removed by stopFlashGuard
 // Leaving the page: lines to run first, so closing the tab never holds the board in reset
 window.addEventListener("pagehide", () => {
   // Flasher Version 115.11: RTS off now (the step that matters), DTR off once that is done, if the page is still there.
@@ -4151,4 +4183,4 @@ try {
 syncConsoleButtons();
 
 // For the page tests (Playwright): the slide helper and the console writer
-window.gsp32 = { setShown, appendConsole };
+window.gsp32 = { setShown, appendConsole, flashHidden, hiddenNote };

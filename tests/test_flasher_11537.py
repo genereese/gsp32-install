@@ -1,7 +1,7 @@
 """ Flasher 115.37 (Gene, 2026-11-01 MT, t2967u/t2968u): GSP32-C Beta V137.1 (ec780b3, tag pre-projects-v137.1) is
 listed again as a second Beta, "GSP32-C Beta V137.1 (before Projects)", the rollback for comparison with the
 Projects Betas (manifest-gspc-v137.1.json, firmware/gspc-v137.1; the 115.35 images, same sha256). V136 Stable and
-Beta V138 are unchanged. Footer/tag 115.37-s136-c138-c137.1.
+Beta V138 are unchanged. Footer/tag 115.38-s136-c138-c137.1.
 Earlier (115.36):
  Flasher 115.36 (Gene, 2026-11-01 MT): GSP32-C Beta V138 replaces Beta V137.1 as the Beta pick next to the
 Stable V136 (manifest-gspc-v138.json, firmware/gspc-v138; channel gspc-beta). V138: Projects: every program is a
@@ -105,7 +105,7 @@ for v, entry in (("136", versions[0]), ("138", versions[1]), ("137.1", versions[
     esp = open(os.path.join(site, "firmware/gspc-v%s/gsp32c-esp32.bin" % v), "rb").read(4)
     check("V%s ESP32 image: 80 MHz flash header" % v, esp[0] == 0xE9 and esp[3] & 0x0F == 0x0F, esp.hex())
 html = open(os.path.join(site, "index.html"), encoding="utf-8").read()
-check("cache tag 115.37-s136-c138-c137.1 on style.css, app.js, tour.js", html.count("?v=115.37-s136-c138-c137.1\"") == 3)
+check("cache tag 115.38-s136-c138-c137.1 on style.css, app.js, tour.js", html.count("?v=115.38-s136-c138-c137.1\"") == 3)
 def status(path):
     try: return urllib.request.urlopen("http://127.0.0.1:8904/" + path).status
     except urllib.error.HTTPError as e: return e.code
@@ -139,7 +139,7 @@ with sync_playwright() as p:
         pg.on("request", lambda r: asked.append(r.url)); pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.goto("http://127.0.0.1:8904/index.html"); pg.wait_for_timeout(800)
         w = " @%d" % width
-        check("footer Flasher Version 115.37" + w, "Flasher Version 115.37" in pg.text_content(".flasher-version"))
+        check("footer Flasher Version 115.38" + w, "Flasher Version 115.38" in pg.text_content(".flasher-version"))
         check("Release dropdown shown (Stable and the Beta)" + w, pg.evaluate("!document.querySelector('.release-field').hidden"))
         usable = pg.evaluate("[...document.querySelectorAll('#release-channel option')].filter(o => !o.hidden && !o.disabled).map(o => o.value + '=' + o.textContent.trim())")
         check("picks: Stable, GSP32-C Beta V138, GSP32-C Beta V137.1 (before Projects)" + w, usable == ["stable=Stable", "gspc-138=GSP32-C Beta V138", "gspc-137.1=GSP32-C Beta V137.1 (before Projects)"], str(usable))

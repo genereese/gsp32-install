@@ -26,7 +26,7 @@ with sync_playwright() as p:
 
     # 1, 2, 7: wizard under the status line, pulse while scanning and connecting, Wi-Fi Connected! with its link
     pg = page(b, "window.__bootGap = 3000")
-    check("warning: could, not will", pg.inner_text("#flash-warn") == "Changing Tabs Could Cause the Install to Fail", pg.inner_text("#flash-warn"))
+    check("warning: could, not will", pg.inner_text("#flash-warn") == "Installing — keep this tab open and in front until it finishes.", pg.inner_text("#flash-warn"))
     check("wizard after the status line, countdown and warning", pg.evaluate("""(() => { const w = document.getElementById('wizard');
       return ['board-status', 'check-wait', 'flash-warn'].every(id => document.getElementById(id).compareDocumentPosition(w) & Node.DOCUMENT_POSITION_FOLLOWING); })()"""))
     pg.click("#connect"); pg.wait_for_timeout(100); boot(pg); pg.wait_for_timeout(1500)
