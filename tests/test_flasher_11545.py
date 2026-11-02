@@ -1,7 +1,7 @@
-""" Flasher 115.44 (Gene, 2026-11-02 MT): GSP32-C Beta V137.2 (Files and the Editor on one screen) is listed as the
+""" Flasher 115.45 (Gene, 2026-11-02 MT): GSP32-C Beta V137.2 (Files and the Editor on one screen) is listed as the
 Beta pick (manifest-gspc-v137.2.json, firmware/gspc-v137.2; channel gspc-beta), labelled "GSP32-C Beta V137.2 (<hash>)".
 V137.1 (74294d8) stays the Stable default, its files unchanged (same sha256 as 115.43). The Release dropdown shows
-Stable and the Beta. Footer/tag 115.44-s137.1-c137.2.
+Stable and the Beta. Footer/tag 115.45-s137.1-c137.2.
 Earlier (115.43):
  Flasher 115.43 (Gene, 2026-11-02 12:08 AM MT): the Projects work (V138-V141.1) is rolled back and GSP32-C V137.1 is
 the Stable default and the only version on the site (manifest-gspc-v137.1.json, firmware/gspc-v137.1), rebuilt as a
@@ -50,7 +50,7 @@ for n in os.listdir(os.path.join(site, "firmware/gspc-v137.2")):
     data = open(os.path.join(site, "firmware/gspc-v137.2", n), "rb").read()
     check("V137.2 %s names itself GSP32-C Beta V137.2" % n, b"GSP32-C Beta V137.2" in data and b"V137.1" not in data.split(b"GSP32-C Beta V137.2")[0][-64:])
 html = open(os.path.join(site, "index.html"), encoding="utf-8").read()
-check("cache tag 115.44-s137.1-c137.2 on style.css, app.js, tour.js", html.count("?v=115.44-s137.1-c137.2\"") == 3)
+check("cache tag 115.45-s137.1-c137.2 on style.css, app.js, tour.js", html.count("?v=115.45-s137.1-c137.2\"") == 3)
 def status(path):
     try: return urllib.request.urlopen("http://127.0.0.1:8904/" + path).status
     except urllib.error.HTTPError as e: return e.code
@@ -82,7 +82,7 @@ with sync_playwright() as p:
         pg.on("request", lambda r: asked.append(r.url)); pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.goto("http://127.0.0.1:8904/index.html"); pg.wait_for_timeout(800)
         w = " @%d" % width
-        check("footer Flasher Version 115.44" + w, "Flasher Version 115.44" in pg.text_content(".flasher-version"))
+        check("footer Flasher Version 115.45" + w, "Flasher Version 115.45" in pg.text_content(".flasher-version"))
         check("Release dropdown shown (Stable and the Beta)" + w, pg.evaluate("!document.querySelector('.release-field').hidden"))
         usable = pg.evaluate("[...document.querySelectorAll('#release-channel option')].filter(o => !o.hidden && !o.disabled).map(o => o.value + '=' + o.textContent.trim())")
         check("picks: Stable, GSP32-C Beta V137.2" + w, usable == ["stable=Stable", "gspc-137.2=GSP32-C Beta V137.2"], str(usable))
@@ -108,7 +108,7 @@ with sync_playwright() as p:
         check("images from firmware/gspc-v137.1/", bool(img) and all("/firmware/gspc-v137.1/" in u for u in img), str(img))
         check("no page errors" + w, not errs, str(errs))
         pg.close()
-    # Flasher 115.44: the Beta pick installs Beta V137.2 from its own files
+    # Flasher 115.45: the Beta pick installs Beta V137.2 from its own files
     pg = b.new_page(viewport={"width": 1100, "height": 900}); pg.add_init_script(path=here + "/mock.js"); pg.add_init_script("window.__ver = '84';")
     pg.route("**/vendor/esptool-js-0.5.7.js", lambda r: r.fulfill(path=here + "/fake-esptool.js", content_type="text/javascript"))
     asked = []; errs = []

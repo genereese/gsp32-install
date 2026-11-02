@@ -84,7 +84,13 @@ with sync_playwright() as p:
     check("countdown shows 'Checking for GSP32… N s' and counts down", t1.startswith("Checking for GSP32\u2026") and t1.endswith(" s") and int(t2.split()[-2]) < int(t1.split()[-2]), (t1, t2))
     check("slim bar fills", w2 > w1 and pg.locator("#check-wait .progress").bounding_box()["height"] <= 5, (w1, w2))
     check("Install clickable during the countdown", pg.is_visible("#install-btn") and pg.is_enabled("#install-btn"))
-    pg.wait_for_timeout(18500)
-    check("countdown gone at No GSP32 Found", not pg.is_visible("#check-wait") and "No GSP32 Found" in pg.inner_text("#board-state"))
+    # (Flasher 115.45: the app's 20 s timer runs from the boot; a fixed 18.5 s sleep left about 2.6 s, which a loaded
+    #  machine (8 suites at once) used up. Wait for it, up to twice the timer)
+    try:
+        pg.wait_for_function("document.getElementById('board-state').innerText.includes('No GSP32 Found')", timeout=40000)
+        pg.wait_for_selector("#check-wait", state="hidden", timeout=3000)   # (it folds shut, about 0.3 s)
+    except Exception:
+        pass
+    check("countdown gone at No GSP32 Found", not pg.is_visible("#check-wait") and "No GSP32 Found" in pg.inner_text("#board-state"), pg.inner_text("#board-state"))
     pg.close()
 print("fails", fails); sys.exit(1 if fails else 0)

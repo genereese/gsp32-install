@@ -57,7 +57,12 @@ with sync_playwright() as p:
     pg.click("#connect"); pg.wait_for_timeout(100); boot(pg); pg.wait_for_timeout(4500)
     pg.wait_for_selector("#wifi-setup:not([hidden])", timeout=5000)
     started = time.time(); pg.click("#wifi-setup")
-    pg.wait_for_function("document.getElementById('board-status').textContent.includes('older GSP32')", timeout=25000)
+    # (Flasher 115.45: a timeout here was a traceback, and the run stopped; now it is this check's FAIL. The suite is in
+    #  flasher_tests.py's ALONE set: "within 20 s" is a wall-clock promise, measured on a quiet machine)
+    try:
+        pg.wait_for_function("document.getElementById('board-status').textContent.includes('older GSP32')", timeout=40000)
+    except Exception:
+        pass
     took = time.time() - started
     status = pg.inner_text("#board-status")
     check("old firmware: says so within 20 s", took < 20 and status == "This device runs an older GSP32. Install Version 43.1 or newer to change Wi-Fi here.", "%.1f s %s" % (took, status))

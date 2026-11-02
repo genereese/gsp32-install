@@ -70,6 +70,8 @@ def waitForPorts(names, limit=900):
             print("waiting: another flasher run holds the suites' ports", flush=True)
         time.sleep(5)
 
+ALONE = {"test_v42_1", "test_v43_2"}
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--smoke", action="store_true")
@@ -133,8 +135,13 @@ def main():
                 code = -9
         return name, verdict(code, open(log_path, errors="replace").read()), time.time() - t
 
+    # Flasher 115.45: suites that check wall-clock promises ("No GSP32 Found" after 20 s, the old-firmware answer within
+    #  20 s) run after the pool, one at a time: with 8 browsers at once their timers ran late and they failed (they
+    #  passed alone)
+    together = [n for n in names if n not in ALONE]
     with ThreadPoolExecutor(max_workers=a.jobs) as pool:
-        results = list(pool.map(one, names))
+        results = list(pool.map(one, together))
+    results += [one(n) for n in names if n in ALONE]
     passes = sum(len(re.findall(r"^PASS ", open(os.path.join(a.out, n + ".log"), errors="replace").read(), re.M)) for n in names)
     bad = [r for r in results if r[1] != "ok"]
     lines = ["%-24s %6.1f s  %s" % (name, seconds, result) for name, result, seconds in results]
