@@ -12,6 +12,6 @@ check("plain HTTP" in html and "home network" in html, "plain-HTTP home-network 
 # Flasher 115.25 (Gene, "remove all previous versions"): the unlisted rollbacks V84, V85 and V99 are gone from the site
 #  (git history keeps them; tests/oldsite.py brings them back for test_v79). The site has GSP32-C V130 and Beta V132 only (115.26). 115.27: V133 Stable and V130 Previous. 115.28: plus Beta V134. 115.29: V135 only
 mans = sorted(n for n in os.listdir(site) if n.startswith("manifest"))
-check(mans == ["manifest-gspc-v136.json", "manifest-gspc-v137.1.json", "manifest-gspc-v140.json"], "manifests: V136, Beta V140 and Beta V137.1 (before Projects) only (115.37): %r" % mans)
+check(mans == ["manifest-gspc-v136.json", "manifest-gspc-v137.1.json", "manifest-gspc-v141.json"], "manifests: V136, Beta V141 and Beta V137.1 (before Projects) only (115.37): %r" % mans)
 check(not any(os.path.exists(os.path.join(site, "firmware", d)) for d in ("v84", "v85", "v99")), "firmware/v84, v85, v99 gone")
 print("FAILS", fails); sys.exit(1 if fails else 0)
