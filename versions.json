@@ -4,5 +4,12 @@
     "manifest": "manifest-gspc-v137.1.json",
     "label": "GSP32-C V137.1 (74294d8)",
     "line": "GSP32-C"
+  },
+  {
+    "version": "39c0cea",
+    "manifest": "manifest-gspc-v137.2.json",
+    "label": "GSP32-C Beta V137.2 (39c0cea)",
+    "channel": "gspc-beta",
+    "line": "GSP32-C"
   }
 ]
