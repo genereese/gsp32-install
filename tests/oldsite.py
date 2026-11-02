@@ -14,10 +14,29 @@ OLD_FILES = ["versions.json", "manifest.json", "manifest-beta.json", "manifest-g
     ["manifest-gspc-v130.json", "firmware/gspc-v130"]
 # Flasher 115.25: the rollbacks are gone from the site too. Flasher 115.29: so is V130 (V135 is the only version)
 
+def prune(keep, current):
+    """ Flasher 115.43: the overlays pile up in the temp folder (one per site commit, ~40 MB of old images each; the
+    2026-11-01 box cleanup found many). Keep the newest `keep` finished ones (and the current one); remove the rest.
+    A folder still being built (no .ready) is another suite's: left alone. """
+    tmp = tempfile.gettempdir()
+    done = []
+    for name in os.listdir(tmp):
+        path = os.path.join(tmp, name)
+        if name.startswith("flasher-oldsite-") and os.path.isdir(path) and os.path.exists(os.path.join(path, ".ready")):
+            try:
+                done.append((os.path.getmtime(os.path.join(path, ".ready")), path))
+            except OSError:
+                pass
+    done.sort(reverse=True)
+    for _, path in done[keep:]:
+        if os.path.realpath(path) != os.path.realpath(current):
+            shutil.rmtree(path, ignore_errors=True)
+
 def overlay(site):
     head = subprocess.run(["git", "-C", site, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip() or "x"
     out = os.path.join(tempfile.gettempdir(), "flasher-oldsite-%s-%s-%05x" % (OLD, head, int(hashlib.md5(os.path.realpath(site).encode()).hexdigest()[:5], 16)))
     if os.path.exists(os.path.join(out, ".ready")):
+        prune(2, out)
         return out
     work = tempfile.mkdtemp(prefix=os.path.basename(out) + ".", dir=tempfile.gettempdir())
     # the old files out of git
@@ -42,4 +61,5 @@ def overlay(site):
         os.rename(work, out)
     except OSError:   # another suite made it first
         shutil.rmtree(work, ignore_errors=True)
+    prune(2, out)
     return out

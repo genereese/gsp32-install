@@ -1,6 +1,6 @@
 {
   "name": "GSP32-C",
-  "version": "GSP32-C Beta V137.1 (before Projects) (ec780b3)",
+  "version": "GSP32-C V137.1 (74294d8)",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 15,
   "builds": [
