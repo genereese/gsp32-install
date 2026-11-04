@@ -1,4 +1,4 @@
-""" Flasher 115.49 (Gene, 2026-11-03 MT): GSP32-C Beta V137.6 (a0e242b; dropped folder trees fly in folder by folder) is
+""" Flasher 115.49 (Gene, 2026-11-03 MT): GSP32-C Beta V137.6 (9fdb905; dropped folder trees fly in folder by folder) is
 listed as the Beta pick (manifest-gspc-v137.6.json, firmware/gspc-v137.6; channel gspc-beta). GSP32-C V137.5 (bb47288)
 stays the Stable default, its files unchanged since 115.48 (same sha256 as 32e1a61). V137.4, V137.1, V137.3, V137.2 404.
 Footer/tag 115.49-s137.5-c137.6. Follows test_flasher_11547 (115.47: a Stable and a Beta).
