@@ -6,9 +6,9 @@
     "line": "GSP32-C"
   },
   {
-    "version": "b7b4118",
-    "manifest": "manifest-gspc-v137.11.json",
-    "label": "GSP32-C Beta V137.11 (b7b4118)",
+    "version": "b8b4eed",
+    "manifest": "manifest-gspc-v137.12.json",
+    "label": "GSP32-C Beta V137.12 (b8b4eed)",
     "channel": "gspc-beta",
     "line": "GSP32-C"
   }
