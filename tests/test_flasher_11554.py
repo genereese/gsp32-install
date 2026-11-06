@@ -25,9 +25,9 @@ check("manifests: V137.10 and Beta V137.11 only", mans == ["manifest-gspc-v137.1
 fw = sorted(os.listdir(os.path.join(site, "firmware")))
 check("firmware/: gspc-v137.10 and gspc-v137.11 only", fw == ["gspc-v137.10", "gspc-v137.11"], str(fw))
 import hashlib, subprocess
-for n in sorted(os.listdir(os.path.join(site, "firmware/gspc-v137.10"))):   # the Stable's images are 115.43's, byte for byte
-    old = subprocess.run(["git", "-C", site, "show", "32e1a61:firmware/gspc-v137.10/" + n], capture_output=True).stdout
-    check("V137.10 %s unchanged since 115.48" % n, old and hashlib.sha256(old).digest() == hashlib.sha256(open(os.path.join(site, "firmware/gspc-v137.10", n), "rb").read()).digest())
+for n in sorted(os.listdir(os.path.join(site, "firmware/gspc-v137.10"))):   # Stable V137.10 images unchanged since Flasher 115.53
+    old = subprocess.run(["git", "-C", site, "show", "114e179:firmware/gspc-v137.10/" + n], capture_output=True).stdout
+    check("V137.10 %s unchanged since 115.53" % n, old and hashlib.sha256(old).digest() == hashlib.sha256(open(os.path.join(site, "firmware/gspc-v137.10", n), "rb").read()).digest())
 for v, entry in (("137.10", versions[0]), ("137.11", versions[1])):
     m = json.load(open(os.path.join(site, "manifest-gspc-v%s.json" % v)))
     parts = [p["path"] for b in m["builds"] for p in b["parts"]]
